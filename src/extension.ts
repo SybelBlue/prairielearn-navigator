@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as path from "path";
+import * as fs from "fs";
 
 class PrairieLearnAssessmentDefinitionProvider
   implements vscode.DefinitionProvider
@@ -29,12 +30,18 @@ class PrairieLearnAssessmentDefinitionProvider
       return null;
     }
 
-    const questionPath = path.join(
+    const questionDirPath = path.join(
       workspaceFolder.uri.fsPath,
       "questions",
-      questionId,
-      "info.json"
+      questionId
     );
+
+    if (!fs.existsSync(questionDirPath)) {
+      console.log(`prairielearn -- directory ${questionDirPath} DNE`);
+      return null;
+    }
+
+    const questionPath = path.join(questionDirPath, "info.json");
 
     return new vscode.Location(
       vscode.Uri.file(questionPath),
