@@ -4,52 +4,28 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 
-class PrairieLearnAssessmentDefinitionProvider
-  implements vscode.DefinitionProvider
-{
-  provideDefinition(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-    token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.Definition> {
-    // Get the range of the quoted string at cursor
-    const range = document.getWordRangeAtPosition(position, /"([^"]+)"/);
-    if (!range) {
-      return null;
+function getQuestionPathAtPosition(
+  document: vscode.TextDocument,
+  position: vscode.Position
+): string | null {
+  function isQuestionId(obj: any, value: string): boolean {
+    if (typeof obj !== "object" || obj === null) {
+      return false;
     }
 
-    const questionId = this.getConfirmedQuestionId(document, position, range);
-    if (!questionId) {
-      return null;
+    for (const key in obj) {
+      if (key === "id" && obj[key] === value) {
+        return true;
+      }
+      if (typeof obj[key] === "object" && isQuestionId(obj[key], value)) {
+        return true;
+      }
     }
 
-    console.log("prairielearn -- questionId:" + questionId);
-
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!workspaceFolder) {
-      return null;
-    }
-
-    const questionDirPath = path.join(
-      workspaceFolder.uri.fsPath,
-      "questions",
-      questionId
-    );
-
-    if (!fs.existsSync(questionDirPath)) {
-      console.log(`prairielearn -- directory ${questionDirPath} DNE`);
-      return null;
-    }
-
-    const questionPath = path.join(questionDirPath, "info.json");
-
-    return new vscode.Location(
-      vscode.Uri.file(questionPath),
-      new vscode.Position(0, 0)
-    );
+    return false;
   }
 
-  private getConfirmedQuestionId(
+  function getConfirmedQuestionId(
     document: vscode.TextDocument,
     position: vscode.Position,
     range: vscode.Range
@@ -68,7 +44,7 @@ class PrairieLearnAssessmentDefinitionProvider
       const json = JSON.parse(document.getText());
       const clickedText = document.getText(range).replace(/"/g, "");
 
-      return this.isQuestionId(json, clickedText) ? clickedText : null;
+      return isQuestionId(json, clickedText) ? clickedText : null;
     } catch (e) {
       if (!(e instanceof SyntaxError)) {
         console.error("prairielearn -- unexpected error parsing json: " + e);
@@ -78,21 +54,54 @@ class PrairieLearnAssessmentDefinitionProvider
     return null;
   }
 
-  private isQuestionId(obj: any, value: string): boolean {
-    if (typeof obj !== "object" || obj === null) {
-      return false;
+  // Get the range of the quoted string at cursor
+  const range = document.getWordRangeAtPosition(position, /"([^"]+)"/);
+  if (!range) {
+    return null;
+  }
+
+  const questionId = getConfirmedQuestionId(document, position, range);
+  if (!questionId) {
+    return null;
+  }
+
+  console.log("prairielearn -- questionId:" + questionId);
+
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+  if (!workspaceFolder) {
+    return null;
+  }
+
+  const questionDirPath = path.join(
+    workspaceFolder.uri.fsPath,
+    "questions",
+    questionId
+  );
+
+  return questionDirPath;
+}
+
+class PrairieLearnAssessmentDefinitionProvider
+  implements vscode.DefinitionProvider
+{
+  provideDefinition(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken
+  ): vscode.ProviderResult<vscode.Definition> {
+    const questionDirPath = getQuestionPathAtPosition(document, position);
+
+    if (!questionDirPath || !fs.existsSync(questionDirPath)) {
+      console.log(`prairielearn -- directory ${questionDirPath} DNE`);
+      return null;
     }
 
-    for (const key in obj) {
-      if (key === "id" && obj[key] === value) {
-        return true;
-      }
-      if (typeof obj[key] === "object" && this.isQuestionId(obj[key], value)) {
-        return true;
-      }
-    }
+    const questionPath = path.join(questionDirPath, "info.json");
 
-    return false;
+    return new vscode.Location(
+      vscode.Uri.file(questionPath),
+      new vscode.Position(0, 0)
+    );
   }
 }
 
