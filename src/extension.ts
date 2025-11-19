@@ -10,26 +10,20 @@ class PrairieLearnAssessmentDefinitionProvider
     document: vscode.TextDocument,
     position: vscode.Position,
     token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.Definition | vscode.DefinitionLink[]> {
-    console.log("prairielearn -- provideDef");
-
-    // Get the word/range at the cursor position
+  ): vscode.ProviderResult<vscode.Definition> {
+    // Get the range of the quoted string at cursor
     const range = document.getWordRangeAtPosition(position, /"([^"]+)"/);
     if (!range) {
       return null;
     }
 
-    const line = document.lineAt(position.line).text;
-    const idMatch = line.match(/"id"\s*:\s*"([^"]+)"/);
-
-    if (!idMatch) {
+    const questionId = this.getConfirmedQuestionId(document, position, range);
+    if (!questionId) {
       return null;
     }
 
-    const questionId = idMatch[1]; // e.g., "ch02/difficult"
     console.log("prairielearn -- questionId:" + questionId);
 
-    // Resolve to questions/ch02/difficult/info.json
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
     if (!workspaceFolder) {
       return null;
@@ -42,9 +36,56 @@ class PrairieLearnAssessmentDefinitionProvider
       "info.json"
     );
 
-    const targetUri = vscode.Uri.file(questionPath);
+    return new vscode.Location(
+      vscode.Uri.file(questionPath),
+      new vscode.Position(0, 0)
+    );
+  }
 
-    return new vscode.Location(targetUri, new vscode.Position(0, 0));
+  private getConfirmedQuestionId(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    range: vscode.Range
+  ): string | null {
+    console.log("prairielearn -- falling back to old parser");
+
+    const line = document.lineAt(position.line).text;
+    const idMatch = line.match(/"id"\s*:\s*"([^"]+)"/);
+
+    if (idMatch) {
+      return idMatch[1]; // e.g., "ch02/difficult"
+    }
+
+    try {
+      // try to determine by parsing the entire JSON document
+      const json = JSON.parse(document.getText());
+      const clickedText = document.getText(range).replace(/"/g, "");
+
+      return this.isQuestionId(json, clickedText) ? clickedText : null;
+    } catch (e) {
+      if (!(e instanceof SyntaxError)) {
+        console.error("prairielearn -- unexpected error parsing json: " + e);
+      }
+    }
+
+    return null;
+  }
+
+  private isQuestionId(obj: any, value: string): boolean {
+    if (typeof obj !== "object" || obj === null) {
+      return false;
+    }
+
+    for (const key in obj) {
+      if (key === "id" && obj[key] === value) {
+        return true;
+      }
+      if (typeof obj[key] === "object" && this.isQuestionId(obj[key], value)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 
@@ -68,7 +109,7 @@ export function activate(context: vscode.ExtensionContext) {
         "Hello World from prairielearn-navigator!"
       );
     }),
-    // Register the custom provider
+    // Register the jump-to-def provider in infoAssessments
     vscode.languages.registerDefinitionProvider(
       [{ pattern: "**/infoAssessment.json" }],
       new PrairieLearnAssessmentDefinitionProvider()
