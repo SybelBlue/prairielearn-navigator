@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { QuestionIdCache } from "./providers/filewatchers";
+import { AssessmentCache, QuestionIdCache } from "./providers/filewatchers";
 import { AssessmentDefinitionProvider } from "./providers/definitions";
 import { AssessmentCompletionItemProvider } from "./providers/completions";
 import {
@@ -11,6 +11,7 @@ import {
   QuestionHeaderCodeLensProvider,
 } from "./providers/lenses";
 import { commands } from "./commands";
+import { getAssessmentLabelFromUri } from "./providers/utils";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -23,17 +24,25 @@ export function activate(context: vscode.ExtensionContext) {
   for (const [cmdName, cmdImpl] of Object.entries(commands)) {
     context.subscriptions.push(
       vscode.commands.registerCommand(
-        `priarielearn-navigator.${cmdName}`,
+        `prairielearn-navigator.${cmdName}`,
         cmdImpl
       )
     );
   }
 
-  // setup cache
-  const cache = new QuestionIdCache();
+  // setup caches
+  const questionCache = new QuestionIdCache();
+  const assessmentCache = new AssessmentCache(questionCache);
 
-  cache.onDidChange((ids) =>
-    console.info(`prairielearn -- cache update ${ids}`)
+  questionCache.onDidChange((ids) =>
+    console.info(`prairielearn -- question cache update ${ids}`)
+  );
+  assessmentCache.onDidChange((uris) =>
+    console.info(
+      `prairielearn -- assessment cache update ${uris.map((u) =>
+        getAssessmentLabelFromUri(u)
+      )}`
+    )
   );
 
   // helpful constant
@@ -43,11 +52,16 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     // Shared Utilities
-    cache,
+    questionCache,
+    assessmentCache,
 
     // Diagnostics
-    ...new DuplicatedQuestionDiagnosticCollection(cache).subscriptions(),
-    ...new IncompleteQuestionDiagnosticCollection(cache).subscriptions(),
+    ...new DuplicatedQuestionDiagnosticCollection(
+      questionCache
+    ).subscriptions(),
+    ...new IncompleteQuestionDiagnosticCollection(
+      questionCache
+    ).subscriptions(),
 
     // Jump-to-Definition Providers
     vscode.languages.registerDefinitionProvider(
@@ -58,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
     // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
-      new AssessmentCompletionItemProvider(cache),
+      new AssessmentCompletionItemProvider(questionCache),
       `"`
     ),
 

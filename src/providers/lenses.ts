@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { getQuestionIdFromUri, questionFilePathsFromId } from "./utils";
+import {
+  getAssessmentLabelFromUri,
+  getQuestionIdFromUri,
+  questionFilePathsFromId,
+} from "./utils";
 
 export class AssessmentCodeLensProvider implements vscode.CodeLensProvider {
   provideCodeLenses(
@@ -70,7 +74,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
 
     if (occurrences.length < 5) {
       for (const occ of occurrences) {
-        const title = this.getAssessmentLabelFromUri(occ.uri);
+        const title = getAssessmentLabelFromUri(occ.uri);
         lenses.push(
           new vscode.CodeLens(firstLine, {
             title,
@@ -82,16 +86,6 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
     }
 
     return lenses;
-  }
-
-  private getAssessmentLabelFromUri(uri: vscode.Uri): string {
-    const pathParts = uri.fsPath.split(path.sep);
-    const instanceIndex = pathParts.indexOf("courseInstances");
-    const assessmentsIndex = pathParts.indexOf("assessments");
-    return path.join(
-      ...pathParts.slice(instanceIndex + 1, assessmentsIndex),
-      ...pathParts.slice(assessmentsIndex + 1, -1)
-    );
   }
 
   private async findOccurrences(
