@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { AssessmentCache } from "./filewatchers";
 import {
   getAssessmentLabelFromUri,
-  getQuestionIdFromUri,
+  getLocalQuestionIdFromUri,
   questionFilePathsFromId,
 } from "./utils";
 
@@ -63,7 +63,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
   ): Promise<vscode.CodeLens[]> {
     const lenses: vscode.CodeLens[] = [];
 
-    const questionId = getQuestionIdFromUri(document.uri);
+    const questionId = getLocalQuestionIdFromUri(document.uri);
     const occurrences = this.assessments.getQuestionUses(questionId);
     const firstLine = new vscode.Range(0, 0, 0, 0);
 

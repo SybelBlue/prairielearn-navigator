@@ -2,34 +2,8 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 
-/**
- * Assumes course directory has `courseInstances/` and `questions/` as direct children
- * and that the document is in the `courseInstances/` or  `questions/` directories,
- * otherwise assumes the workspace root is the course directory, and infers the path
- */
-function getQuestionDirFromId(
-  document: vscode.TextDocument,
-  questionId: string
-): null | string {
-  // TODO: there should be per-course instancing on all of this
-  const pathParts = document.uri.fsPath.split(path.sep);
-  let courseTop = pathParts.indexOf("courseInstances");
-  if (courseTop < 0) {
-    courseTop = pathParts.indexOf("questions");
-  }
-  let leader;
-  if (courseTop < 0) {
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    if (!workspaceFolder) {
-      console.error(`prairielearn -- document not in a course ${document.uri}`);
-      return null;
-    }
-    leader = [workspaceFolder.uri.fsPath];
-  } else {
-    leader = pathParts.slice(0, courseTop);
-  }
-
-  return path.join(...leader, "questions", questionId);
+function getQuestionDirFromId(questionId: QuestionId): null | string {
+  return path.join(questionId.courseId, "questions", questionId.localId);
 }
 
 type QuestionPaths = {
@@ -40,10 +14,9 @@ type QuestionPaths = {
 };
 
 function questionFilePathsFromId(
-  document: vscode.TextDocument,
-  questionId: string
+  questionId: QuestionId
 ): (QuestionPaths & { strict(): Partial<QuestionPaths> }) | null {
-  const dir = getQuestionDirFromId(document, questionId);
+  const dir = getQuestionDirFromId(questionId);
 
   if (!dir || !fs.existsSync(dir)) {
     return null;
@@ -77,7 +50,9 @@ function questionFilePathsFromId(
   };
 }
 
-function getQuestionIdFromUri(questionUri: vscode.Uri): string {
+type QuestionId = { courseId: string; localId: string };
+
+function getLocalQuestionIdFromUri(questionUri: vscode.Uri): string {
   const pathParts = questionUri.fsPath.split(path.sep);
   const questionsIndex = pathParts.indexOf("questions");
   return path.join(...pathParts.slice(questionsIndex + 1, -1));
@@ -101,8 +76,9 @@ function makeRegexSafe(s: string) {
 export {
   getQuestionDirFromId,
   questionFilePathsFromId,
-  getQuestionIdFromUri,
+  getLocalQuestionIdFromUri,
   makeRegexSafe,
   getAssessmentLabelFromUri,
   type QuestionPaths,
+  type QuestionId,
 };

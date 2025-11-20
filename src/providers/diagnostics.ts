@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { questionFilePathsFromId } from "./utils";
-import { QuestionIdCache } from "./filewatchers";
+import { CourseCache, QuestionIdCache } from "./filewatchers";
 
 abstract class ReferenceBasedDiagnosticCollection {
   protected collection: vscode.DiagnosticCollection;
@@ -99,6 +99,13 @@ export class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagno
 }
 
 export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
+  public constructor(
+    questionCache: QuestionIdCache,
+    private courseCache: CourseCache
+  ) {
+    super(questionCache);
+  }
+
   protected diagnosticsFor(document: vscode.TextDocument) {
     if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
       return;
@@ -122,13 +129,26 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
 
       let existingPaths;
       if (!paths || !(existingPaths = paths.strict()).dir) {
+        const courseRoot =
+          this.courseCache?.getCourseIdFor(document.uri) ??
+          vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
+          "${workspaceRoot}";
         const diagnostic = new vscode.Diagnostic(
           range,
-          `missing question: expected question directory ${
-            "${workspaceRoot}/questions/" + id
-          }`,
+          `missing question: expected question directory ${courseRoot}/questions/${id}`,
           vscode.DiagnosticSeverity.Error
         );
+        if (paths) {
+          diagnostic.relatedInformation = [
+            new vscode.DiagnosticRelatedInformation(
+              new vscode.Location(
+                vscode.Uri.file(paths.infoJson),
+                new vscode.Range(0, 0, 0, 0)
+              ),
+              "Expected location of info.json"
+            ),
+          ];
+        }
         diagnostics.push(diagnostic);
         continue;
       }

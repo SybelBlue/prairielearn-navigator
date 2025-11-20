@@ -11,6 +11,7 @@ import {
   QuestionIdCache,
   utils,
 } from "./providers";
+import { CourseCache, CourseInstanceCache } from "./providers/filewatchers";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -30,18 +31,24 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // setup caches
-  const questionCache = new QuestionIdCache();
+  const courseCache = new CourseCache();
+  const courseInstanceCache = new CourseInstanceCache(courseCache);
+  const questionCache = new QuestionIdCache(courseCache);
   const assessmentCache = new AssessmentCache(questionCache);
 
+  courseCache.onDidChange((ids) =>
+    console.info(`prairielearn -- course cache update: n=${ids}`)
+  );
+  courseInstanceCache.onDidChange((ids) =>
+    console.info(
+      `prairielearn -- course instance cache update: n=${ids.length}`
+    )
+  );
   questionCache.onDidChange((ids) =>
-    console.info(`prairielearn -- question cache update ${ids}`)
+    console.info(`prairielearn -- question cache update: n=${ids.length}`)
   );
   assessmentCache.onDidChange((uris) =>
-    console.info(
-      `prairielearn -- assessment cache update ${uris.map((u) =>
-        utils.getAssessmentLabelFromUri(u)
-      )}`
-    )
+    console.info(`prairielearn -- assessment cache update: n=${uris.length}`)
   );
 
   // helpful constant
@@ -51,6 +58,8 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     // Shared Utilities
+    courseCache,
+    courseInstanceCache,
     questionCache,
     assessmentCache,
 
@@ -59,7 +68,8 @@ export function activate(context: vscode.ExtensionContext) {
       questionCache
     ).subscriptions(),
     ...new IncompleteQuestionDiagnosticCollection(
-      questionCache
+      questionCache,
+      courseCache
     ).subscriptions(),
 
     // Jump-to-Definition Providers

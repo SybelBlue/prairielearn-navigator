@@ -1,9 +1,12 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
-import { getQuestionDirFromId } from "./utils";
+import { getQuestionDirFromId, QuestionId } from "./utils";
+import { CourseCache } from "./filewatchers";
 
 export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
+  constructor(private courseCache: CourseCache) {}
+
   provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position,
@@ -27,15 +30,19 @@ export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
     }
 
     function getConfirmedQuestionId(
+      courseId: string,
       document: vscode.TextDocument,
       position: vscode.Position,
       range: vscode.Range
-    ): string | null {
+    ): QuestionId | null {
       const line = document.lineAt(position.line).text;
       const idMatch = line.match(/"id"\s*:\s*"([^"]+)"/);
 
       if (idMatch) {
-        return idMatch[1]; // e.g., "ch02/difficult"
+        return {
+          courseId,
+          localId: idMatch[1], // e.g., "ch02/difficult"
+        };
       }
 
       try {
@@ -43,7 +50,12 @@ export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
         const json = JSON.parse(document.getText());
         const clickedText = document.getText(range).replace(/"/g, "");
 
-        return isQuestionId(json, clickedText) ? clickedText : null;
+        return isQuestionId(json, clickedText)
+          ? {
+              localId: clickedText,
+              courseId,
+            }
+          : null;
       } catch (e) {
         if (!(e instanceof SyntaxError)) {
           console.error("prairielearn -- unexpected error parsing json: " + e);
@@ -59,12 +71,18 @@ export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
       return null;
     }
 
-    const questionId = getConfirmedQuestionId(document, position, range);
+    const courseId = this.courseCache.getCourseIdFor(document.uri) ?? "";
+    const questionId = getConfirmedQuestionId(
+      courseId,
+      document,
+      position,
+      range
+    );
     if (!questionId) {
       return null;
     }
 
-    const questionDirPath = getQuestionDirFromId(document, questionId);
+    const questionDirPath = getQuestionDirFromId(questionId);
 
     if (!questionDirPath || !fs.existsSync(questionDirPath)) {
       return null;

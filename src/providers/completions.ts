@@ -16,7 +16,10 @@ export class AssessmentCompletionItemProvider
     const questionIds = this.questionIdCache.getQuestionIds();
     this.completionItems = questionIds.map(
       (qid) =>
-        new vscode.CompletionItem(qid, vscode.CompletionItemKind.Reference)
+        new vscode.CompletionItem(
+          qid.localId,
+          vscode.CompletionItemKind.Reference
+        )
     );
   }
 
