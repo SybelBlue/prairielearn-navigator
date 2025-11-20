@@ -10,6 +10,7 @@ import {
   AssessmentCodeLensProvider,
   QuestionHeaderCodeLensProvider,
 } from "./providers/lenses";
+import { commands } from "./commands";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -18,15 +19,27 @@ export function activate(context: vscode.ExtensionContext) {
   // This line of code will only be executed once when your extension is activated
   console.log("prairielearn-navigator is now active!");
 
-  const infoAssessmentPatterns = [
-    { pattern: "**/assessments/**/infoAssessment.json" },
-  ];
+  // register commands
+  for (const [cmdName, cmdImpl] of Object.entries(commands)) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(
+        `priarielearn-navigator.${cmdName}`,
+        cmdImpl
+      )
+    );
+  }
 
+  // setup cache
   const cache = new QuestionIdCache();
 
   cache.onDidChange((ids) =>
     console.info(`prairielearn -- cache update ${ids}`)
   );
+
+  // helpful constant
+  const infoAssessmentPatterns = [
+    { pattern: "**/assessments/**/infoAssessment.json" },
+  ];
 
   context.subscriptions.push(
     // Shared Utilities
@@ -36,48 +49,13 @@ export function activate(context: vscode.ExtensionContext) {
     ...new DuplicatedQuestionDiagnosticCollection(cache).subscriptions(),
     ...new IncompleteQuestionDiagnosticCollection(cache).subscriptions(),
 
-    // Commands
-    vscode.commands.registerCommand(
-      "prairielearn-navigator.openFile",
-      async (path: string, selection?: vscode.Range) => {
-        await vscode.window.showTextDocument(vscode.Uri.file(path), {
-          selection,
-        });
-      }
-    ),
-    vscode.commands.registerCommand(
-      "prairielearn-navigator.unknownId",
-      (questionId: string) => {
-        vscode.window.showInformationMessage(
-          `question id "${questionId}" does not exist`
-        );
-      }
-    ),
-    vscode.commands.registerCommand(
-      "prairielearn-navigator.showOccurrences",
-      async (occurrences: vscode.Location[]) => {
-        if (occurrences.length === 0) {
-          vscode.window.showInformationMessage("No references found");
-          return;
-        }
-
-        // Show in references view
-        await vscode.commands.executeCommand(
-          "editor.action.showReferences",
-          occurrences[0].uri,
-          occurrences[0].range.start,
-          occurrences
-        );
-      }
-    ),
-
     // Jump-to-Definition Providers
     vscode.languages.registerDefinitionProvider(
       infoAssessmentPatterns,
       new AssessmentDefinitionProvider()
     ),
 
-    // Completion Providers
+    // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
       new AssessmentCompletionItemProvider(cache),
