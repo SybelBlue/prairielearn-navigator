@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 
-function questionDirFromId(
+function getQuestionDirFromId(
   document: vscode.TextDocument,
   questionId: string
 ): null | string {
@@ -17,19 +17,19 @@ function questionDirFromId(
 }
 
 type QuestionPaths = {
+  dir: string;
   infoJson: string;
-  html: string;
+  questionHtml: string;
   serverPy: string;
 };
 
 function questionFilePathsFromId(
   document: vscode.TextDocument,
   questionId: string
-): (QuestionPaths & { dir: string; strict(): Partial<QuestionPaths> }) | null {
-  const dir = questionDirFromId(document, questionId);
+): (QuestionPaths & { strict(): Partial<QuestionPaths> }) | null {
+  const dir = getQuestionDirFromId(document, questionId);
 
   if (!dir || !fs.existsSync(dir)) {
-    console.log(`prairielearn -- directory ${dir} DNE`);
     return null;
   }
 
@@ -39,16 +39,19 @@ function questionFilePathsFromId(
   return {
     dir,
     infoJson,
-    html,
+    questionHtml: html,
     serverPy,
     /** Only returns existing file-paths */
     strict(): Partial<QuestionPaths> {
       const out: Partial<QuestionPaths> = {};
+      if (fs.existsSync(dir)) {
+        out.dir = dir;
+      }
       if (fs.existsSync(infoJson)) {
         out.infoJson = infoJson;
       }
       if (fs.existsSync(html)) {
-        out.html = html;
+        out.questionHtml = html;
       }
       if (fs.existsSync(serverPy)) {
         out.serverPy = serverPy;
@@ -73,7 +76,8 @@ class QuestionIdCache {
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor() {
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher("**/questions");
+    this.fileWatcher =
+      vscode.workspace.createFileSystemWatcher("**/questions/**");
 
     this.fileWatcher.onDidCreate(() => this.refresh());
     this.fileWatcher.onDidDelete(() => this.refresh());
@@ -83,7 +87,6 @@ class QuestionIdCache {
   }
 
   private async refresh() {
-    console.log("prairielearn -- question id cache refresh");
     const questionInfoJsons = await vscode.workspace.findFiles(
       "**/questions/**/info.json"
     );
@@ -131,8 +134,6 @@ class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
       position: vscode.Position,
       range: vscode.Range
     ): string | null {
-      console.log("prairielearn -- falling back to old parser");
-
       const line = document.lineAt(position.line).text;
       const idMatch = line.match(/"id"\s*:\s*"([^"]+)"/);
 
@@ -166,11 +167,9 @@ class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
       return null;
     }
 
-    console.log("prairielearn -- questionId:" + questionId);
-    const questionDirPath = questionDirFromId(document, questionId);
+    const questionDirPath = getQuestionDirFromId(document, questionId);
 
     if (!questionDirPath || !fs.existsSync(questionDirPath)) {
-      console.log(`prairielearn -- directory ${questionDirPath} DNE`);
       return null;
     }
 
@@ -220,14 +219,16 @@ class AssessmentCodeLensProvider implements vscode.CodeLensProvider {
         continue;
       }
 
-      for (const p of Object.values(questionPaths.strict())) {
-        lenses.push(
-          new vscode.CodeLens(matchRange, {
-            title: `${path.basename(p)}`,
-            command: "prairielearn-navigator.openFile",
-            arguments: [p],
-          })
-        );
+      for (const [key, p] of Object.entries(questionPaths.strict())) {
+        if (key !== "dir") {
+          lenses.push(
+            new vscode.CodeLens(matchRange, {
+              title: `${path.basename(p)}`,
+              command: "prairielearn-navigator.openFile",
+              arguments: [p],
+            })
+          );
+        }
       }
     }
 
@@ -365,20 +366,54 @@ class AssessmentCompletionItemProvider
   }
 }
 
-class DuplicatedQuestionDiagnosticCollection {
-  private collection: vscode.DiagnosticCollection;
-  constructor() {
+abstract class ReferenceBasedDiagnosticCollection {
+  protected collection: vscode.DiagnosticCollection;
+  constructor(questionCache: QuestionIdCache) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"
     );
 
+    questionCache.onDidChange(() => this.updateOpenDocuments());
+
     // Check already open documents once on init
+    this.updateOpenDocuments();
+  }
+
+  updateOpenDocuments() {
     vscode.workspace.textDocuments.forEach((doc) => {
       this.update(doc);
     });
   }
 
+  subscriptions(): vscode.Disposable[] {
+    return [
+      this.collection,
+
+      vscode.workspace.onDidOpenTextDocument((doc) => {
+        this.update(doc);
+      }),
+
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        this.update(e.document);
+      }),
+    ];
+  }
+
   private update(document: vscode.TextDocument) {
+    const ds = this.diagnosticsFor(document);
+    if (ds === null || ds === undefined) {
+      return;
+    }
+    this.collection.set(document.uri, ds);
+  }
+
+  protected abstract diagnosticsFor(
+    document: vscode.TextDocument
+  ): vscode.Diagnostic[] | null | undefined;
+}
+
+class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
+  protected diagnosticsFor(document: vscode.TextDocument) {
     if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
       return;
     }
@@ -423,21 +458,83 @@ class DuplicatedQuestionDiagnosticCollection {
       console.error("prairielearn -- error in duplicate diagnostics: " + e);
     }
 
-    this.collection.set(document.uri, diagnostics);
+    return diagnostics;
   }
+}
 
-  subscriptions(): vscode.Disposable[] {
-    return [
-      this.collection,
+class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
+  protected diagnosticsFor(document: vscode.TextDocument) {
+    if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
+      return;
+    }
+    const diagnostics: vscode.Diagnostic[] = [];
+    const text = document.getText();
 
-      vscode.workspace.onDidOpenTextDocument((doc) => {
-        this.update(doc);
-      }),
+    // Find all "id" field positions
+    const idMatches = Array.from(text.matchAll(/"id"\s*:\s*"([^"]+)"/g));
 
-      vscode.workspace.onDidChangeTextDocument((e) => {
-        this.update(e.document);
-      }),
-    ];
+    for (const match of idMatches) {
+      const id = match[1];
+
+      const paths = questionFilePathsFromId(document, id);
+
+      const endOffset = match.index + match[0].length;
+      const range = new vscode.Range(
+        document.positionAt(endOffset - (id.length + 1)),
+        document.positionAt(endOffset - 1)
+      );
+
+      let existingPaths;
+      if (!paths || !(existingPaths = paths.strict()).dir) {
+        const diagnostic = new vscode.Diagnostic(
+          range,
+          `missing question: expected question directory ${
+            "${workspaceRoot}/questions/" + id
+          }`,
+          vscode.DiagnosticSeverity.Error
+        );
+        diagnostics.push(diagnostic);
+        continue;
+      }
+      if (!existingPaths.infoJson) {
+        const diagnostic = new vscode.Diagnostic(
+          range,
+          `incomplete question: missing required JSON file`,
+          vscode.DiagnosticSeverity.Error
+        );
+
+        diagnostic.relatedInformation = [
+          new vscode.DiagnosticRelatedInformation(
+            new vscode.Location(
+              vscode.Uri.file(paths.infoJson),
+              new vscode.Range(0, 0, 0, 0)
+            ),
+            "Expected location of info.json"
+          ),
+        ];
+        diagnostics.push(diagnostic);
+      }
+      if (!existingPaths.questionHtml) {
+        const diagnostic = new vscode.Diagnostic(
+          range,
+          `incomplete question: missing required html file`,
+          vscode.DiagnosticSeverity.Error
+        );
+
+        diagnostic.relatedInformation = [
+          new vscode.DiagnosticRelatedInformation(
+            new vscode.Location(
+              vscode.Uri.file(paths.questionHtml),
+              new vscode.Range(0, 0, 0, 0)
+            ),
+            "Expected location of question.html"
+          ),
+        ];
+        diagnostics.push(diagnostic);
+      }
+    }
+
+    return diagnostics;
   }
 }
 
@@ -454,14 +551,19 @@ export function activate(context: vscode.ExtensionContext) {
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
 
-  const questionIdCache = new QuestionIdCache();
+  const cache = new QuestionIdCache();
+
+  cache.onDidChange((ids) =>
+    console.info(`prairielearn -- cache update ${ids}`)
+  );
 
   context.subscriptions.push(
     // Shared Utilities
-    questionIdCache,
+    cache,
 
     // Diagnostics
-    ...new DuplicatedQuestionDiagnosticCollection().subscriptions(),
+    ...new DuplicatedQuestionDiagnosticCollection(cache).subscriptions(),
+    ...new IncompleteQuestionDiagnosticCollection(cache).subscriptions(),
 
     // Commands
     vscode.commands.registerCommand(
@@ -507,7 +609,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
-      new AssessmentCompletionItemProvider(questionIdCache),
+      new AssessmentCompletionItemProvider(cache),
       `"`
     ),
 
