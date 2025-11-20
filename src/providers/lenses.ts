@@ -7,7 +7,9 @@ import {
   questionFilePathsFromId,
 } from "./utils";
 
-export class AssessmentCodeLensProvider implements vscode.CodeLensProvider {
+export class AssessmentJumpToSourcesCodeLensProvider
+  implements vscode.CodeLensProvider
+{
   provideCodeLenses(
     document: vscode.TextDocument,
     token: vscode.CancellationToken

@@ -6,7 +6,7 @@ export {
 } from "./diagnostics";
 export { AssessmentCache, QuestionIdCache } from "./filewatchers";
 export {
-  AssessmentCodeLensProvider,
+  AssessmentJumpToSourcesCodeLensProvider,
   QuestionHeaderCodeLensProvider,
 } from "./lenses";
 export * as utils from "./utils";

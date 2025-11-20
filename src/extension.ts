@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { commands } from "./commands";
 import {
   AssessmentCache,
-  AssessmentCodeLensProvider,
+  AssessmentJumpToSourcesCodeLensProvider,
   AssessmentCompletionItemProvider,
   AssessmentDefinitionProvider,
   DuplicatedQuestionDiagnosticCollection,
@@ -78,7 +78,7 @@ export function activate(context: vscode.ExtensionContext) {
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
       infoAssessmentPatterns,
-      new AssessmentCodeLensProvider()
+      new AssessmentJumpToSourcesCodeLensProvider()
     ),
     vscode.languages.registerCodeLensProvider(
       [
