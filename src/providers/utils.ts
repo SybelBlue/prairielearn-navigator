@@ -2,16 +2,34 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 
+/**
+ * Assumes course directory has `courseInstances/` and `questions/` as direct children
+ * and that the document is in the `courseInstances/` or  `questions/` directories,
+ * otherwise assumes the workspace root is the course directory, and infers the path
+ */
 function getQuestionDirFromId(
   document: vscode.TextDocument,
   questionId: string
 ): null | string {
-  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-  if (!workspaceFolder) {
-    return null;
+  // TODO: there should be per-course instancing on all of this
+  const pathParts = document.uri.fsPath.split(path.sep);
+  let courseTop = pathParts.indexOf("courseInstances");
+  if (courseTop < 0) {
+    courseTop = pathParts.indexOf("questions");
+  }
+  let leader;
+  if (courseTop < 0) {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!workspaceFolder) {
+      console.error(`prairielearn -- document not in a course ${document.uri}`);
+      return null;
+    }
+    leader = [workspaceFolder.uri.fsPath];
+  } else {
+    leader = pathParts.slice(0, courseTop);
   }
 
-  return path.join(workspaceFolder.uri.fsPath, "questions", questionId);
+  return path.join(...leader, "questions", questionId);
 }
 
 type QuestionPaths = {
