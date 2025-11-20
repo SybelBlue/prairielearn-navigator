@@ -192,16 +192,93 @@ class PrairieLearnAssessmentCodeLensProvider
 
     return lenses;
   }
+}
 
-  private getQuestionIdFromDocument(document: vscode.TextDocument): string {
-    // Extract from path: questions/ch02/difficult/info.json -> ch02/difficult
-    const pathParts = document.uri.fsPath.split(path.sep);
-    const questionsIndex = pathParts.indexOf("questions");
-    return pathParts.slice(questionsIndex + 1, -1).join("/");
+class PrairieLearnQuestionHeaderCodeLensProvider
+  implements vscode.CodeLensProvider
+{
+  async provideCodeLenses(
+    document: vscode.TextDocument,
+    token: vscode.CancellationToken
+  ): Promise<vscode.CodeLens[]> {
+    const lenses: vscode.CodeLens[] = [];
+
+    const questionId = this.getQuestionIdFromDocument(document);
+    const occurrences = await this.findOccurrences(questionId);
+    const firstLine = new vscode.Range(0, 0, 0, 0);
+
+    lenses.push(
+      new vscode.CodeLens(firstLine, {
+        title:
+          `${occurrences.length} reference` +
+          (occurrences.length === 1 ? "" : "s"),
+        command: "prairielearn-navigator.showOccurrences",
+        arguments: [occurrences],
+      })
+    );
+
+    if (occurrences.length < 5) {
+      for (const occ of occurrences) {
+        const title = this.getAssessmentLabelFromUri(occ.uri);
+        lenses.push(
+          new vscode.CodeLens(firstLine, {
+            title,
+            command: "prairielearn-navigator.openFile",
+            arguments: [occ.uri.fsPath, occ.range],
+          })
+        );
+      }
+    }
+
+    return lenses;
   }
 
-  private getUsageCount(questionId: string): number {
-    return 0; // placeholder
+  private getQuestionIdFromDocument(document: vscode.TextDocument): string {
+    const pathParts = document.uri.fsPath.split(path.sep);
+    const questionsIndex = pathParts.indexOf("questions");
+    return path.join(...pathParts.slice(questionsIndex + 1, -1));
+  }
+
+  private getAssessmentLabelFromUri(uri: vscode.Uri): string {
+    const pathParts = uri.fsPath.split(path.sep);
+    const instanceIndex = pathParts.indexOf("courseInstances");
+    const assessmentsIndex = pathParts.indexOf("assessments");
+    return path.join(
+      ...pathParts.slice(instanceIndex + 1, assessmentsIndex),
+      ...pathParts.slice(assessmentsIndex + 1, -1)
+    );
+  }
+
+  private async findOccurrences(
+    questionId: string
+  ): Promise<vscode.Location[]> {
+    const as = await vscode.workspace.findFiles(
+      "**/assessments/**/infoAssessment.json"
+    );
+    const re = new RegExp(`"id"\\s*:[\\s\\n]*"${questionId}"`);
+    const out = [];
+    for (const uri of as) {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      if (!doc) {
+        return [];
+      }
+      const docText = doc.getText();
+      const match = re.exec(docText);
+      if (!match) {
+        return [];
+      }
+      const matchEnd = match.index + match[0].length;
+      out.push(
+        new vscode.Location(
+          doc.uri,
+          new vscode.Range(
+            doc.positionAt(matchEnd - (questionId.length + 1)),
+            doc.positionAt(matchEnd - 1)
+          )
+        )
+      );
+    }
+    return out;
   }
 }
 
@@ -215,20 +292,13 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    // The command has been defined in the package.json file
-    // Now provide the implementation of the command with registerCommand
-    // The commandId parameter must match the command field in package.json
-    vscode.commands.registerCommand("prairielearn-navigator.helloWorld", () => {
-      // The code you place here will be executed every time your command is executed
-      // Display a message box to the user
-      vscode.window.showInformationMessage(
-        "Hello World from prairielearn-navigator!"
-      );
-    }),
+    // Commands
     vscode.commands.registerCommand(
       "prairielearn-navigator.openFile",
-      async (path: string) => {
-        await vscode.window.showTextDocument(vscode.Uri.file(path));
+      async (path: string, selection?: vscode.Range) => {
+        await vscode.window.showTextDocument(vscode.Uri.file(path), {
+          selection,
+        });
       }
     ),
     vscode.commands.registerCommand(
@@ -239,15 +309,40 @@ export function activate(context: vscode.ExtensionContext) {
         );
       }
     ),
-    // Register the jump-to-def provider in infoAssessments
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.showOccurrences",
+      async (occurrences: vscode.Location[]) => {
+        if (occurrences.length === 0) {
+          vscode.window.showInformationMessage("No references found");
+          return;
+        }
+
+        // Show in references view
+        await vscode.commands.executeCommand(
+          "editor.action.showReferences",
+          occurrences[0].uri,
+          occurrences[0].range.start,
+          occurrences
+        );
+      }
+    ),
+
+    // Providers
     vscode.languages.registerDefinitionProvider(
       [{ pattern: "**/infoAssessment.json" }],
       new PrairieLearnAssessmentDefinitionProvider()
     ),
-    // Register inlay hints provider for infoAssessments
     vscode.languages.registerCodeLensProvider(
       [{ pattern: "**/infoAssessment.json" }],
       new PrairieLearnAssessmentCodeLensProvider()
+    ),
+    vscode.languages.registerCodeLensProvider(
+      [
+        { pattern: "**/questions/**/info.json" },
+        { pattern: "**/questions/**/question.html" },
+        { pattern: "**/questions/**/server.py" },
+      ],
+      new PrairieLearnQuestionHeaderCodeLensProvider()
     )
   );
 }

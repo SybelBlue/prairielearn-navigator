@@ -10,7 +10,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:json"
+    "workspaceContains:**/infoAssessment.json",
+    "workspaceContains:**/questions/**/info.json"
   ],
   "main": "./dist/extension.js",
   "contributes": {
