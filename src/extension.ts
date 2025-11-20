@@ -58,6 +58,12 @@ function questionFilePathsFromId(
   };
 }
 
+function getQuestionIdFromUri(questionUri: vscode.Uri): string {
+  const pathParts = questionUri.fsPath.split(path.sep);
+  const questionsIndex = pathParts.indexOf("questions");
+  return path.join(...pathParts.slice(questionsIndex + 1, -1));
+}
+
 class PrairieLearnAssessmentDefinitionProvider
   implements vscode.DefinitionProvider
 {
@@ -203,7 +209,7 @@ class PrairieLearnQuestionHeaderCodeLensProvider
   ): Promise<vscode.CodeLens[]> {
     const lenses: vscode.CodeLens[] = [];
 
-    const questionId = this.getQuestionIdFromDocument(document);
+    const questionId = getQuestionIdFromUri(document.uri);
     const occurrences = await this.findOccurrences(questionId);
     const firstLine = new vscode.Range(0, 0, 0, 0);
 
@@ -231,12 +237,6 @@ class PrairieLearnQuestionHeaderCodeLensProvider
     }
 
     return lenses;
-  }
-
-  private getQuestionIdFromDocument(document: vscode.TextDocument): string {
-    const pathParts = document.uri.fsPath.split(path.sep);
-    const questionsIndex = pathParts.indexOf("questions");
-    return path.join(...pathParts.slice(questionsIndex + 1, -1));
   }
 
   private getAssessmentLabelFromUri(uri: vscode.Uri): string {
@@ -282,6 +282,32 @@ class PrairieLearnQuestionHeaderCodeLensProvider
   }
 }
 
+class PrairieLearnAssessmentCompletionItemProvider
+  implements vscode.CompletionItemProvider
+{
+  async provideCompletionItems(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken,
+    context: vscode.CompletionContext
+  ): Promise<
+    vscode.CompletionList<vscode.CompletionItem> | vscode.CompletionItem[]
+  > {
+    const questionInfoJsons = await vscode.workspace.findFiles(
+      "**/questions/**/info.json"
+    );
+    const questionIds = questionInfoJsons.map((uri) =>
+      getQuestionIdFromUri(uri)
+    );
+    return new vscode.CompletionList(
+      questionIds.map(
+        (qid) => new vscode.CompletionItem(qid, vscode.CompletionItemKind.Text)
+      ),
+      false
+    );
+  }
+}
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -290,6 +316,10 @@ export function activate(context: vscode.ExtensionContext) {
   console.log(
     'Congratulations, your extension "prairielearn-navigator" is now active!'
   );
+
+  const infoAssessmentPatterns = [
+    { pattern: "**/assessments/**/infoAssessment.json" },
+  ];
 
   context.subscriptions.push(
     // Commands
@@ -327,13 +357,21 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
 
-    // Providers
+    // Jump-to-Definition Providers
     vscode.languages.registerDefinitionProvider(
-      [{ pattern: "**/infoAssessment.json" }],
+      infoAssessmentPatterns,
       new PrairieLearnAssessmentDefinitionProvider()
     ),
+
+    // Completion Providers
+    vscode.languages.registerCompletionItemProvider(
+      infoAssessmentPatterns,
+      new PrairieLearnAssessmentCompletionItemProvider()
+    ),
+
+    // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
-      [{ pattern: "**/infoAssessment.json" }],
+      infoAssessmentPatterns,
       new PrairieLearnAssessmentCodeLensProvider()
     ),
     vscode.languages.registerCodeLensProvider(
