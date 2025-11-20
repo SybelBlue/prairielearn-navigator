@@ -371,6 +371,82 @@ class PrairieLearnAssessmentCompletionItemProvider
   }
 }
 
+class PrairieLearnDuplicatedQuestionDiagnosticCollection {
+  private collection: vscode.DiagnosticCollection;
+  constructor() {
+    this.collection = vscode.languages.createDiagnosticCollection(
+      "prairielearn-navigator"
+    );
+
+    // Check already open documents once on init
+    vscode.workspace.textDocuments.forEach((doc) => {
+      this.update(doc);
+    });
+  }
+
+  private update(document: vscode.TextDocument) {
+    if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
+      return;
+    }
+    const diagnostics: vscode.Diagnostic[] = [];
+    const text = document.getText();
+
+    try {
+      const idPositions = new Map<string, number[]>();
+
+      // Find all "id" field positions
+      const idMatches = Array.from(text.matchAll(/"id"\s*:\s*"([^"]+)"/g));
+
+      for (const match of idMatches) {
+        const id = match[1];
+        const offset = match.index! + match[0].indexOf(id);
+
+        if (!idPositions.has(id)) {
+          idPositions.set(id, []);
+        }
+        idPositions.get(id)!.push(offset);
+      }
+
+      // Create diagnostics for duplicates
+      for (const [id, positions] of idPositions) {
+        if (positions.length > 1) {
+          for (const offset of positions) {
+            const start = document.positionAt(offset);
+            const end = document.positionAt(offset + id.length);
+            const range = new vscode.Range(start, end);
+
+            const diagnostic = new vscode.Diagnostic(
+              range,
+              `Duplicate question ID: "${id}" appears ${positions.length} times`,
+              vscode.DiagnosticSeverity.Warning
+            );
+
+            diagnostics.push(diagnostic);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("prairielearn -- error in duplicate diagnostics: " + e);
+    }
+
+    this.collection.set(document.uri, diagnostics);
+  }
+
+  subscriptions(): vscode.Disposable[] {
+    return [
+      this.collection,
+
+      vscode.workspace.onDidOpenTextDocument((doc) => {
+        this.update(doc);
+      }),
+
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        this.update(e.document);
+      }),
+    ];
+  }
+}
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -389,6 +465,9 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     // Shared Utilities
     questionIdCache,
+
+    // Diagnostics
+    ...new PrairieLearnDuplicatedQuestionDiagnosticCollection().subscriptions(),
 
     // Commands
     vscode.commands.registerCommand(
