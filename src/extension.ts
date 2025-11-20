@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
-import { QuestionIdCache } from "./filewatchers";
-import { AssessmentDefinitionProvider } from "./definitions";
-import { AssessmentCompletionItemProvider } from "./completions";
+import { QuestionIdCache } from "./providers/filewatchers";
+import { AssessmentDefinitionProvider } from "./providers/definitions";
+import { AssessmentCompletionItemProvider } from "./providers/completions";
 import {
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
-} from "./Diagnostics";
+} from "./providers/diagnostics";
 import {
   AssessmentCodeLensProvider,
   QuestionHeaderCodeLensProvider,
-} from "./lenses";
+} from "./providers/lenses";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
