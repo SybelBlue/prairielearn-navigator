@@ -64,6 +64,45 @@ function getQuestionIdFromUri(questionUri: vscode.Uri): string {
   return path.join(...pathParts.slice(questionsIndex + 1, -1));
 }
 
+class PrairieLearnQuestionIdCache {
+  private questionIds: string[] = [];
+  private fileWatcher: vscode.FileSystemWatcher;
+  private onDidChangeEmitter = new vscode.EventEmitter<string[]>();
+
+  // Event that providers can subscribe to
+  public readonly onDidChange = this.onDidChangeEmitter.event;
+
+  constructor() {
+    this.fileWatcher = vscode.workspace.createFileSystemWatcher("**/questions");
+
+    this.fileWatcher.onDidCreate(() => this.refresh());
+    this.fileWatcher.onDidDelete(() => this.refresh());
+    this.fileWatcher.onDidChange(() => this.refresh());
+
+    this.refresh();
+  }
+
+  private async refresh() {
+    console.log("prairielearn -- question id cache refresh");
+    const questionInfoJsons = await vscode.workspace.findFiles(
+      "**/questions/**/info.json"
+    );
+    this.questionIds = questionInfoJsons.map((uri) =>
+      getQuestionIdFromUri(uri)
+    );
+    this.onDidChangeEmitter.fire(this.questionIds);
+  }
+
+  public getQuestionIds(): string[] {
+    return [...this.questionIds];
+  }
+
+  public dispose() {
+    this.fileWatcher.dispose();
+    this.onDidChangeEmitter.dispose();
+  }
+}
+
 class PrairieLearnAssessmentDefinitionProvider
   implements vscode.DefinitionProvider
 {
@@ -165,7 +204,7 @@ class PrairieLearnAssessmentCodeLensProvider
     const lenses: vscode.CodeLens[] = [];
     const text = document.getText();
 
-    const re = /"id"\s*:[\n\s]*"([^"]+)"/g;
+    const re = /"id"\s*:[\n\s]*"([^"]+)"/gm;
     let match;
     while ((match = re.exec(text))) {
       const questionId = match[1];
@@ -255,7 +294,7 @@ class PrairieLearnQuestionHeaderCodeLensProvider
     const as = await vscode.workspace.findFiles(
       "**/assessments/**/infoAssessment.json"
     );
-    const re = new RegExp(`"id"\\s*:[\\s\\n]*"${questionId}"`);
+    const re = new RegExp(`"id"\\s*:[\\s\\n]*"${questionId}"`, "gm");
     const out = [];
     for (const uri of as) {
       const doc = await vscode.workspace.openTextDocument(uri);
@@ -263,20 +302,19 @@ class PrairieLearnQuestionHeaderCodeLensProvider
         return [];
       }
       const docText = doc.getText();
-      const match = re.exec(docText);
-      if (!match) {
-        return [];
-      }
-      const matchEnd = match.index + match[0].length;
-      out.push(
-        new vscode.Location(
-          doc.uri,
-          new vscode.Range(
-            doc.positionAt(matchEnd - (questionId.length + 1)),
-            doc.positionAt(matchEnd - 1)
+      let match;
+      while ((match = re.exec(docText))) {
+        const matchEnd = match.index + match[0].length;
+        out.push(
+          new vscode.Location(
+            doc.uri,
+            new vscode.Range(
+              doc.positionAt(matchEnd - (questionId.length + 1)),
+              doc.positionAt(matchEnd - 1)
+            )
           )
-        )
-      );
+        );
+      }
     }
     return out;
   }
@@ -285,27 +323,15 @@ class PrairieLearnAssessmentCompletionItemProvider
   implements vscode.CompletionItemProvider
 {
   private completionItems: vscode.CompletionItem[] = [];
-  private fileWatcher: vscode.FileSystemWatcher | undefined;
 
-  constructor() {
-    this.refreshCompletionItems();
+  constructor(private questionIdCache: PrairieLearnQuestionIdCache) {
+    this.updateCompletionItems();
 
-    // Watch for changes in questions directory
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-      "**/questions/**/info.json"
-    );
-
-    this.fileWatcher.onDidCreate(() => this.refreshCompletionItems());
-    this.fileWatcher.onDidDelete(() => this.refreshCompletionItems());
+    questionIdCache.onDidChange(() => this.updateCompletionItems());
   }
 
-  private async refreshCompletionItems() {
-    const questionInfoJsons = await vscode.workspace.findFiles(
-      "**/questions/**/info.json"
-    );
-    const questionIds = questionInfoJsons.map((uri) =>
-      getQuestionIdFromUri(uri)
-    );
+  private updateCompletionItems() {
+    const questionIds = this.questionIdCache.getQuestionIds();
     this.completionItems = questionIds.map(
       (qid) =>
         new vscode.CompletionItem(qid, vscode.CompletionItemKind.Reference)
@@ -343,10 +369,6 @@ class PrairieLearnAssessmentCompletionItemProvider
       return newItem;
     });
   }
-
-  dispose() {
-    this.fileWatcher?.dispose();
-  }
 }
 
 // This method is called when your extension is activated
@@ -362,7 +384,12 @@ export function activate(context: vscode.ExtensionContext) {
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
 
+  const questionIdCache = new PrairieLearnQuestionIdCache();
+
   context.subscriptions.push(
+    // Shared Utilities
+    questionIdCache,
+
     // Commands
     vscode.commands.registerCommand(
       "prairielearn-navigator.openFile",
@@ -407,7 +434,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
-      new PrairieLearnAssessmentCompletionItemProvider(),
+      new PrairieLearnAssessmentCompletionItemProvider(questionIdCache),
       `"`
     ),
 
