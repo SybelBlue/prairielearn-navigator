@@ -1,17 +1,16 @@
 import * as vscode from "vscode";
-import { AssessmentCache, QuestionIdCache } from "./providers/filewatchers";
-import { AssessmentDefinitionProvider } from "./providers/definitions";
-import { AssessmentCompletionItemProvider } from "./providers/completions";
+import { commands } from "./commands";
 import {
+  AssessmentCache,
+  AssessmentCodeLensProvider,
+  AssessmentCompletionItemProvider,
+  AssessmentDefinitionProvider,
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
-} from "./providers/diagnostics";
-import {
-  AssessmentCodeLensProvider,
   QuestionHeaderCodeLensProvider,
-} from "./providers/lenses";
-import { commands } from "./commands";
-import { getAssessmentLabelFromUri } from "./providers/utils";
+  QuestionIdCache,
+  utils,
+} from "./providers";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -40,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
   assessmentCache.onDidChange((uris) =>
     console.info(
       `prairielearn -- assessment cache update ${uris.map((u) =>
-        getAssessmentLabelFromUri(u)
+        utils.getAssessmentLabelFromUri(u)
       )}`
     )
   );
