@@ -281,30 +281,71 @@ class PrairieLearnQuestionHeaderCodeLensProvider
     return out;
   }
 }
-
 class PrairieLearnAssessmentCompletionItemProvider
   implements vscode.CompletionItemProvider
 {
-  async provideCompletionItems(
-    document: vscode.TextDocument,
-    position: vscode.Position,
-    token: vscode.CancellationToken,
-    context: vscode.CompletionContext
-  ): Promise<
-    vscode.CompletionList<vscode.CompletionItem> | vscode.CompletionItem[]
-  > {
+  private completionItems: vscode.CompletionItem[] = [];
+  private fileWatcher: vscode.FileSystemWatcher | undefined;
+
+  constructor() {
+    this.refreshCompletionItems();
+
+    // Watch for changes in questions directory
+    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
+      "**/questions/**/info.json"
+    );
+
+    this.fileWatcher.onDidCreate(() => this.refreshCompletionItems());
+    this.fileWatcher.onDidDelete(() => this.refreshCompletionItems());
+  }
+
+  private async refreshCompletionItems() {
     const questionInfoJsons = await vscode.workspace.findFiles(
       "**/questions/**/info.json"
     );
     const questionIds = questionInfoJsons.map((uri) =>
       getQuestionIdFromUri(uri)
     );
-    return new vscode.CompletionList(
-      questionIds.map(
-        (qid) => new vscode.CompletionItem(qid, vscode.CompletionItemKind.Text)
-      ),
-      false
+    this.completionItems = questionIds.map(
+      (qid) =>
+        new vscode.CompletionItem(qid, vscode.CompletionItemKind.Reference)
     );
+  }
+
+  async provideCompletionItems(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    token: vscode.CancellationToken,
+    context: vscode.CompletionContext
+  ): Promise<vscode.CompletionItem[] | undefined> {
+    const linePrefix = document
+      .lineAt(position)
+      .text.slice(0, position.character);
+
+    // Check if we're inside an "id" field value
+    const match = linePrefix.match(/"id"\s*:\s*"([^"]*)$/);
+    if (!match) {
+      return undefined;
+    }
+
+    // Calculate the range of the partial text to replace
+    const partialText = match[1];
+    const startPos = new vscode.Position(
+      position.line,
+      position.character - partialText.length
+    );
+    const range = new vscode.Range(startPos, position);
+
+    // Set the range on each completion item
+    return this.completionItems.map((item) => {
+      const newItem = new vscode.CompletionItem(item.label, item.kind);
+      newItem.range = range;
+      return newItem;
+    });
+  }
+
+  dispose() {
+    this.fileWatcher?.dispose();
   }
 }
 
@@ -366,7 +407,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
-      new PrairieLearnAssessmentCompletionItemProvider()
+      new PrairieLearnAssessmentCompletionItemProvider(),
+      `"`
     ),
 
     // CodeLens Providers
