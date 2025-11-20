@@ -64,7 +64,7 @@ function getQuestionIdFromUri(questionUri: vscode.Uri): string {
   return path.join(...pathParts.slice(questionsIndex + 1, -1));
 }
 
-class PrairieLearnQuestionIdCache {
+class QuestionIdCache {
   private questionIds: string[] = [];
   private fileWatcher: vscode.FileSystemWatcher;
   private onDidChangeEmitter = new vscode.EventEmitter<string[]>();
@@ -103,9 +103,7 @@ class PrairieLearnQuestionIdCache {
   }
 }
 
-class PrairieLearnAssessmentDefinitionProvider
-  implements vscode.DefinitionProvider
-{
+class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
   provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position,
@@ -194,9 +192,7 @@ class PrairieLearnAssessmentDefinitionProvider
   }
 }
 
-class PrairieLearnAssessmentCodeLensProvider
-  implements vscode.CodeLensProvider
-{
+class AssessmentCodeLensProvider implements vscode.CodeLensProvider {
   provideCodeLenses(
     document: vscode.TextDocument,
     token: vscode.CancellationToken
@@ -239,9 +235,7 @@ class PrairieLearnAssessmentCodeLensProvider
   }
 }
 
-class PrairieLearnQuestionHeaderCodeLensProvider
-  implements vscode.CodeLensProvider
-{
+class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
   async provideCodeLenses(
     document: vscode.TextDocument,
     token: vscode.CancellationToken
@@ -319,12 +313,12 @@ class PrairieLearnQuestionHeaderCodeLensProvider
     return out;
   }
 }
-class PrairieLearnAssessmentCompletionItemProvider
+class AssessmentCompletionItemProvider
   implements vscode.CompletionItemProvider
 {
   private completionItems: vscode.CompletionItem[] = [];
 
-  constructor(private questionIdCache: PrairieLearnQuestionIdCache) {
+  constructor(private questionIdCache: QuestionIdCache) {
     this.updateCompletionItems();
 
     questionIdCache.onDidChange(() => this.updateCompletionItems());
@@ -371,7 +365,7 @@ class PrairieLearnAssessmentCompletionItemProvider
   }
 }
 
-class PrairieLearnDuplicatedQuestionDiagnosticCollection {
+class DuplicatedQuestionDiagnosticCollection {
   private collection: vscode.DiagnosticCollection;
   constructor() {
     this.collection = vscode.languages.createDiagnosticCollection(
@@ -460,14 +454,14 @@ export function activate(context: vscode.ExtensionContext) {
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
 
-  const questionIdCache = new PrairieLearnQuestionIdCache();
+  const questionIdCache = new QuestionIdCache();
 
   context.subscriptions.push(
     // Shared Utilities
     questionIdCache,
 
     // Diagnostics
-    ...new PrairieLearnDuplicatedQuestionDiagnosticCollection().subscriptions(),
+    ...new DuplicatedQuestionDiagnosticCollection().subscriptions(),
 
     // Commands
     vscode.commands.registerCommand(
@@ -507,20 +501,20 @@ export function activate(context: vscode.ExtensionContext) {
     // Jump-to-Definition Providers
     vscode.languages.registerDefinitionProvider(
       infoAssessmentPatterns,
-      new PrairieLearnAssessmentDefinitionProvider()
+      new AssessmentDefinitionProvider()
     ),
 
     // Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
-      new PrairieLearnAssessmentCompletionItemProvider(questionIdCache),
+      new AssessmentCompletionItemProvider(questionIdCache),
       `"`
     ),
 
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
       infoAssessmentPatterns,
-      new PrairieLearnAssessmentCodeLensProvider()
+      new AssessmentCodeLensProvider()
     ),
     vscode.languages.registerCodeLensProvider(
       [
@@ -528,7 +522,7 @@ export function activate(context: vscode.ExtensionContext) {
         { pattern: "**/questions/**/question.html" },
         { pattern: "**/questions/**/server.py" },
       ],
-      new PrairieLearnQuestionHeaderCodeLensProvider()
+      new QuestionHeaderCodeLensProvider()
     )
   );
 }
