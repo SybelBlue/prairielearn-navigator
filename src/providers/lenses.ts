@@ -1,5 +1,6 @@
-import * as vscode from "vscode";
 import * as path from "path";
+import * as vscode from "vscode";
+import { AssessmentCache } from "./filewatchers";
 import {
   getAssessmentLabelFromUri,
   getQuestionIdFromUri,
@@ -52,6 +53,8 @@ export class AssessmentCodeLensProvider implements vscode.CodeLensProvider {
 }
 
 export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
+  constructor(private assessments: AssessmentCache) {}
+
   async provideCodeLenses(
     document: vscode.TextDocument,
     token: vscode.CancellationToken
@@ -59,7 +62,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
     const lenses: vscode.CodeLens[] = [];
 
     const questionId = getQuestionIdFromUri(document.uri);
-    const occurrences = await this.findOccurrences(questionId);
+    const occurrences = this.assessments.getQuestionUses(questionId);
     const firstLine = new vscode.Range(0, 0, 0, 0);
 
     lenses.push(
@@ -68,7 +71,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
           `${occurrences.length} reference` +
           (occurrences.length === 1 ? "" : "s"),
         command: "prairielearn-navigator.showOccurrences",
-        arguments: [occurrences],
+        arguments: [occurrences], // todo, maybe add def occurrence here
       })
     );
 
@@ -86,36 +89,5 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
     }
 
     return lenses;
-  }
-
-  private async findOccurrences(
-    questionId: string
-  ): Promise<vscode.Location[]> {
-    const as = await vscode.workspace.findFiles(
-      "**/assessments/**/infoAssessment.json"
-    );
-    const re = new RegExp(`"id"\\s*:[\\s\\n]*"${questionId}"`, "gm");
-    const out = [];
-    for (const uri of as) {
-      const doc = await vscode.workspace.openTextDocument(uri);
-      if (!doc) {
-        return [];
-      }
-      const docText = doc.getText();
-      let match;
-      while ((match = re.exec(docText))) {
-        const matchEnd = match.index + match[0].length;
-        out.push(
-          new vscode.Location(
-            doc.uri,
-            new vscode.Range(
-              doc.positionAt(matchEnd - (questionId.length + 1)),
-              doc.positionAt(matchEnd - 1)
-            )
-          )
-        );
-      }
-    }
-    return out;
   }
 }

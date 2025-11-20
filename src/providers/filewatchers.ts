@@ -54,7 +54,7 @@ export class QuestionIdCache {
 
 export class AssessmentCache {
   private assessmentJsons: vscode.Uri[] = [];
-  private questionUses: Map<string, vscode.Location> = new Map();
+  private questionUses: Map<string, vscode.Location[]> = new Map();
   private fileWatcher: vscode.FileSystemWatcher;
   private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
@@ -94,24 +94,27 @@ export class AssessmentCache {
       while ((match = re.exec(docText))) {
         const matchEnd = match.index + match[0].length;
         const matchedId = match[1];
-        this.questionUses.set(
-          matchedId,
-          new vscode.Location(
-            doc.uri,
-            new vscode.Range(
-              doc.positionAt(matchEnd - (matchedId.length + 1)),
-              doc.positionAt(matchEnd - 1)
-            )
+        const newLocation = new vscode.Location(
+          doc.uri,
+          new vscode.Range(
+            doc.positionAt(matchEnd - (matchedId.length + 1)),
+            doc.positionAt(matchEnd - 1)
           )
         );
+        const value = this.questionUses.get(matchedId);
+        if (value) {
+          value.push(newLocation);
+        } else {
+          this.questionUses.set(matchedId, [newLocation]);
+        }
       }
     }
 
     this.onDidChangeEmitter.fire(this.getAssessmentJsons());
   }
 
-  public getQuestionUses() {
-    return [...this.questionUses];
+  public getQuestionUses(questionId: string): vscode.Location[] {
+    return [...(this.questionUses.get(questionId) || [])];
   }
 
   public getAssessmentJsons() {

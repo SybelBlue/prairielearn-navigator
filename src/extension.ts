@@ -87,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
         { pattern: "**/questions/**/question.html" },
         { pattern: "**/questions/**/server.py" },
       ],
-      new QuestionHeaderCodeLensProvider()
+      new QuestionHeaderCodeLensProvider(assessmentCache)
     )
   );
 }
