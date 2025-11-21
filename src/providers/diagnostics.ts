@@ -5,8 +5,8 @@ import { CourseCache, QuestionCache } from "./filewatchers";
 abstract class ReferenceBasedDiagnosticCollection {
   protected collection: vscode.DiagnosticCollection;
   constructor(
-    questionCache: QuestionCache,
-    protected courseCache: CourseCache
+    protected courseCache: CourseCache,
+    questionCache: QuestionCache
   ) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"

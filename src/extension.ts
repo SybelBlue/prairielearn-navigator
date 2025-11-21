@@ -71,12 +71,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Diagnostics
     ...new DuplicatedQuestionDiagnosticCollection(
-      questionCache,
-      courseCache
+      courseCache,
+      questionCache
     ).subscriptions(),
     ...new IncompleteQuestionDiagnosticCollection(
-      questionCache,
-      courseCache
+      courseCache,
+      questionCache
     ).subscriptions(),
 
     // Jump-to-Definition Providers
