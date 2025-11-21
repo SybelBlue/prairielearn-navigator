@@ -1,7 +1,7 @@
-import * as vscode from "vscode";
 import * as crypto from "crypto";
-import { getQuestionDirFromId, questionFilePathsFromId } from "./utils";
-import { CourseCache, QuestionCache } from "./filewatchers";
+import * as vscode from "vscode";
+import { CourseCache, QuestionCache } from "../filewatchers";
+import { getQuestionDirFromId, questionFilePathsFromId } from "../utils";
 
 abstract class ReferenceBasedDiagnosticCollection {
   protected collection: vscode.DiagnosticCollection;

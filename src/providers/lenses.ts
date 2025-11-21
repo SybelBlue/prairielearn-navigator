@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { AssessmentCache, CourseCache } from "./filewatchers";
-import { questionFilePathsFromId } from "./utils";
+import { AssessmentCache, CourseCache } from "../filewatchers";
+import { questionFilePathsFromId } from "../utils";
 
 function getAssessmentCourseInstanceDisplayName(
   assessmentUri: vscode.Uri

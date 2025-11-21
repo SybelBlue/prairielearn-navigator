@@ -1,8 +1,8 @@
-import * as vscode from "vscode";
-import * as path from "path";
 import * as fs from "fs";
-import { getQuestionDirFromId, QuestionId } from "./utils";
-import { CourseCache } from "./filewatchers";
+import * as path from "path";
+import * as vscode from "vscode";
+import { CourseCache } from "../filewatchers";
+import { getQuestionDirFromId, QuestionId } from "../utils";
 
 export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
   constructor(private courseCache: CourseCache) {}

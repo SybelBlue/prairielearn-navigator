@@ -2,16 +2,19 @@ import * as vscode from "vscode";
 import { commands } from "./commands";
 import {
   AssessmentCache,
+  CourseCache,
+  CourseInstanceCache,
+  QuestionCache,
+} from "./filewatchers";
+import {
   AssessmentCompletionItemProvider,
   AssessmentDefinitionProvider,
   AssessmentJumpToSourcesCodeLensProvider,
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
   IncompleteQuestionQuickFixProvider,
-  QuestionCache,
   QuestionHeaderCodeLensProvider,
 } from "./providers";
-import { CourseCache, CourseInstanceCache } from "./providers/filewatchers";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed

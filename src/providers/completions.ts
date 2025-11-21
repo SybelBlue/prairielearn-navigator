@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { QuestionCache } from "./filewatchers";
+import { QuestionCache } from "../filewatchers";
 
 export class AssessmentCompletionItemProvider
   implements vscode.CompletionItemProvider

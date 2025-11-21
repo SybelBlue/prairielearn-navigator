@@ -5,9 +5,7 @@ export {
   IncompleteQuestionDiagnosticCollection,
   IncompleteQuestionQuickFixProvider,
 } from "./diagnostics";
-export * from "./filewatchers";
 export {
   AssessmentJumpToSourcesCodeLensProvider,
   QuestionHeaderCodeLensProvider,
 } from "./lenses";
-export * as utils from "./utils";
