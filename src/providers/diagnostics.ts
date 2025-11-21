@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as crypto from "crypto";
 import { getQuestionDirFromId, questionFilePathsFromId } from "./utils";
 import { CourseCache, QuestionCache } from "./filewatchers";
 
@@ -214,8 +215,9 @@ export class IncompleteQuestionQuickFixProvider
       if (diagInfo === undefined) {
         continue;
       }
+      const fileName = diagInfo.message.split(" ").at(-1) ?? "file";
       const fix = new vscode.CodeAction(
-        "create missing " + (diagInfo.message.split(" ").at(-1) ?? "file"),
+        "create missing " + fileName,
         vscode.CodeActionKind.QuickFix
       );
 
@@ -223,9 +225,23 @@ export class IncompleteQuestionQuickFixProvider
       fix.isPreferred = true;
 
       fix.edit = new vscode.WorkspaceEdit();
+      let contents;
+      if (fileName.endsWith(".json")) {
+        const fileContents = JSON.stringify(
+          {
+            uuid: crypto.randomUUID(),
+            title: "New Question",
+            type: "v3",
+          },
+          undefined,
+          2
+        );
+        contents = new TextEncoder().encode(fileContents);
+      }
       fix.edit.createFile(diagInfo.location.uri, {
         ignoreIfExists: true,
         overwrite: false,
+        contents,
       });
 
       quickFixes.push(fix);
