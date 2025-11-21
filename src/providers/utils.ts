@@ -17,6 +17,7 @@ function questionFilePathsFromId(
   questionId: QuestionId
 ): (QuestionPaths & { strict(): Partial<QuestionPaths> }) | null {
   const dir = getQuestionDirFromId(questionId);
+  console.debug(dir);
 
   if (!dir || !fs.existsSync(dir)) {
     return null;

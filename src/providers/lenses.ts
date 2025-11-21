@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { AssessmentCache } from "./filewatchers";
+import { AssessmentCache, CourseCache } from "./filewatchers";
 import {
   getAssessmentLabelFromUri,
   getLocalQuestionIdFromUri,
@@ -10,28 +10,31 @@ import {
 export class AssessmentJumpToSourcesCodeLensProvider
   implements vscode.CodeLensProvider
 {
+  constructor(private courseCache: CourseCache) {}
+
   provideCodeLenses(
     document: vscode.TextDocument,
     token: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.CodeLens[]> {
     const lenses: vscode.CodeLens[] = [];
     const text = document.getText();
+    const courseId = this.courseCache.getCourseIdFor(document.uri);
 
     const re = /"id"\s*:[\n\s]*"([^"]+)"/gm;
     let match;
     while ((match = re.exec(text))) {
-      const questionId = match[1];
+      const questionId = { localId: match[1], courseId };
       const matchRange = new vscode.Range(
         document.positionAt(match.index),
         document.positionAt(match.index + match[0].length)
       );
-      const questionPaths = questionFilePathsFromId(document, questionId);
+      const questionPaths = questionFilePathsFromId(questionId);
       if (!questionPaths) {
         lenses.push(
           new vscode.CodeLens(matchRange, {
             title: `!! Unknown Id !!`,
             command: "prairielearn-navigator.unknownId",
-            arguments: [questionId],
+            arguments: [questionId.localId],
           })
         );
         continue;

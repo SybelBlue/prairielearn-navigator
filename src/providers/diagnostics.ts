@@ -1,10 +1,13 @@
 import * as vscode from "vscode";
-import { questionFilePathsFromId } from "./utils";
+import { getQuestionDirFromId, questionFilePathsFromId } from "./utils";
 import { CourseCache, QuestionIdCache } from "./filewatchers";
 
 abstract class ReferenceBasedDiagnosticCollection {
   protected collection: vscode.DiagnosticCollection;
-  constructor(questionCache: QuestionIdCache) {
+  constructor(
+    questionCache: QuestionIdCache,
+    protected courseCache: CourseCache
+  ) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"
     );
@@ -99,43 +102,35 @@ export class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagno
 }
 
 export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
-  public constructor(
-    questionCache: QuestionIdCache,
-    private courseCache: CourseCache
-  ) {
-    super(questionCache);
-  }
-
   protected diagnosticsFor(document: vscode.TextDocument) {
     if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
       return;
     }
     const diagnostics: vscode.Diagnostic[] = [];
     const text = document.getText();
+    const courseId = this.courseCache.getCourseIdFor(document.uri);
 
     // Find all "id" field positions
     const idMatches = Array.from(text.matchAll(/"id"\s*:\s*"([^"]+)"/g));
 
     for (const match of idMatches) {
-      const id = match[1];
+      const id = { courseId, localId: match[1] };
 
-      const paths = questionFilePathsFromId(document, id);
+      const paths = questionFilePathsFromId(id);
 
       const endOffset = match.index + match[0].length;
       const range = new vscode.Range(
-        document.positionAt(endOffset - (id.length + 1)),
+        document.positionAt(endOffset - (id.localId.length + 1)),
         document.positionAt(endOffset - 1)
       );
 
       let existingPaths;
       if (!paths || !(existingPaths = paths.strict()).dir) {
-        const courseRoot =
-          this.courseCache?.getCourseIdFor(document.uri) ??
-          vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
-          "${workspaceRoot}";
         const diagnostic = new vscode.Diagnostic(
           range,
-          `missing question: expected question directory ${courseRoot}/questions/${id}`,
+          `missing question: expected question directory ${getQuestionDirFromId(
+            id
+          )}`,
           vscode.DiagnosticSeverity.Error
         );
         if (paths) {

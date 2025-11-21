@@ -19,9 +19,8 @@ class CourseJsonPath {
   public readonly pathParts: number;
   public readonly courseId: string;
   constructor(public readonly uri: vscode.Uri) {
-    const sep = uri.fsPath.split(path.sep);
-    this.pathParts = sep.length;
-    this.courseId = path.join(...sep.slice(0, -1)); // drop "infoCourse.json"
+    this.courseId = path.dirname(path.normalize(uri.fsPath));
+    this.pathParts = this.courseId.split(path.sep).length;
   }
 }
 
@@ -41,7 +40,7 @@ class CourseJsonPaths {
     let i;
     for (i = 0; i < this.paths.length; i++) {
       const p: CourseJsonPath = this.paths[i];
-      if (p.pathParts >= i) {
+      if (p.pathParts <= path.pathParts) {
         if (p.uri.fsPath === path.uri.fsPath) {
           return;
         }
@@ -55,9 +54,14 @@ class CourseJsonPaths {
     const p = path.normalize(
       filePath instanceof vscode.Uri ? filePath.fsPath : filePath
     );
-    return (
-      this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null
+    const out =
+      this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null;
+    console.log(
+      filePath instanceof vscode.Uri ? filePath.fsPath : filePath,
+      ">",
+      out
     );
+    return out;
   }
 
   getCourseIds(): string[] {
@@ -98,13 +102,19 @@ export class CourseCache {
     this.onDidChangeEmitter.dispose();
   }
 
-  public getCourseIdFor(filePath: vscode.Uri | string): string | null {
-    return this.courseJsons.getCourseIdFor(filePath);
+  public getCourseIdFor(filePath: vscode.Uri | string): string {
+    const out =
+      this.courseJsons.getCourseIdFor(filePath) ??
+      (filePath instanceof vscode.Uri
+        ? vscode.workspace.getWorkspaceFolder(filePath)?.uri.fsPath
+        : null) ??
+      (filePath instanceof vscode.Uri ? filePath.fsPath : filePath);
+    return out;
   }
 
   public getQuestionIdFor(questionUri: vscode.Uri): QuestionId {
     return {
-      courseId: this.getCourseIdFor(questionUri) ?? "",
+      courseId: this.getCourseIdFor(questionUri),
       localId: getLocalQuestionIdFromUri(questionUri),
     };
   }
@@ -128,6 +138,8 @@ export class CourseInstanceCache {
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
 
+    this.courseCache.onDidChange(() => this.refresh());
+
     this.refresh();
   }
 
@@ -138,7 +150,7 @@ export class CourseInstanceCache {
 
     this.instancesByCourseId.clear();
     for (const instJson of this.courseInstanceJsons) {
-      const key = this.courseCache.getCourseIdFor(instJson) ?? "";
+      const key = this.courseCache.getCourseIdFor(instJson);
       const valArr = this.instancesByCourseId.get(key);
       if (valArr) {
         valArr.push(instJson);
@@ -180,6 +192,8 @@ export class QuestionIdCache {
     this.fileWatcher.onDidCreate(() => this.refresh());
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
+
+    this.courseCache.onDidChange(() => this.refresh());
 
     this.refresh();
   }

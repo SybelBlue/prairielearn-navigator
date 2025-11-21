@@ -37,15 +37,21 @@ export function activate(context: vscode.ExtensionContext) {
   const assessmentCache = new AssessmentCache(questionCache);
 
   courseCache.onDidChange((ids) =>
-    console.info(`prairielearn -- course cache update: n=${ids}`)
+    console.info(`prairielearn -- course cache update: ${ids}`)
   );
-  courseInstanceCache.onDidChange((ids) =>
+  courseInstanceCache.onDidChange((uris) =>
     console.info(
-      `prairielearn -- course instance cache update: n=${ids.length}`
+      // `prairielearn -- course instance cache update: n=${ids.length}`
+      `prairielearn -- course instance cache update: ${uris.map(
+        (uris) => uris.fsPath
+      )}`
     )
   );
   questionCache.onDidChange((ids) =>
-    console.info(`prairielearn -- question cache update: n=${ids.length}`)
+    // console.info(`prairielearn -- question cache update: n=${ids.length}`)
+    console.info(
+      `prairielearn -- question cache update: ${ids.map((qid) => qid.localId)}`
+    )
   );
   assessmentCache.onDidChange((uris) =>
     console.info(`prairielearn -- assessment cache update: n=${uris.length}`)
@@ -65,7 +71,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Diagnostics
     ...new DuplicatedQuestionDiagnosticCollection(
-      questionCache
+      questionCache,
+      courseCache
     ).subscriptions(),
     ...new IncompleteQuestionDiagnosticCollection(
       questionCache,
@@ -75,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Jump-to-Definition Providers
     vscode.languages.registerDefinitionProvider(
       infoAssessmentPatterns,
-      new AssessmentDefinitionProvider()
+      new AssessmentDefinitionProvider(courseCache)
     ),
 
     // IntelliSense Completion Providers
@@ -88,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
       infoAssessmentPatterns,
-      new AssessmentJumpToSourcesCodeLensProvider()
+      new AssessmentJumpToSourcesCodeLensProvider(courseCache)
     ),
     vscode.languages.registerCodeLensProvider(
       [

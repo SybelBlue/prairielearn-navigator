@@ -71,7 +71,7 @@ export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
       return null;
     }
 
-    const courseId = this.courseCache.getCourseIdFor(document.uri) ?? "";
+    const courseId = this.courseCache.getCourseIdFor(document.uri);
     const questionId = getConfirmedQuestionId(
       courseId,
       document,
