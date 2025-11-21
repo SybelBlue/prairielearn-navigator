@@ -6,6 +6,6 @@ export {
   IncompleteQuestionQuickFixProvider,
 } from "./diagnostics";
 export {
-  AssessmentJumpToSourcesCodeLensProvider,
+  AssessmentQuestionIdCodeLensProvider,
   QuestionHeaderCodeLensProvider,
 } from "./lenses";

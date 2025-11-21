@@ -26,7 +26,7 @@ function pluralize(n: number, s: string) {
   return n + " " + s + (n === 1 ? "" : "s");
 }
 
-export class AssessmentJumpToSourcesCodeLensProvider
+export class AssessmentQuestionIdCodeLensProvider
   implements vscode.CodeLensProvider
 {
   constructor(

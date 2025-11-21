@@ -9,7 +9,7 @@ import {
 import {
   AssessmentCompletionItemProvider,
   AssessmentDefinitionProvider,
-  AssessmentJumpToSourcesCodeLensProvider,
+  AssessmentQuestionIdCodeLensProvider,
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
   IncompleteQuestionQuickFixProvider,
@@ -102,7 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
       infoAssessmentPatterns,
-      new AssessmentJumpToSourcesCodeLensProvider(courseCache, assessmentCache)
+      new AssessmentQuestionIdCodeLensProvider(courseCache, assessmentCache)
     ),
     vscode.languages.registerCodeLensProvider(
       [
