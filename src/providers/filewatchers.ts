@@ -54,14 +54,9 @@ class CourseJsonPaths {
     const p = path.normalize(
       filePath instanceof vscode.Uri ? filePath.fsPath : filePath
     );
-    const out =
-      this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null;
-    console.log(
-      filePath instanceof vscode.Uri ? filePath.fsPath : filePath,
-      ">",
-      out
+    return (
+      this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null
     );
-    return out;
   }
 
   getCourseIds(): string[] {
@@ -103,13 +98,13 @@ export class CourseCache {
   }
 
   public getCourseIdFor(filePath: vscode.Uri | string): string {
-    const out =
+    return (
       this.courseJsons.getCourseIdFor(filePath) ??
       (filePath instanceof vscode.Uri
         ? vscode.workspace.getWorkspaceFolder(filePath)?.uri.fsPath
         : null) ??
-      (filePath instanceof vscode.Uri ? filePath.fsPath : filePath);
-    return out;
+      (filePath instanceof vscode.Uri ? filePath.fsPath : filePath)
+    );
   }
 
   public getQuestionIdFor(questionUri: vscode.Uri): QuestionId {
