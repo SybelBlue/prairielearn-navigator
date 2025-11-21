@@ -1,71 +1,10 @@
-import * as path from "path";
 import * as vscode from "vscode";
 import { getLocalQuestionIdFromUri, QuestionId } from "../utils";
 import { FileWatcher } from "./filewatcher";
-
-class CourseJsonPath {
-  public readonly pathParts: number;
-  public readonly courseId: string;
-  public readonly displayName: string;
-  constructor(public readonly uri: vscode.Uri) {
-    this.courseId = path.dirname(path.normalize(uri.fsPath));
-    this.pathParts = this.courseId.split(path.sep).length;
-
-    const wsPath = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
-    this.displayName = this.courseId.slice(
-      0,
-      wsPath === undefined ? -1 : wsPath.length
-    );
-  }
-}
-
-class CourseJsonPaths {
-  private paths: CourseJsonPath[] = [];
-
-  getPaths(): CourseJsonPath[] {
-    return [...this.paths];
-  }
-
-  clear() {
-    this.paths = [];
-  }
-
-  push(uri: vscode.Uri) {
-    const path = new CourseJsonPath(uri);
-    let i;
-    for (i = 0; i < this.paths.length; i++) {
-      const p: CourseJsonPath = this.paths[i];
-      if (p.pathParts <= path.pathParts) {
-        if (p.uri.fsPath === path.uri.fsPath) {
-          return path;
-        }
-        break;
-      }
-    }
-    this.paths.splice(i, 0, path);
-    return path;
-  }
-
-  getCourseIdFor(filePath: vscode.Uri | string): string | null {
-    const p = path.normalize(
-      filePath instanceof vscode.Uri ? filePath.fsPath : filePath
-    );
-    return (
-      this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null
-    );
-  }
-
-  getCourseIds(): string[] {
-    return this.paths.map((cjp) => cjp.courseId);
-  }
-
-  getDisplayNameFor(courseId: string) {
-    return this.paths.find((cjp) => cjp.courseId === courseId)?.displayName;
-  }
-}
+import { CourseIdManager } from "./courseIdManager";
 
 export class CourseCache {
-  private courseJsons: CourseJsonPaths = new CourseJsonPaths();
+  private courseJsons: CourseIdManager = new CourseIdManager();
   private fileWatcher: FileWatcher;
   private onUpdatedEmitter = new vscode.EventEmitter<string[]>();
 
@@ -77,9 +16,9 @@ export class CourseCache {
     this.fileWatcher.onUpdated((event) => {
       if (event.type === "refreshed") {
         this.courseJsons.clear();
-        event.uris.forEach((uri) => this.courseJsons.push(uri));
+        event.uris.forEach((uri) => this.courseJsons.createId(uri));
       } else {
-        this.courseJsons.push(event.uri);
+        this.courseJsons.createId(event.uri);
       }
       this.onUpdatedEmitter.fire(this.courseJsons.getCourseIds());
     });

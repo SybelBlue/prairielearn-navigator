@@ -1,7 +1,17 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { AssessmentCache, CourseCache } from "../filewatchers";
+import {
+  AssessmentCache,
+  CourseCache,
+  CourseInstanceCache,
+} from "../filewatchers";
 import { questionFilePathsFromId } from "../utils";
+
+function getAssessmentCourseInstanceId(assessmentUri: vscode.Uri): string {
+  const pathParts = assessmentUri.fsPath.split(path.sep);
+  const assessmentsIndex = pathParts.indexOf("assessments");
+  return path.join(...pathParts.slice(0, assessmentsIndex));
+}
 
 function getAssessmentCourseInstanceDisplayName(
   assessmentUri: vscode.Uri
@@ -62,8 +72,14 @@ export class AssessmentQuestionIdCodeLensProvider
         continue;
       }
 
-      const occurrences = this.assessmentCache.getQuestionUses(questionId);
-      const filtered = occurrences.filter((loc) => loc.uri !== document.uri);
+      const courseInstanceId = getAssessmentCourseInstanceId(document.uri);
+      const allOccurrences = this.assessmentCache.getQuestionUses(questionId);
+      const instanceOccurrences = allOccurrences.filter(
+        (loc) => courseInstanceId === getAssessmentCourseInstanceId(loc.uri)
+      );
+      const filtered = instanceOccurrences.filter(
+        (loc) => loc.uri !== document.uri
+      );
       if (filtered.length) {
         const instDispName = getAssessmentCourseInstanceDisplayName(
           document.uri
@@ -72,7 +88,7 @@ export class AssessmentQuestionIdCodeLensProvider
           new vscode.CodeLens(matchRange, {
             title: `${pluralize(filtered.length, "reuse")} in ${instDispName}!`,
             command: "prairielearn-navigator.showOccurrences",
-            arguments: [occurrences], // todo, maybe add def occurrence here
+            arguments: [allOccurrences], // todo, maybe add def occurrence here
           })
         );
       }

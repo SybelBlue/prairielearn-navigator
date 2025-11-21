@@ -65,6 +65,7 @@ export class AssessmentCache {
       const value = this.questionUses.get(key);
       if (value) {
         value.push(newLocation);
+        console.log("reuse", key, newLocation);
       } else {
         this.questionUses.set(key, [newLocation]);
       }
