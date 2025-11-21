@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
-import { QuestionIdCache } from "./filewatchers";
+import { QuestionCache } from "./filewatchers";
 
 export class AssessmentCompletionItemProvider
   implements vscode.CompletionItemProvider
 {
   private completionItems: vscode.CompletionItem[] = [];
 
-  constructor(private questionIdCache: QuestionIdCache) {
+  constructor(private questionIdCache: QuestionCache) {
     this.updateCompletionItems();
 
     questionIdCache.onDidChange(() => this.updateCompletionItems());

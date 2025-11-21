@@ -4,7 +4,10 @@ export {
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
 } from "./diagnostics";
-export { AssessmentCache, QuestionIdCache } from "./filewatchers";
+export {
+  AssessmentCache,
+  QuestionCache as QuestionIdCache,
+} from "./filewatchers";
 export {
   AssessmentJumpToSourcesCodeLensProvider,
   QuestionHeaderCodeLensProvider,

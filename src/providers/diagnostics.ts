@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import { getQuestionDirFromId, questionFilePathsFromId } from "./utils";
-import { CourseCache, QuestionIdCache } from "./filewatchers";
+import { CourseCache, QuestionCache } from "./filewatchers";
 
 abstract class ReferenceBasedDiagnosticCollection {
   protected collection: vscode.DiagnosticCollection;
   constructor(
-    questionCache: QuestionIdCache,
+    questionCache: QuestionCache,
     protected courseCache: CourseCache
   ) {
     this.collection = vscode.languages.createDiagnosticCollection(

@@ -212,7 +212,7 @@ export class CourseInstanceCache {
   }
 }
 
-export class QuestionIdCache {
+export class QuestionCache {
   private static regexSafeIds: Map<string, string> = new Map();
   private questionIds: QuestionId[] = [];
   private fileWatcher: vscode.FileSystemWatcher;
@@ -247,11 +247,8 @@ export class QuestionIdCache {
   private addJson(uri: vscode.Uri, skipEmit?: boolean) {
     const quid = this.courseCache.getQuestionIdFor(uri);
     this.questionIds.push(quid);
-    if (!QuestionIdCache.regexSafeIds.has(quid.localId)) {
-      QuestionIdCache.regexSafeIds.set(
-        quid.localId,
-        makeRegexSafe(quid.localId)
-      );
+    if (!QuestionCache.regexSafeIds.has(quid.localId)) {
+      QuestionCache.regexSafeIds.set(quid.localId, makeRegexSafe(quid.localId));
     }
     if (!skipEmit) {
       this.emit();
@@ -271,7 +268,7 @@ export class QuestionIdCache {
       .filter((id) => id.courseId === courseId)
       .map(
         (id) =>
-          QuestionIdCache.regexSafeIds.get(id.localId) ||
+          QuestionCache.regexSafeIds.get(id.localId) ||
           makeRegexSafe(id.localId)
       );
   }
@@ -279,8 +276,7 @@ export class QuestionIdCache {
   getAllRegexSafeQuestionIds(): string[] {
     return this.questionIds.map(
       (id) =>
-        QuestionIdCache.regexSafeIds.get(id.localId) ||
-        makeRegexSafe(id.localId)
+        QuestionCache.regexSafeIds.get(id.localId) || makeRegexSafe(id.localId)
     );
   }
 
@@ -301,7 +297,7 @@ export class AssessmentCache {
 
   constructor(
     private courseCache: CourseCache,
-    private questionCache: QuestionIdCache
+    private questionCache: QuestionCache
   ) {
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(
       "**/assessments/**/infoAssessment.json"
