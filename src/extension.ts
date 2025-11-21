@@ -2,15 +2,14 @@ import * as vscode from "vscode";
 import { commands } from "./commands";
 import {
   AssessmentCache,
-  AssessmentJumpToSourcesCodeLensProvider,
   AssessmentCompletionItemProvider,
   AssessmentDefinitionProvider,
+  AssessmentJumpToSourcesCodeLensProvider,
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
-  QuestionHeaderCodeLensProvider,
-  QuestionIdCache,
-  utils,
   IncompleteQuestionQuickFixProvider,
+  QuestionCache,
+  QuestionHeaderCodeLensProvider,
 } from "./providers";
 import { CourseCache, CourseInstanceCache } from "./providers/filewatchers";
 
@@ -34,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
   // setup caches
   const courseCache = new CourseCache();
   const courseInstanceCache = new CourseInstanceCache(courseCache);
-  const questionCache = new QuestionIdCache(courseCache);
+  const questionCache = new QuestionCache(courseCache);
   const assessmentCache = new AssessmentCache(courseCache, questionCache);
 
   courseCache.onDidChange((ids) =>

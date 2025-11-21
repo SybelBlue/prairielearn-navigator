@@ -5,10 +5,7 @@ export {
   IncompleteQuestionDiagnosticCollection,
   IncompleteQuestionQuickFixProvider,
 } from "./diagnostics";
-export {
-  AssessmentCache,
-  QuestionCache as QuestionIdCache,
-} from "./filewatchers";
+export * from "./filewatchers";
 export {
   AssessmentJumpToSourcesCodeLensProvider,
   QuestionHeaderCodeLensProvider,
