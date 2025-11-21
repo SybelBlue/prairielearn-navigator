@@ -10,6 +10,7 @@ import {
   QuestionHeaderCodeLensProvider,
   QuestionIdCache,
   utils,
+  IncompleteQuestionQuickFixProvider,
 } from "./providers";
 import { CourseCache, CourseInstanceCache } from "./providers/filewatchers";
 
@@ -108,6 +109,15 @@ export function activate(context: vscode.ExtensionContext) {
         { pattern: "**/questions/**/server.py" },
       ],
       new QuestionHeaderCodeLensProvider(courseCache, assessmentCache)
+    ),
+
+    // Code Action Providers
+    vscode.languages.registerCodeActionsProvider(
+      "json",
+      new IncompleteQuestionQuickFixProvider(),
+      {
+        providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+      }
     )
   );
 }

@@ -101,6 +101,9 @@ export class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagno
   }
 }
 
+export const incompleteQuestionDiagnosticCode =
+  "prairielearn-navigator-incomplete";
+
 export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
   protected diagnosticsFor(document: vscode.TextDocument) {
     if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
@@ -134,6 +137,7 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
           vscode.DiagnosticSeverity.Error
         );
         if (paths) {
+          diagnostic.code = incompleteQuestionDiagnosticCode;
           diagnostic.relatedInformation = [
             new vscode.DiagnosticRelatedInformation(
               new vscode.Location(
@@ -154,6 +158,7 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
           vscode.DiagnosticSeverity.Error
         );
 
+        diagnostic.code = incompleteQuestionDiagnosticCode;
         diagnostic.relatedInformation = [
           new vscode.DiagnosticRelatedInformation(
             new vscode.Location(
@@ -172,6 +177,7 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
           vscode.DiagnosticSeverity.Error
         );
 
+        diagnostic.code = incompleteQuestionDiagnosticCode;
         diagnostic.relatedInformation = [
           new vscode.DiagnosticRelatedInformation(
             new vscode.Location(
@@ -186,5 +192,45 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
     }
 
     return diagnostics;
+  }
+}
+
+export class IncompleteQuestionQuickFixProvider
+  implements vscode.CodeActionProvider
+{
+  provideCodeActions(
+    document: vscode.TextDocument,
+    range: vscode.Range | vscode.Selection,
+    context: vscode.CodeActionContext,
+    token: vscode.CancellationToken
+  ): vscode.CodeAction[] {
+    const quickFixes: vscode.CodeAction[] = [];
+
+    for (const diagnostic of context.diagnostics) {
+      if (diagnostic.code !== incompleteQuestionDiagnosticCode) {
+        continue;
+      }
+      const diagInfo = diagnostic.relatedInformation?.at(0);
+      if (diagInfo === undefined) {
+        continue;
+      }
+      const fix = new vscode.CodeAction(
+        "create missing " + (diagInfo.message.split(" ").at(-1) ?? "file"),
+        vscode.CodeActionKind.QuickFix
+      );
+
+      fix.diagnostics = [diagnostic];
+      fix.isPreferred = true;
+
+      fix.edit = new vscode.WorkspaceEdit();
+      fix.edit.createFile(diagInfo.location.uri, {
+        ignoreIfExists: true,
+        overwrite: false,
+      });
+
+      quickFixes.push(fix);
+    }
+
+    return quickFixes;
   }
 }

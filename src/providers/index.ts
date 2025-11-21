@@ -3,6 +3,7 @@ export { AssessmentDefinitionProvider } from "./definitions";
 export {
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
+  IncompleteQuestionQuickFixProvider,
 } from "./diagnostics";
 export {
   AssessmentCache,
