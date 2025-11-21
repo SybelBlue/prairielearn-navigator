@@ -202,7 +202,7 @@ export class CourseInstanceCache {
     return [...this.courseInstanceJsons];
   }
 
-  public getCourseInstanceFor(courseId: string) {
+  public getCourseInstancesFor(courseId: string) {
     return [...(this.instancesByCourseId.get(courseId) ?? [])];
   }
 

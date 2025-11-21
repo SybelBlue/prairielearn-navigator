@@ -1,16 +1,38 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { AssessmentCache, CourseCache } from "./filewatchers";
-import {
-  getAssessmentLabelFromUri,
-  getLocalQuestionIdFromUri,
-  questionFilePathsFromId,
-} from "./utils";
+import { questionFilePathsFromId } from "./utils";
+
+function getAssessmentCourseInstanceDisplayName(
+  assessmentUri: vscode.Uri
+): string {
+  const pathParts = assessmentUri.fsPath.split(path.sep);
+  const instanceIndex = pathParts.indexOf("courseInstances");
+  const assessmentsIndex = pathParts.indexOf("assessments");
+  return path.join(...pathParts.slice(instanceIndex + 1, assessmentsIndex));
+}
+
+function getQualifiedAssessmentDisplayName(assessmentUri: vscode.Uri): string {
+  const pathParts = assessmentUri.fsPath.split(path.sep);
+  const instanceIndex = pathParts.indexOf("courseInstances");
+  const assessmentsIndex = pathParts.indexOf("assessments");
+  return path.join(
+    ...pathParts.slice(instanceIndex + 1, assessmentsIndex),
+    ...pathParts.slice(assessmentsIndex + 1, -1)
+  );
+}
+
+function pluralize(n: number, s: string) {
+  return n + " " + s + (n === 1 ? "" : "s");
+}
 
 export class AssessmentJumpToSourcesCodeLensProvider
   implements vscode.CodeLensProvider
 {
-  constructor(private courseCache: CourseCache) {}
+  constructor(
+    private courseCache: CourseCache,
+    private assessmentCache: AssessmentCache
+  ) {}
 
   provideCodeLenses(
     document: vscode.TextDocument,
@@ -40,17 +62,32 @@ export class AssessmentJumpToSourcesCodeLensProvider
         continue;
       }
 
-      for (const [key, p] of Object.entries(questionPaths.strict())) {
-        if (key !== "dir") {
-          lenses.push(
-            new vscode.CodeLens(matchRange, {
-              title: `${path.basename(p)}`,
-              command: "prairielearn-navigator.openFile",
-              arguments: [p],
-            })
-          );
-        }
+      const occurrences = this.assessmentCache.getQuestionUses(questionId);
+      const filtered = occurrences.filter((loc) => loc.uri !== document.uri);
+      if (filtered.length) {
+        const instDispName = getAssessmentCourseInstanceDisplayName(
+          document.uri
+        );
+        lenses.push(
+          new vscode.CodeLens(matchRange, {
+            title: `${pluralize(filtered.length, "reuse")} in ${instDispName}!`,
+            command: "prairielearn-navigator.showOccurrences",
+            arguments: [occurrences], // todo, maybe add def occurrence here
+          })
+        );
       }
+
+      // for (const [key, p] of Object.entries(questionPaths.strict())) {
+      //   if (key !== "dir") {
+      //     lenses.push(
+      //       new vscode.CodeLens(matchRange, {
+      //         title: `${path.basename(p)}`,
+      //         command: "prairielearn-navigator.openFile",
+      //         arguments: [p],
+      //       })
+      //     );
+      //   }
+      // }
     }
 
     return lenses;
@@ -60,7 +97,7 @@ export class AssessmentJumpToSourcesCodeLensProvider
 export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
   constructor(
     private courseCache: CourseCache,
-    private assessments: AssessmentCache
+    private assessmentCache: AssessmentCache
   ) {}
 
   async provideCodeLenses(
@@ -70,14 +107,12 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
     const lenses: vscode.CodeLens[] = [];
 
     const questionId = this.courseCache.getQuestionIdFor(document.uri);
-    const occurrences = this.assessments.getQuestionUses(questionId);
+    const occurrences = this.assessmentCache.getQuestionUses(questionId);
     const firstLine = new vscode.Range(0, 0, 0, 0);
 
     lenses.push(
       new vscode.CodeLens(firstLine, {
-        title:
-          `${occurrences.length} reference` +
-          (occurrences.length === 1 ? "" : "s"),
+        title: pluralize(occurrences.length, `reference`),
         command: "prairielearn-navigator.showOccurrences",
         arguments: [occurrences], // todo, maybe add def occurrence here
       })
@@ -85,7 +120,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
 
     if (occurrences.length < 5) {
       for (const occ of occurrences) {
-        const title = getAssessmentLabelFromUri(occ.uri);
+        const title = getQualifiedAssessmentDisplayName(occ.uri);
         lenses.push(
           new vscode.CodeLens(firstLine, {
             title,

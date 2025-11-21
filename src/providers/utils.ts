@@ -58,16 +58,6 @@ function getLocalQuestionIdFromUri(questionUri: vscode.Uri): string {
   return path.join(...pathParts.slice(questionsIndex + 1, -1));
 }
 
-function getAssessmentLabelFromUri(uri: vscode.Uri): string {
-  const pathParts = uri.fsPath.split(path.sep);
-  const instanceIndex = pathParts.indexOf("courseInstances");
-  const assessmentsIndex = pathParts.indexOf("assessments");
-  return path.join(
-    ...pathParts.slice(instanceIndex + 1, assessmentsIndex),
-    ...pathParts.slice(assessmentsIndex + 1, -1)
-  );
-}
-
 const reTargets = /[\{\}\[\]\|\*\+\\\.\^]/g;
 function makeRegexSafe(s: string) {
   return s.replaceAll(reTargets, "\\$&");
@@ -78,7 +68,6 @@ export {
   questionFilePathsFromId,
   getLocalQuestionIdFromUri,
   makeRegexSafe,
-  getAssessmentLabelFromUri,
   type QuestionPaths,
   type QuestionId,
 };

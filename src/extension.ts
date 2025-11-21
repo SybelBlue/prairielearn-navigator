@@ -95,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
       infoAssessmentPatterns,
-      new AssessmentJumpToSourcesCodeLensProvider(courseCache)
+      new AssessmentJumpToSourcesCodeLensProvider(courseCache, assessmentCache)
     ),
     vscode.languages.registerCodeLensProvider(
       [
