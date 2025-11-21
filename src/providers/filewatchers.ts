@@ -18,9 +18,16 @@ import { getLocalQuestionIdFromUri, makeRegexSafe, QuestionId } from "./utils";
 class CourseJsonPath {
   public readonly pathParts: number;
   public readonly courseId: string;
+  public readonly displayName: string;
   constructor(public readonly uri: vscode.Uri) {
     this.courseId = path.dirname(path.normalize(uri.fsPath));
     this.pathParts = this.courseId.split(path.sep).length;
+
+    const wsPath = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+    this.displayName = this.courseId.slice(
+      0,
+      wsPath === undefined ? -1 : wsPath.length
+    );
   }
 }
 
@@ -42,12 +49,13 @@ class CourseJsonPaths {
       const p: CourseJsonPath = this.paths[i];
       if (p.pathParts <= path.pathParts) {
         if (p.uri.fsPath === path.uri.fsPath) {
-          return;
+          return path;
         }
         break;
       }
     }
     this.paths.splice(i, 0, path);
+    return path;
   }
 
   getCourseIdFor(filePath: vscode.Uri | string): string | null {
@@ -61,6 +69,10 @@ class CourseJsonPaths {
 
   getCourseIds(): string[] {
     return this.paths.map((cjp) => cjp.courseId);
+  }
+
+  getDisplayNameFor(courseId: string) {
+    return this.paths.find((cjp) => cjp.courseId === courseId)?.displayName;
   }
 }
 
@@ -76,7 +88,7 @@ export class CourseCache {
     this.fileWatcher =
       vscode.workspace.createFileSystemWatcher("**/infoCourse.json");
 
-    this.fileWatcher.onDidCreate(() => this.refresh());
+    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
 
@@ -87,14 +99,29 @@ export class CourseCache {
     const courseJsons = await vscode.workspace.findFiles("**/infoCourse.json");
 
     this.courseJsons.clear();
-    courseJsons.forEach((uri) => this.courseJsons.push(uri));
+    courseJsons.forEach((uri) => this.addJson(uri, true));
 
+    this.emit();
+  }
+
+  private addJson(uri: vscode.Uri, skipEmit?: boolean) {
+    this.courseJsons.push(uri);
+    if (!skipEmit) {
+      this.emit();
+    }
+  }
+
+  private emit() {
     this.onDidChangeEmitter.fire(this.courseJsons.getCourseIds());
   }
 
   public dispose() {
     this.fileWatcher.dispose();
     this.onDidChangeEmitter.dispose();
+  }
+
+  public getDisplayNameFor(courseId: string) {
+    return this.courseJsons.getDisplayNameFor(courseId);
   }
 
   public getCourseIdFor(filePath: vscode.Uri | string): string {
@@ -129,7 +156,7 @@ export class CourseInstanceCache {
       "**/infoCourseInstance.json"
     );
 
-    this.fileWatcher.onDidCreate(() => this.refresh());
+    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
 
@@ -144,16 +171,25 @@ export class CourseInstanceCache {
     );
 
     this.instancesByCourseId.clear();
-    for (const instJson of this.courseInstanceJsons) {
-      const key = this.courseCache.getCourseIdFor(instJson);
-      const valArr = this.instancesByCourseId.get(key);
-      if (valArr) {
-        valArr.push(instJson);
-      } else {
-        this.instancesByCourseId.set(key, [instJson]);
-      }
-    }
+    this.courseInstanceJsons.forEach((cij) => this.addJson(cij, true));
 
+    this.emit();
+  }
+
+  private addJson(uri: vscode.Uri, skipEmit?: boolean) {
+    const key = this.courseCache.getCourseIdFor(uri);
+    const valArr = this.instancesByCourseId.get(key);
+    if (valArr) {
+      valArr.push(uri);
+    } else {
+      this.instancesByCourseId.set(key, [uri]);
+    }
+    if (!skipEmit) {
+      this.emit();
+    }
+  }
+
+  private emit() {
     this.onDidChangeEmitter.fire(this.getCourseInstanceJsons());
   }
 
@@ -181,10 +217,11 @@ export class QuestionIdCache {
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(private courseCache: CourseCache) {
-    this.fileWatcher =
-      vscode.workspace.createFileSystemWatcher("**/questions/**");
+    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
+      "**/questions/**/info.json"
+    );
 
-    this.fileWatcher.onDidCreate(() => this.refresh());
+    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
 
@@ -197,14 +234,26 @@ export class QuestionIdCache {
     const questionInfoJsons = await vscode.workspace.findFiles(
       "**/questions/**/info.json"
     );
-    this.questionIds = questionInfoJsons.map((uri) =>
-      this.courseCache.getQuestionIdFor(uri)
-    );
-    for (const id of this.questionIds) {
-      if (!QuestionIdCache.regexSafeIds.has(id.localId)) {
-        QuestionIdCache.regexSafeIds.set(id.localId, makeRegexSafe(id.localId));
-      }
+    this.questionIds = [];
+    questionInfoJsons.forEach((uri) => this.addJson(uri, true));
+    this.emit();
+  }
+
+  private addJson(uri: vscode.Uri, skipEmit?: boolean) {
+    const quid = this.courseCache.getQuestionIdFor(uri);
+    this.questionIds.push(quid);
+    if (!QuestionIdCache.regexSafeIds.has(quid.localId)) {
+      QuestionIdCache.regexSafeIds.set(
+        quid.localId,
+        makeRegexSafe(quid.localId)
+      );
     }
+    if (!skipEmit) {
+      this.emit();
+    }
+  }
+
+  private emit() {
     this.onDidChangeEmitter.fire(this.getQuestionIds());
   }
 
@@ -230,6 +279,7 @@ export class AssessmentCache {
   private assessmentJsons: vscode.Uri[] = [];
   private questionUses: Map<string, vscode.Location[]> = new Map();
   private fileWatcher: vscode.FileSystemWatcher;
+  private _qidsRe?: RegExp;
   private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
   // Event that providers can subscribe to
@@ -240,11 +290,13 @@ export class AssessmentCache {
       "**/assessments/**/infoAssessment.json"
     );
 
-    this.fileWatcher.onDidCreate(() => this.refresh());
+    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
 
-    questionCache.onDidChange(() => this.refresh());
+    questionCache.onDidChange(() => {
+      this.refresh();
+    });
 
     this.refresh();
   }
@@ -255,36 +307,55 @@ export class AssessmentCache {
     );
 
     this.questionUses.clear();
-    const questionIds = this.questionCache.getRegexSafeQuestionIds().join("|");
-    const re = new RegExp(`"id"\\s*:[\\s\\n]*"(${questionIds})"`, "gm");
+    this.assessmentJsons.forEach((uri) => this.addJson(uri, true));
 
-    for (const uri of this.assessmentJsons) {
-      const doc = await vscode.workspace.openTextDocument(uri);
-      if (!doc) {
-        return [];
-      }
-      const docText = doc.getText();
-      let match;
-      while ((match = re.exec(docText))) {
-        const matchEnd = match.index + match[0].length;
-        const matchedId = match[1];
-        const newLocation = new vscode.Location(
-          doc.uri,
-          new vscode.Range(
-            doc.positionAt(matchEnd - (matchedId.length + 1)),
-            doc.positionAt(matchEnd - 1)
-          )
-        );
-        const value = this.questionUses.get(matchedId);
-        if (value) {
-          value.push(newLocation);
-        } else {
-          this.questionUses.set(matchedId, [newLocation]);
-        }
+    this.emit();
+  }
+
+  private async addJson(uri: vscode.Uri, skipEmit?: boolean) {
+    const doc = await vscode.workspace.openTextDocument(uri);
+    if (!doc) {
+      return [];
+    }
+    const docText = doc.getText();
+    let match;
+    while ((match = this.getQuidsRe().exec(docText))) {
+      const matchEnd = match.index + match[0].length;
+      const matchedId = match[1];
+      const newLocation = new vscode.Location(
+        doc.uri,
+        new vscode.Range(
+          doc.positionAt(matchEnd - (matchedId.length + 1)),
+          doc.positionAt(matchEnd - 1)
+        )
+      );
+      const value = this.questionUses.get(matchedId);
+      if (value) {
+        value.push(newLocation);
+      } else {
+        this.questionUses.set(matchedId, [newLocation]);
       }
     }
 
+    if (!skipEmit) {
+      this.emit();
+    }
+  }
+
+  private emit() {
     this.onDidChangeEmitter.fire(this.getAssessmentJsons());
+  }
+
+  private refreshQidsRe() {
+    const questionIds = this.questionCache.getRegexSafeQuestionIds().join("|");
+    return (this._qidsRe = new RegExp(
+      `"id"\\s*:[\\s\\n]*"(${questionIds})"`,
+      "gm"
+    ));
+  }
+
+  private getQuidsRe() {
+    return this._qidsRe || this.refreshQidsRe();
   }
 
   public getQuestionUses(questionId: string): vscode.Location[] {
