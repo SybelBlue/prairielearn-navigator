@@ -7,9 +7,9 @@ import { QuestionCache } from "./questionCache";
 export class AssessmentCache {
   private questionUses: Map<string, vscode.Location[]> = new Map();
   private fileWatcher: FileWatcher;
-  private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
+  private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
-  public readonly onDidChange = this.onDidChangeEmitter.event;
+  public readonly onUpdated = this.onUpdatedEmitter.event;
 
   constructor(
     private courseCache: CourseCache,
@@ -17,18 +17,18 @@ export class AssessmentCache {
   ) {
     this.fileWatcher = new FileWatcher("**/assessments/**/infoAssessment.json");
 
-    this.fileWatcher.onDidChange((event) => {
+    this.fileWatcher.onUpdated((event) => {
       if (event.type === "refreshed") {
         this.rebuildIndex(event.uris);
       } else {
         this.addToIndex(event.uri);
       }
-      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+      this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
     });
 
-    this.questionCache.onDidChange(() => {
+    this.questionCache.onUpdated(() => {
       this.rebuildIndex(this.fileWatcher.getUris());
-      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+      this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
     });
   }
 
@@ -81,6 +81,6 @@ export class AssessmentCache {
 
   public dispose() {
     this.fileWatcher.dispose();
-    this.onDidChangeEmitter.dispose();
+    this.onUpdatedEmitter.dispose();
   }
 }

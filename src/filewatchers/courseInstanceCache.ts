@@ -5,25 +5,25 @@ import { FileWatcher } from "./filewatcher";
 export class CourseInstanceCache {
   private instancesByCourseId: Map<string, vscode.Uri[]> = new Map();
   private fileWatcher: FileWatcher;
-  private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
+  private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
-  public readonly onDidChange = this.onDidChangeEmitter.event;
+  public readonly onUpdated = this.onUpdatedEmitter.event;
 
   constructor(private courseCache: CourseCache) {
     this.fileWatcher = new FileWatcher("**/infoCourseInstance.json");
 
-    this.fileWatcher.onDidChange((event) => {
+    this.fileWatcher.onUpdated((event) => {
       if (event.type === "refreshed") {
         this.rebuildIndex(event.uris);
       } else {
         this.addToIndex(event.uri);
       }
-      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+      this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
     });
 
-    this.courseCache.onDidChange(() => {
+    this.courseCache.onUpdated(() => {
       this.rebuildIndex(this.fileWatcher.getUris());
-      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+      this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
     });
   }
 
@@ -52,6 +52,6 @@ export class CourseInstanceCache {
 
   public dispose() {
     this.fileWatcher.dispose();
-    this.onDidChangeEmitter.dispose();
+    this.onUpdatedEmitter.dispose();
   }
 }

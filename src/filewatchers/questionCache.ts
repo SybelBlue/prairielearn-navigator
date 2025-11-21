@@ -8,26 +8,26 @@ export class QuestionCache {
   private static regexSafeIds: Map<string, string> = new Map();
   private questionIds: QuestionId[] = [];
   private fileWatcher: FileWatcher;
-  private onDidChangeEmitter = new vscode.EventEmitter<QuestionId[]>();
+  private onUpdatedEmitter = new vscode.EventEmitter<QuestionId[]>();
 
-  public readonly onDidChange = this.onDidChangeEmitter.event;
+  public readonly onUpdated = this.onUpdatedEmitter.event;
 
   constructor(private courseCache: CourseCache) {
     // capture all question changes so that missing server.py/html files trigger
     this.fileWatcher = new FileWatcher("**/questions/**");
 
-    this.fileWatcher.onDidChange((event) => {
+    this.fileWatcher.onUpdated((event) => {
       if (event.type === "refreshed") {
         this.rebuildIndex(event.uris);
       } else {
         this.addToIndex(event.uri);
       }
-      this.onDidChangeEmitter.fire(this.getQuestionIds());
+      this.onUpdatedEmitter.fire(this.getQuestionIds());
     });
 
-    this.courseCache.onDidChange(() => {
+    this.courseCache.onUpdated(() => {
       this.rebuildIndex(this.fileWatcher.getUris());
-      this.onDidChangeEmitter.fire(this.getQuestionIds());
+      this.onUpdatedEmitter.fire(this.getQuestionIds());
     });
   }
 
@@ -73,6 +73,6 @@ export class QuestionCache {
 
   public dispose() {
     this.fileWatcher.dispose();
-    this.onDidChangeEmitter.dispose();
+    this.onUpdatedEmitter.dispose();
   }
 }

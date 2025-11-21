@@ -13,7 +13,7 @@ abstract class ReferenceBasedDiagnosticCollection {
       "prairielearn-navigator"
     );
 
-    questionCache.onDidChange(() => this.updateOpenDocuments());
+    questionCache.onUpdated(() => this.updateOpenDocuments());
 
     // Check already open documents once on init
     this.updateOpenDocuments();

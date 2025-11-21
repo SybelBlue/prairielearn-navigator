@@ -9,7 +9,7 @@ export class AssessmentCompletionItemProvider
   constructor(private questionIdCache: QuestionCache) {
     this.updateCompletionItems();
 
-    questionIdCache.onDidChange(() => this.updateCompletionItems());
+    questionIdCache.onUpdated(() => this.updateCompletionItems());
   }
 
   private updateCompletionItems() {

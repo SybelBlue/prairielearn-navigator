@@ -39,10 +39,10 @@ export function activate(context: vscode.ExtensionContext) {
   const questionCache = new QuestionCache(courseCache);
   const assessmentCache = new AssessmentCache(courseCache, questionCache);
 
-  courseCache.onDidChange((ids) =>
+  courseCache.onUpdated((ids) =>
     console.info(`prairielearn -- course cache update: ${ids}`)
   );
-  courseInstanceCache.onDidChange((uris) =>
+  courseInstanceCache.onUpdated((uris) =>
     console.info(
       uris.length > 6
         ? `prairielearn -- course instance cache update: n=${uris.length}`
@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
           )}`
     )
   );
-  questionCache.onDidChange((ids) =>
+  questionCache.onUpdated((ids) =>
     ids.length > 6
       ? console.info(`prairielearn -- question cache update: n=${ids.length}`)
       : console.info(
@@ -60,7 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
           )}`
         )
   );
-  assessmentCache.onDidChange((uris) =>
+  assessmentCache.onUpdated((uris) =>
     console.info(`prairielearn -- assessment cache update: n=${uris.length}`)
   );
 

@@ -67,27 +67,27 @@ class CourseJsonPaths {
 export class CourseCache {
   private courseJsons: CourseJsonPaths = new CourseJsonPaths();
   private fileWatcher: FileWatcher;
-  private onDidChangeEmitter = new vscode.EventEmitter<string[]>();
+  private onUpdatedEmitter = new vscode.EventEmitter<string[]>();
 
-  public readonly onDidChange = this.onDidChangeEmitter.event;
+  public readonly onUpdated = this.onUpdatedEmitter.event;
 
   constructor() {
     this.fileWatcher = new FileWatcher("**/infoCourse.json");
 
-    this.fileWatcher.onDidChange((event) => {
+    this.fileWatcher.onUpdated((event) => {
       if (event.type === "refreshed") {
         this.courseJsons.clear();
         event.uris.forEach((uri) => this.courseJsons.push(uri));
       } else {
         this.courseJsons.push(event.uri);
       }
-      this.onDidChangeEmitter.fire(this.courseJsons.getCourseIds());
+      this.onUpdatedEmitter.fire(this.courseJsons.getCourseIds());
     });
   }
 
   public dispose() {
     this.fileWatcher.dispose();
-    this.onDidChangeEmitter.dispose();
+    this.onUpdatedEmitter.dispose();
   }
 
   public getDisplayNameFor(courseId: string) {

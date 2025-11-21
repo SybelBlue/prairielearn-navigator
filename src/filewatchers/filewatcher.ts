@@ -8,9 +8,9 @@ export type FileWatcherEvent = { uris: vscode.Uri[] } & (
 export class FileWatcher {
   private watcher: vscode.FileSystemWatcher;
   private uris: vscode.Uri[] = [];
-  private onDidChangeEmitter = new vscode.EventEmitter<FileWatcherEvent>();
+  private onUpdatedEmitter = new vscode.EventEmitter<FileWatcherEvent>();
 
-  public readonly onDidChange = this.onDidChangeEmitter.event;
+  public readonly onUpdated = this.onUpdatedEmitter.event;
 
   constructor(private readonly globPattern: string) {
     this.watcher = vscode.workspace.createFileSystemWatcher(globPattern);
@@ -25,12 +25,12 @@ export class FileWatcher {
   private async refresh() {
     const foundUris = await vscode.workspace.findFiles(this.globPattern);
     this.uris = foundUris;
-    this.onDidChangeEmitter.fire({ type: "refreshed", uris: this.getUris() });
+    this.onUpdatedEmitter.fire({ type: "refreshed", uris: this.getUris() });
   }
 
   private handleCreate(uri: vscode.Uri) {
     this.uris.push(uri);
-    this.onDidChangeEmitter.fire({ type: "added", uri, uris: this.getUris() });
+    this.onUpdatedEmitter.fire({ type: "added", uri, uris: this.getUris() });
   }
 
   public getUris(): vscode.Uri[] {
@@ -39,6 +39,6 @@ export class FileWatcher {
 
   public dispose() {
     this.watcher.dispose();
-    this.onDidChangeEmitter.dispose();
+    this.onUpdatedEmitter.dispose();
   }
 }
