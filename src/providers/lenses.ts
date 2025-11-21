@@ -58,7 +58,10 @@ export class AssessmentJumpToSourcesCodeLensProvider
 }
 
 export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
-  constructor(private assessments: AssessmentCache) {}
+  constructor(
+    private courseCache: CourseCache,
+    private assessments: AssessmentCache
+  ) {}
 
   async provideCodeLenses(
     document: vscode.TextDocument,
@@ -66,7 +69,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
   ): Promise<vscode.CodeLens[]> {
     const lenses: vscode.CodeLens[] = [];
 
-    const questionId = getLocalQuestionIdFromUri(document.uri);
+    const questionId = this.courseCache.getQuestionIdFor(document.uri);
     const occurrences = this.assessments.getQuestionUses(questionId);
     const firstLine = new vscode.Range(0, 0, 0, 0);
 

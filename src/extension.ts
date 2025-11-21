@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
   const courseCache = new CourseCache();
   const courseInstanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionIdCache(courseCache);
-  const assessmentCache = new AssessmentCache(questionCache);
+  const assessmentCache = new AssessmentCache(courseCache, questionCache);
 
   courseCache.onDidChange((ids) =>
     console.info(`prairielearn -- course cache update: ${ids}`)
@@ -103,7 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
         { pattern: "**/questions/**/question.html" },
         { pattern: "**/questions/**/server.py" },
       ],
-      new QuestionHeaderCodeLensProvider(assessmentCache)
+      new QuestionHeaderCodeLensProvider(courseCache, assessmentCache)
     )
   );
 }

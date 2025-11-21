@@ -1,6 +1,11 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { getLocalQuestionIdFromUri, makeRegexSafe, QuestionId } from "./utils";
+import {
+  getLocalQuestionIdFromUri,
+  getQuestionDirFromId,
+  makeRegexSafe,
+  QuestionId,
+} from "./utils";
 
 /*
  * Assumed structure:
@@ -261,7 +266,17 @@ export class QuestionIdCache {
     return [...this.questionIds];
   }
 
-  getRegexSafeQuestionIds(): string[] {
+  getCourseRegexSafeQuestionIds(courseId: string): string[] {
+    return this.questionIds
+      .filter((id) => id.courseId === courseId)
+      .map(
+        (id) =>
+          QuestionIdCache.regexSafeIds.get(id.localId) ||
+          makeRegexSafe(id.localId)
+      );
+  }
+
+  getAllRegexSafeQuestionIds(): string[] {
     return this.questionIds.map(
       (id) =>
         QuestionIdCache.regexSafeIds.get(id.localId) ||
@@ -279,13 +294,15 @@ export class AssessmentCache {
   private assessmentJsons: vscode.Uri[] = [];
   private questionUses: Map<string, vscode.Location[]> = new Map();
   private fileWatcher: vscode.FileSystemWatcher;
-  private _qidsRe?: RegExp;
   private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
   // Event that providers can subscribe to
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
-  constructor(private questionCache: QuestionIdCache) {
+  constructor(
+    private courseCache: CourseCache,
+    private questionCache: QuestionIdCache
+  ) {
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(
       "**/assessments/**/infoAssessment.json"
     );
@@ -294,9 +311,7 @@ export class AssessmentCache {
     this.fileWatcher.onDidDelete(() => this.refresh());
     this.fileWatcher.onDidChange(() => this.refresh());
 
-    questionCache.onDidChange(() => {
-      this.refresh();
-    });
+    questionCache.onDidChange(() => this.refresh());
 
     this.refresh();
   }
@@ -317,23 +332,31 @@ export class AssessmentCache {
     if (!doc) {
       return [];
     }
+    const courseId = this.courseCache.getCourseIdFor(uri);
+
+    const questionIds = this.questionCache
+      .getCourseRegexSafeQuestionIds(courseId)
+      .join("|");
+    const re = RegExp(`"id"\\s*:[\\s\\n]*"(${questionIds})"`, "gm");
     const docText = doc.getText();
     let match;
-    while ((match = this.getQuidsRe().exec(docText))) {
+    while ((match = re.exec(docText))) {
       const matchEnd = match.index + match[0].length;
-      const matchedId = match[1];
+      const localId = match[1];
       const newLocation = new vscode.Location(
         doc.uri,
         new vscode.Range(
-          doc.positionAt(matchEnd - (matchedId.length + 1)),
+          doc.positionAt(matchEnd - (localId.length + 1)),
           doc.positionAt(matchEnd - 1)
         )
       );
-      const value = this.questionUses.get(matchedId);
+      const quid = { localId, courseId };
+      const key = getQuestionDirFromId(quid);
+      const value = this.questionUses.get(key);
       if (value) {
         value.push(newLocation);
       } else {
-        this.questionUses.set(matchedId, [newLocation]);
+        this.questionUses.set(key, [newLocation]);
       }
     }
 
@@ -346,20 +369,8 @@ export class AssessmentCache {
     this.onDidChangeEmitter.fire(this.getAssessmentJsons());
   }
 
-  private refreshQidsRe() {
-    const questionIds = this.questionCache.getRegexSafeQuestionIds().join("|");
-    return (this._qidsRe = new RegExp(
-      `"id"\\s*:[\\s\\n]*"(${questionIds})"`,
-      "gm"
-    ));
-  }
-
-  private getQuidsRe() {
-    return this._qidsRe || this.refreshQidsRe();
-  }
-
-  public getQuestionUses(questionId: string): vscode.Location[] {
-    return [...(this.questionUses.get(questionId) || [])];
+  public getQuestionUses(questionId: QuestionId): vscode.Location[] {
+    return [...(this.questionUses.get(getQuestionDirFromId(questionId)) || [])];
   }
 
   public getAssessmentJsons() {

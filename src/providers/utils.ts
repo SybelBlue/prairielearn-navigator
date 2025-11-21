@@ -2,10 +2,6 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 
-function getQuestionDirFromId(questionId: QuestionId): null | string {
-  return path.join(questionId.courseId, "questions", questionId.localId);
-}
-
 type QuestionPaths = {
   dir: string;
   infoJson: string;
@@ -51,6 +47,10 @@ function questionFilePathsFromId(
 }
 
 type QuestionId = { courseId: string; localId: string };
+
+function getQuestionDirFromId(questionId: QuestionId): string {
+  return path.join(questionId.courseId, "questions", questionId.localId);
+}
 
 function getLocalQuestionIdFromUri(questionUri: vscode.Uri): string {
   const pathParts = questionUri.fsPath.split(path.sep);
