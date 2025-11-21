@@ -41,17 +41,21 @@ export function activate(context: vscode.ExtensionContext) {
   );
   courseInstanceCache.onDidChange((uris) =>
     console.info(
-      // `prairielearn -- course instance cache update: n=${ids.length}`
-      `prairielearn -- course instance cache update: ${uris.map(
-        (uris) => uris.fsPath
-      )}`
+      uris.length > 6
+        ? `prairielearn -- course instance cache update: n=${uris.length}`
+        : `prairielearn -- course instance cache update: ${uris.map(
+            (uris) => uris.fsPath
+          )}`
     )
   );
   questionCache.onDidChange((ids) =>
-    // console.info(`prairielearn -- question cache update: n=${ids.length}`)
-    console.info(
-      `prairielearn -- question cache update: ${ids.map((qid) => qid.localId)}`
-    )
+    ids.length > 6
+      ? console.info(`prairielearn -- question cache update: n=${ids.length}`)
+      : console.info(
+          `prairielearn -- question cache update: ${ids.map(
+            (qid) => qid.localId
+          )}`
+        )
   );
   assessmentCache.onDidChange((uris) =>
     console.info(`prairielearn -- assessment cache update: n=${uris.length}`)
