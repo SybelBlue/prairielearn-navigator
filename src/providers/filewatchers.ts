@@ -19,6 +19,48 @@ import {
  * | | "info.json"
  * |
  */
+export type FileWatcherEvent = { uris: vscode.Uri[] } & (
+  | { type: "refreshed" }
+  | { type: "added"; uri: vscode.Uri }
+);
+
+class FileWatcher {
+  private watcher: vscode.FileSystemWatcher;
+  private uris: vscode.Uri[] = [];
+  private onDidChangeEmitter = new vscode.EventEmitter<FileWatcherEvent>();
+
+  public readonly onDidChange = this.onDidChangeEmitter.event;
+
+  constructor(private readonly globPattern: string) {
+    this.watcher = vscode.workspace.createFileSystemWatcher(globPattern);
+
+    this.watcher.onDidCreate((uri) => this.handleCreate(uri));
+    this.watcher.onDidDelete(() => this.refresh());
+    this.watcher.onDidChange(() => this.refresh());
+
+    this.refresh();
+  }
+
+  private async refresh() {
+    const foundUris = await vscode.workspace.findFiles(this.globPattern);
+    this.uris = foundUris;
+    this.onDidChangeEmitter.fire({ type: "refreshed", uris: this.getUris() });
+  }
+
+  private handleCreate(uri: vscode.Uri) {
+    this.uris.push(uri);
+    this.onDidChangeEmitter.fire({ type: "added", uri, uris: this.getUris() });
+  }
+
+  public getUris(): vscode.Uri[] {
+    return [...this.uris];
+  }
+
+  public dispose() {
+    this.watcher.dispose();
+    this.onDidChangeEmitter.dispose();
+  }
+}
 
 class CourseJsonPath {
   public readonly pathParts: number;
@@ -83,41 +125,23 @@ class CourseJsonPaths {
 
 export class CourseCache {
   private courseJsons: CourseJsonPaths = new CourseJsonPaths();
-  private fileWatcher: vscode.FileSystemWatcher;
+  private fileWatcher: FileWatcher;
   private onDidChangeEmitter = new vscode.EventEmitter<string[]>();
 
-  // Event that providers can subscribe to
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor() {
-    this.fileWatcher =
-      vscode.workspace.createFileSystemWatcher("**/infoCourse.json");
+    this.fileWatcher = new FileWatcher("**/infoCourse.json");
 
-    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
-    this.fileWatcher.onDidDelete(() => this.refresh());
-    this.fileWatcher.onDidChange(() => this.refresh());
-
-    this.refresh();
-  }
-
-  private async refresh() {
-    const courseJsons = await vscode.workspace.findFiles("**/infoCourse.json");
-
-    this.courseJsons.clear();
-    courseJsons.forEach((uri) => this.addJson(uri, true));
-
-    this.emit();
-  }
-
-  private addJson(uri: vscode.Uri, skipEmit?: boolean) {
-    this.courseJsons.push(uri);
-    if (!skipEmit) {
-      this.emit();
-    }
-  }
-
-  private emit() {
-    this.onDidChangeEmitter.fire(this.courseJsons.getCourseIds());
+    this.fileWatcher.onDidChange((event) => {
+      if (event.type === "refreshed") {
+        this.courseJsons.clear();
+        event.uris.forEach((uri) => this.courseJsons.push(uri));
+      } else {
+        this.courseJsons.push(event.uri);
+      }
+      this.onDidChangeEmitter.fire(this.courseJsons.getCourseIds());
+    });
   }
 
   public dispose() {
@@ -148,40 +172,36 @@ export class CourseCache {
 }
 
 export class CourseInstanceCache {
-  private courseInstanceJsons: vscode.Uri[] = [];
   private instancesByCourseId: Map<string, vscode.Uri[]> = new Map();
-  private fileWatcher: vscode.FileSystemWatcher;
+  private fileWatcher: FileWatcher;
   private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
-  // Event that providers can subscribe to
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(private courseCache: CourseCache) {
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-      "**/infoCourseInstance.json"
-    );
+    this.fileWatcher = new FileWatcher("**/infoCourseInstance.json");
 
-    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
-    this.fileWatcher.onDidDelete(() => this.refresh());
-    this.fileWatcher.onDidChange(() => this.refresh());
+    this.fileWatcher.onDidChange((event) => {
+      if (event.type === "refreshed") {
+        this.rebuildIndex(event.uris);
+      } else {
+        this.addToIndex(event.uri);
+      }
+      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+    });
 
-    this.courseCache.onDidChange(() => this.refresh());
-
-    this.refresh();
+    this.courseCache.onDidChange(() => {
+      this.rebuildIndex(this.fileWatcher.getUris());
+      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+    });
   }
 
-  private async refresh() {
-    this.courseInstanceJsons = await vscode.workspace.findFiles(
-      "**/infoCourseInstance.json"
-    );
-
+  private rebuildIndex(uris: vscode.Uri[]) {
     this.instancesByCourseId.clear();
-    this.courseInstanceJsons.forEach((cij) => this.addJson(cij, true));
-
-    this.emit();
+    uris.forEach((uri) => this.addToIndex(uri));
   }
 
-  private addJson(uri: vscode.Uri, skipEmit?: boolean) {
+  private addToIndex(uri: vscode.Uri) {
     const key = this.courseCache.getCourseIdFor(uri);
     const valArr = this.instancesByCourseId.get(key);
     if (valArr) {
@@ -189,17 +209,10 @@ export class CourseInstanceCache {
     } else {
       this.instancesByCourseId.set(key, [uri]);
     }
-    if (!skipEmit) {
-      this.emit();
-    }
-  }
-
-  private emit() {
-    this.onDidChangeEmitter.fire(this.getCourseInstanceJsons());
   }
 
   public getCourseInstanceJsons(): vscode.Uri[] {
-    return [...this.courseInstanceJsons];
+    return this.fileWatcher.getUris();
   }
 
   public getCourseInstancesFor(courseId: string) {
@@ -215,48 +228,47 @@ export class CourseInstanceCache {
 export class QuestionCache {
   private static regexSafeIds: Map<string, string> = new Map();
   private questionIds: QuestionId[] = [];
-  private fileWatcher: vscode.FileSystemWatcher;
+  private fileWatcher: FileWatcher;
   private onDidChangeEmitter = new vscode.EventEmitter<QuestionId[]>();
 
-  // Event that providers can subscribe to
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(private courseCache: CourseCache) {
     // capture all question changes so that missing server.py/html files trigger
-    this.fileWatcher =
-      vscode.workspace.createFileSystemWatcher("**/questions/**");
+    this.fileWatcher = new FileWatcher("**/questions/**");
 
-    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
-    this.fileWatcher.onDidDelete(() => this.refresh());
-    this.fileWatcher.onDidChange(() => this.refresh());
+    this.fileWatcher.onDidChange((event) => {
+      if (event.type === "refreshed") {
+        this.rebuildIndex(event.uris);
+      } else {
+        this.addToIndex(event.uri);
+      }
+      this.onDidChangeEmitter.fire(this.getQuestionIds());
+    });
 
-    this.courseCache.onDidChange(() => this.refresh());
-
-    this.refresh();
+    this.courseCache.onDidChange(() => {
+      this.rebuildIndex(this.fileWatcher.getUris());
+      this.onDidChangeEmitter.fire(this.getQuestionIds());
+    });
   }
 
-  private async refresh() {
-    const questionInfoJsons = await vscode.workspace.findFiles(
-      "**/questions/**/info.json"
-    );
+  private rebuildIndex(uris: vscode.Uri[]) {
     this.questionIds = [];
-    questionInfoJsons.forEach((uri) => this.addJson(uri, true));
-    this.emit();
+    if (uris.length * 2 < QuestionCache.regexSafeIds.size) {
+      QuestionCache.regexSafeIds.clear();
+    }
+    uris.forEach((uri) => this.addToIndex(uri));
   }
 
-  private addJson(uri: vscode.Uri, skipEmit?: boolean) {
+  private addToIndex(uri: vscode.Uri) {
+    if (path.basename(uri.fsPath) !== "info.json") {
+      return;
+    }
     const quid = this.courseCache.getQuestionIdFor(uri);
     this.questionIds.push(quid);
     if (!QuestionCache.regexSafeIds.has(quid.localId)) {
       QuestionCache.regexSafeIds.set(quid.localId, makeRegexSafe(quid.localId));
     }
-    if (!skipEmit) {
-      this.emit();
-    }
-  }
-
-  private emit() {
-    this.onDidChangeEmitter.fire(this.getQuestionIds());
   }
 
   public getQuestionIds(): QuestionId[] {
@@ -287,46 +299,42 @@ export class QuestionCache {
 }
 
 export class AssessmentCache {
-  private assessmentJsons: vscode.Uri[] = [];
   private questionUses: Map<string, vscode.Location[]> = new Map();
-  private fileWatcher: vscode.FileSystemWatcher;
+  private fileWatcher: FileWatcher;
   private onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
-  // Event that providers can subscribe to
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(
     private courseCache: CourseCache,
     private questionCache: QuestionCache
   ) {
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-      "**/assessments/**/infoAssessment.json"
-    );
+    this.fileWatcher = new FileWatcher("**/assessments/**/infoAssessment.json");
 
-    this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
-    this.fileWatcher.onDidDelete(() => this.refresh());
-    this.fileWatcher.onDidChange(() => this.refresh());
+    this.fileWatcher.onDidChange((event) => {
+      if (event.type === "refreshed") {
+        this.rebuildIndex(event.uris);
+      } else {
+        this.addToIndex(event.uri);
+      }
+      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+    });
 
-    questionCache.onDidChange(() => this.refresh());
-
-    this.refresh();
+    this.questionCache.onDidChange(() => {
+      this.rebuildIndex(this.fileWatcher.getUris());
+      this.onDidChangeEmitter.fire(this.fileWatcher.getUris());
+    });
   }
 
-  private async refresh() {
-    this.assessmentJsons = await vscode.workspace.findFiles(
-      "**/assessments/**/infoAssessment.json"
-    );
-
+  private async rebuildIndex(uris: vscode.Uri[]) {
     this.questionUses.clear();
-    this.assessmentJsons.forEach((uri) => this.addJson(uri, true));
-
-    this.emit();
+    await Promise.all(uris.map((uri) => this.addToIndex(uri)));
   }
 
-  private async addJson(uri: vscode.Uri, skipEmit?: boolean) {
+  private async addToIndex(uri: vscode.Uri) {
     const doc = await vscode.workspace.openTextDocument(uri);
     if (!doc) {
-      return [];
+      return;
     }
     const courseId = this.courseCache.getCourseIdFor(uri);
 
@@ -355,14 +363,6 @@ export class AssessmentCache {
         this.questionUses.set(key, [newLocation]);
       }
     }
-
-    if (!skipEmit) {
-      this.emit();
-    }
-  }
-
-  private emit() {
-    this.onDidChangeEmitter.fire(this.getAssessmentJsons());
   }
 
   public getQuestionUses(questionId: QuestionId): vscode.Location[] {
@@ -370,7 +370,7 @@ export class AssessmentCache {
   }
 
   public getAssessmentJsons() {
-    return [...this.assessmentJsons];
+    return this.fileWatcher.getUris();
   }
 
   public dispose() {
