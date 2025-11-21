@@ -17,11 +17,11 @@ export class AssessmentCache {
   ) {
     this.fileWatcher = new FileWatcher("**/assessments/**/infoAssessment.json");
 
-    this.fileWatcher.onUpdated((event) => {
+    this.fileWatcher.onUpdated(async (event) => {
       if (event.type === "refreshed") {
-        this.rebuildIndex(event.uris);
+        await this.rebuildIndex(event.uris);
       } else {
-        this.addToIndex(event.uri);
+        await this.addToIndex(event.uri);
       }
       this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
     });
