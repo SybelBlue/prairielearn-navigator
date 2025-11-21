@@ -222,9 +222,9 @@ export class QuestionCache {
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   constructor(private courseCache: CourseCache) {
-    this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-      "**/questions/**/info.json"
-    );
+    // capture all question changes so that missing server.py/html files trigger
+    this.fileWatcher =
+      vscode.workspace.createFileSystemWatcher("**/questions/**");
 
     this.fileWatcher.onDidCreate((uri) => this.addJson(uri));
     this.fileWatcher.onDidDelete(() => this.refresh());
