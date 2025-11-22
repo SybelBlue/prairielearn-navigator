@@ -1,4 +1,3 @@
-import * as path from "path";
 import * as vscode from "vscode";
 import { getLocalQuestionIdFromUri, QuestionId, ScopedId } from "../utils";
 import { FileWatcher } from "./filewatcher";
@@ -47,6 +46,12 @@ export class CourseCache {
       courseId: this.getCourseIdFor(questionUri),
       localId: getLocalQuestionIdFromUri(questionUri),
     };
+  }
+
+  public getCourseJson(courseId: string) {
+    return this.fileWatcher
+      .getUris()
+      .find((uri) => uri.fsPath.startsWith(courseId));
   }
 
   public getCourseIds() {

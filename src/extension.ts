@@ -10,6 +10,8 @@ import {
   AssessmentCompletionItemProvider,
   AssessmentDefinitionProvider,
   AssessmentQuestionIdCodeLensProvider,
+  CourseHeaderCodeLensProvider,
+  CourseInstanceHeaderCodeLensProvider,
   DuplicatedQuestionDiagnosticCollection,
   IncompleteQuestionDiagnosticCollection,
   IncompleteQuestionQuickFixProvider,
@@ -36,20 +38,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   // setup caches
   const courseCache = new CourseCache();
-  const courseInstanceCache = new CourseInstanceCache(courseCache);
+  const instanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionCache(courseCache);
   const assessmentCache = new AssessmentCache(courseCache, questionCache);
 
-  new DebugView(
-    courseCache,
-    courseInstanceCache,
-    assessmentCache,
-    questionCache
-  );
+  new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
   courseCache.onUpdated((ids) =>
     console.info(`prairielearn -- course cache update: ${ids}`)
   );
-  courseInstanceCache.onUpdated((uris) =>
+  instanceCache.onUpdated((uris) =>
     console.info(
       uris.length > 6
         ? `prairielearn -- course instance cache update: n=${uris.length}`
@@ -79,7 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     // Shared Utilities
     courseCache,
-    courseInstanceCache,
+    instanceCache,
     questionCache,
     assessmentCache,
 
@@ -118,6 +115,18 @@ export function activate(context: vscode.ExtensionContext) {
         { pattern: "**/questions/**/server.py" },
       ],
       new QuestionHeaderCodeLensProvider(courseCache, assessmentCache)
+    ),
+    vscode.languages.registerCodeLensProvider(
+      { pattern: "**/infoCourse.json" },
+      new CourseHeaderCodeLensProvider(courseCache, instanceCache)
+    ),
+    vscode.languages.registerCodeLensProvider(
+      { pattern: "**/infoCourseInstance.json" },
+      new CourseInstanceHeaderCodeLensProvider(
+        courseCache,
+        instanceCache,
+        assessmentCache
+      )
     ),
 
     // Code Action Providers

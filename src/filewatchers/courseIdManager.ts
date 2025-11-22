@@ -1,10 +1,10 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { ScopedId } from "../utils";
+import { CourseId, ScopedId } from "../utils";
 
 class CourseJsonPath {
   public readonly pathParts: number;
-  public readonly courseId: string;
+  public readonly courseId: CourseId;
   public readonly displayName: string;
   constructor(public readonly uri: vscode.Uri) {
     this.courseId = path.dirname(path.normalize(uri.fsPath));
@@ -28,7 +28,7 @@ export class CourseIdManager {
     this.paths = [];
   }
 
-  createId(uri: vscode.Uri) {
+  createId(uri: vscode.Uri): CourseId {
     const path = new CourseJsonPath(uri);
     let i;
     for (i = 0; i < this.paths.length; i++) {

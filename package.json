@@ -10,6 +10,8 @@
     "Other"
   ],
   "activationEvents": [
+    "workspaceContains:**/infoCourse.json",
+    "workspaceContains:**/infoInstanceCourse.json",
     "workspaceContains:**/infoAssessment.json",
     "workspaceContains:**/questions/**/info.json"
   ],

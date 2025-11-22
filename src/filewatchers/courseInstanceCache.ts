@@ -5,13 +5,13 @@ import { FileWatcher } from "./filewatcher";
 import { CourseId, InstanceId, LocalId } from "../utils";
 
 export class CourseInstanceCache {
-  private instancesByCourseId: Map<CourseId, LocalId[]> = new Map();
-  private fileWatcher: FileWatcher;
-  private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
+  private readonly instancesByCourseId: Map<CourseId, LocalId[]> = new Map();
+  private readonly fileWatcher: FileWatcher;
+  private readonly onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
   public readonly onUpdated = this.onUpdatedEmitter.event;
 
-  constructor(private courseCache: CourseCache) {
+  constructor(private readonly courseCache: CourseCache) {
     this.fileWatcher = new FileWatcher("**/infoCourseInstance.json");
 
     this.fileWatcher.onUpdated((event) => {
@@ -44,7 +44,7 @@ export class CourseInstanceCache {
     }
   }
 
-  private getCourseInstanceIdFor(instanceUri: vscode.Uri): InstanceId {
+  getCourseInstanceIdFor(instanceUri: vscode.Uri): InstanceId {
     const { courseId, localId } = this.courseCache.getScopedIdFor(instanceUri);
     return {
       courseId,
@@ -57,6 +57,10 @@ export class CourseInstanceCache {
       courseId,
       localId,
     }));
+  }
+
+  getCourseInstanceJsons(): vscode.Uri[] {
+    return [...this.fileWatcher.getUris()];
   }
 
   public dispose() {

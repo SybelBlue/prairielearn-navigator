@@ -8,4 +8,6 @@ export {
 export {
   AssessmentQuestionIdCodeLensProvider,
   QuestionHeaderCodeLensProvider,
+  CourseHeaderCodeLensProvider,
+  CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
