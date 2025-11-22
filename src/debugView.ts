@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as YAML from "json-to-pretty-yaml";
-import { CourseId, LocalId, LocalIdUsage } from "./utils";
+import { CourseId, LocalId, LocalIdUsage } from "./common";
 import {
   AssessmentCache,
   CourseCache,

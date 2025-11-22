@@ -8,7 +8,7 @@ import {
   LocalIdUsage,
   QualifiedId,
   QuestionId,
-} from "../utils";
+} from "../common";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
 import { QuestionCache } from "./questionCache";
@@ -141,6 +141,19 @@ export class AssessmentCache {
           aid.courseId === instanceId.courseId &&
           aid.instanceId === instanceId.localId
       );
+  }
+
+  static getUriFrom(assessmentId: AssessmentId): vscode.Uri {
+    return vscode.Uri.file(
+      path.join(
+        assessmentId.courseId,
+        "courseInstances",
+        assessmentId.instanceId,
+        "assessments",
+        assessmentId.assessmentId,
+        "infoAssessment.json"
+      )
+    );
   }
 
   public getAssessmentJsons() {

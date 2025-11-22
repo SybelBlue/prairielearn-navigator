@@ -1,7 +1,8 @@
+import * as path from "path";
 import * as vscode from "vscode";
-import { getLocalQuestionIdFromUri, QuestionId, ScopedId } from "../utils";
-import { FileWatcher } from "./filewatcher";
+import { QuestionId, ScopedId } from "../common";
 import { CourseIdManager } from "./courseIdManager";
+import { FileWatcher } from "./filewatcher";
 
 export class CourseCache {
   private courseJsons: CourseIdManager = new CourseIdManager();
@@ -29,32 +30,34 @@ export class CourseCache {
     this.onUpdatedEmitter.dispose();
   }
 
-  public getDisplayNameFor(courseId: string) {
+  getDisplayNameFor(courseId: string) {
     return this.courseJsons.getDisplayNameFor(courseId);
   }
 
-  public getCourseIdFor(filePath: vscode.Uri): string {
+  getCourseIdFor(filePath: vscode.Uri): string {
     return this.courseJsons.getCourseIdFor(filePath);
   }
 
-  public getScopedIdFor(filePath: vscode.Uri): ScopedId {
+  getScopedIdFor(filePath: vscode.Uri): ScopedId {
     return this.courseJsons.getScopedIdFor(filePath);
   }
 
-  public getQuestionIdFor(questionUri: vscode.Uri): QuestionId {
-    return {
-      courseId: this.getCourseIdFor(questionUri),
-      localId: getLocalQuestionIdFromUri(questionUri),
-    };
+  getQuestionIdFor(questionUri: vscode.Uri): QuestionId {
+    const courseId = this.getCourseIdFor(questionUri);
+    const pathParts = path.normalize(questionUri.fsPath).split(path.sep);
+    const localId = pathParts
+      .slice(pathParts.indexOf("questions") + 1, -1)
+      .join(path.sep);
+    return { courseId, localId };
   }
 
-  public getCourseJson(courseId: string) {
+  getUriFrom(courseId: string) {
     return this.fileWatcher
       .getUris()
       .find((uri) => uri.fsPath.startsWith(courseId));
   }
 
-  public getCourseIds() {
+  getCourseIds() {
     return this.courseJsons.getIds();
   }
 }

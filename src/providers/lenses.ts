@@ -4,8 +4,8 @@ import {
   AssessmentCache,
   CourseCache,
   CourseInstanceCache,
+  QuestionCache,
 } from "../filewatchers";
-import { questionFilePathsFromId } from "../utils";
 
 function getAssessmentCourseInstanceDisplayName(
   assessmentUri: vscode.Uri
@@ -54,7 +54,7 @@ export class AssessmentQuestionIdCodeLensProvider
         document.positionAt(match.index),
         document.positionAt(match.index + match[0].length)
       );
-      const questionPaths = questionFilePathsFromId(questionId);
+      const questionPaths = QuestionCache.questionFilePathsFromId(questionId);
       if (!questionPaths) {
         lenses.push(
           new vscode.CodeLens(matchRange, {
@@ -180,12 +180,14 @@ export class CourseHeaderCodeLensProvider implements vscode.CodeLensProvider {
 
     const courseId = this.courseCache.getCourseIdFor(document.uri);
     const instances = this.courseInstanceCache
-      .getCourseInstanceJsons()
-      .filter((cij) => this.courseCache.getCourseIdFor(cij) === courseId);
+      .getCourseInstancesFor(courseId)
+      .map((iid) => CourseInstanceCache.getUriFrom(iid));
 
     lenses.push(
       new vscode.CodeLens(firstLine, {
-        title: pluralize(instances.length, "instance"),
+        title:
+          pluralize(instances.length, "instance") +
+          (instances.length ? "" : "!"),
         command: "prairielearn-navigator.showOccurrences",
         arguments: [
           instances.map((uri) => new vscode.Location(uri, firstLine)),
@@ -230,11 +232,14 @@ export class CourseInstanceHeaderCodeLensProvider
       document.uri
     );
 
-    const courseJson = this.courseCache.getCourseJson(instanceId.courseId);
+    const courseJson = this.courseCache.getUriFrom(instanceId.courseId);
     if (courseJson) {
       lenses.push(
         new vscode.CodeLens(firstLine, {
-          title: "infoCourse.json",
+          title: `${
+            this.courseCache.getDisplayNameFor(instanceId.courseId) ??
+            "infoCourse"
+          }.json`,
           command: "prairielearn-navigator.openFile",
           arguments: [courseJson.fsPath, firstLine],
         })
@@ -242,16 +247,14 @@ export class CourseInstanceHeaderCodeLensProvider
     }
 
     const assessments = this.assessmentCache
-      .getAssessmentJsons()
-      .filter(
-        (uri) =>
-          this.assessmentCache.getAssessmentIdFor(uri)?.instanceId ===
-          instanceId.localId
-      );
+      .getAssessmentsFor(instanceId)
+      .map((aid) => AssessmentCache.getUriFrom(aid));
 
     lenses.push(
       new vscode.CodeLens(firstLine, {
-        title: pluralize(assessments.length, "assessment"),
+        title:
+          pluralize(assessments.length, "assessment") +
+          (assessments.length ? "" : "!"),
         command: "prairielearn-navigator.showOccurrences",
         arguments: [
           assessments.map((uri) => new vscode.Location(uri, firstLine)),
@@ -262,7 +265,8 @@ export class CourseInstanceHeaderCodeLensProvider
     if (assessments.length < 6) {
       for (const uri of assessments) {
         const title =
-          this.courseInstanceCache.getCourseInstanceIdFor(uri).localId;
+          this.assessmentCache.getAssessmentIdFor(uri)?.assessmentId ??
+          this.courseCache.getScopedIdFor(uri).localId;
         lenses.push(
           new vscode.CodeLens(firstLine, {
             title,

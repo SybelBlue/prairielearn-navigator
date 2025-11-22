@@ -2,7 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
-import { CourseId, InstanceId, LocalId } from "../utils";
+import { CourseId, InstanceId, LocalId } from "../common";
 
 export class CourseInstanceCache {
   private readonly instancesByCourseId: Map<CourseId, LocalId[]> = new Map();
@@ -61,6 +61,17 @@ export class CourseInstanceCache {
 
   getCourseInstanceJsons(): vscode.Uri[] {
     return [...this.fileWatcher.getUris()];
+  }
+
+  static getUriFrom(instanceId: InstanceId): vscode.Uri {
+    return vscode.Uri.file(
+      path.join(
+        instanceId.courseId,
+        "courseInstances",
+        instanceId.localId,
+        "infoCourseInstance.json"
+      )
+    );
   }
 
   public dispose() {

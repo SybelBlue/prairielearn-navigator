@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { CourseId, ScopedId } from "../utils";
+import { CourseId, ScopedId } from "../common";
 
 class CourseJsonPath {
   public readonly pathParts: number;

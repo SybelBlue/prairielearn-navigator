@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { CourseCache } from "../filewatchers";
-import { getQuestionDirFromId, QuestionId } from "../utils";
+import { CourseCache, QuestionCache } from "../filewatchers";
+import { QuestionId } from "../common";
 
 export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
   constructor(private courseCache: CourseCache) {}
@@ -82,7 +82,8 @@ export class AssessmentDefinitionProvider implements vscode.DefinitionProvider {
       return null;
     }
 
-    const questionDirPath = getQuestionDirFromId(questionId);
+    const questionDirPath =
+      QuestionCache.questionFilePathsFromId(questionId)?.dir;
 
     if (!questionDirPath || !fs.existsSync(questionDirPath)) {
       return null;

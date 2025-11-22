@@ -1,7 +1,6 @@
 import * as crypto from "crypto";
 import * as vscode from "vscode";
 import { CourseCache, QuestionCache } from "../filewatchers";
-import { getQuestionDirFromId, questionFilePathsFromId } from "../utils";
 
 abstract class ReferenceBasedDiagnosticCollection {
   protected collection: vscode.DiagnosticCollection;
@@ -120,7 +119,7 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
     for (const match of idMatches) {
       const id = { courseId, localId: match[1] };
 
-      const paths = questionFilePathsFromId(id);
+      const paths = QuestionCache.questionFilePathsFromId(id);
 
       const endOffset = match.index + match[0].length;
       const range = new vscode.Range(
@@ -132,9 +131,9 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
       if (!paths || !(existingPaths = paths.strict()).dir) {
         const diagnostic = new vscode.Diagnostic(
           range,
-          `missing question: expected question directory ${getQuestionDirFromId(
-            id
-          )}`,
+          `missing question: expected question directory ${
+            QuestionCache.questionFilePathsFromId(id).dir
+          }`,
           vscode.DiagnosticSeverity.Error
         );
         if (paths) {
