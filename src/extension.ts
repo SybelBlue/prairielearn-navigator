@@ -15,7 +15,7 @@ import {
   IncompleteQuestionQuickFixProvider,
   QuestionHeaderCodeLensProvider,
 } from "./providers";
-import { JsonCache } from "./filewatchers/jsonCache";
+import { DebugView } from "./debugView";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -40,7 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
   const questionCache = new QuestionCache(courseCache);
   const assessmentCache = new AssessmentCache(courseCache, questionCache);
 
-  new JsonCache(
+  new DebugView(
     courseCache,
     courseInstanceCache,
     assessmentCache,

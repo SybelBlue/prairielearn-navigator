@@ -1,10 +1,12 @@
-import { CourseId, LocalId, LocalIdUsage } from "../utils";
+import * as vscode from "vscode";
+import * as YAML from "json-to-pretty-yaml";
+import { CourseId, LocalId, LocalIdUsage } from "./utils";
 import {
   AssessmentCache,
   CourseCache,
   CourseInstanceCache,
   QuestionCache,
-} from "./index";
+} from "./filewatchers";
 
 type AssessmentData = LocalIdUsage[];
 type InstanceData = Map<LocalId, AssessmentData>;
@@ -15,7 +17,7 @@ type CourseData = {
 
 type JsonRegistry = Map<CourseId, CourseData>;
 
-export class JsonCache {
+export class DebugView {
   constructor(
     private courseCache: CourseCache,
     private courseInstanceCache: CourseInstanceCache,
@@ -24,39 +26,45 @@ export class JsonCache {
   ) {
     const onUpdate = () => {
       const data = this.rebuild();
-      console.log(
-        JSON.stringify(
-          Object.fromEntries(
-            [...data.entries()].map(([k, v]) => [
-              k,
-              {
-                questions: [...v.questions],
-                instances: Object.fromEntries(
-                  [...v.instances.entries()].map(([k, v]) => [
-                    k,
-                    Object.fromEntries(
-                      [...v.entries()].map(([k, v]) => [
-                        k,
-                        v.map(({ localId, location }) => ({
-                          localId,
-                          at: location.range.start,
-                        })),
-                      ])
-                    ),
-                  ])
-                ),
-              },
-            ])
-          ),
-          undefined,
-          2
-        )
-      );
+      console.log(this.registryToDebugYaml(data));
     };
     courseCache.onUpdated(() => onUpdate());
     courseInstanceCache.onUpdated(() => onUpdate());
     assessmentCache.onUpdated(() => onUpdate());
     questionCache.onUpdated(() => onUpdate());
+  }
+
+  private registryToDebugObject(data: JsonRegistry) {
+    return Object.fromEntries(
+      [...data.entries()].map(([courseId, v]) => [
+        this.courseCache.getDisplayNameFor(courseId) || ".",
+        {
+          questions: [...v.questions],
+          instances: Object.fromEntries(
+            [...v.instances.entries()].map(([instanceId, v]) => [
+              instanceId,
+              Object.fromEntries(
+                [...v.entries()].map(([assessmentId, v]) => [
+                  assessmentId,
+                  v.map(({ localId, location }) => ({
+                    localId,
+                    at: `${location.range.start.line}:${location.range.start.character} -> ${location.range.end.line}:${location.range.end.character}`,
+                  })),
+                ])
+              ),
+            ])
+          ),
+        },
+      ])
+    );
+  }
+
+  private registryToDebugJson(data: JsonRegistry) {
+    return JSON.stringify(this.registryToDebugObject(data), undefined, 2);
+  }
+
+  private registryToDebugYaml(data: JsonRegistry) {
+    return YAML.stringify(this.registryToDebugObject(data));
   }
 
   private rebuild(): JsonRegistry {

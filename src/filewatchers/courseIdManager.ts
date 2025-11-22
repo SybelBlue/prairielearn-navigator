@@ -12,8 +12,7 @@ class CourseJsonPath {
 
     const wsPath = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
     this.displayName = this.courseId.slice(
-      0,
-      wsPath === undefined ? -1 : wsPath.length
+      wsPath === undefined ? 0 : wsPath.length + 1
     );
   }
 }
