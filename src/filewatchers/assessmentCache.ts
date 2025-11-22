@@ -7,7 +7,6 @@ import {
   LocalId,
   LocalIdUsage,
   QuestionId,
-  ScopedId,
 } from "../utils";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
@@ -119,7 +118,7 @@ export class AssessmentCache {
     ];
   }
 
-  public getAssessmentIdFor(assessmentUri: vscode.Uri): AssessmentId | null {
+  getAssessmentIdFor(assessmentUri: vscode.Uri): AssessmentId | null {
     const { courseId, localId } =
       this.courseCache.getScopedIdFor(assessmentUri);
     const parts = path.normalize(localId).split(path.sep);

@@ -39,7 +39,7 @@ export class JsonCache {
                         k,
                         v.map(({ localId, location }) => ({
                           localId,
-                          at: location.range,
+                          at: location.range.start,
                         })),
                       ])
                     ),

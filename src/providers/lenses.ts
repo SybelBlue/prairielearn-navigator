@@ -66,25 +66,41 @@ export class AssessmentQuestionIdCodeLensProvider
         document.uri
       );
       if (assessmentId !== null) {
-        const allOccurrences = this.assessmentCache.getQuestionUses(questionId);
-        const instanceOccurrences = allOccurrences.filter(
-          (use) => assessmentId.localId === use.localId
+        const allUses = this.assessmentCache.getQuestionUses(questionId);
+        const instanceUses = allUses.filter(
+          (use) =>
+            assessmentId.instanceId ===
+            this.assessmentCache.getAssessmentIdFor(use.location.uri)
+              ?.instanceId
         );
-        const filtered = instanceOccurrences;
-        if (filtered.length) {
+        if (instanceUses.length - 1) {
           const instDispName = getAssessmentCourseInstanceDisplayName(
             document.uri
           );
           lenses.push(
             new vscode.CodeLens(matchRange, {
               title: `${pluralize(
-                filtered.length,
+                instanceUses.length - 1,
                 "reuse"
               )} in ${instDispName}!`,
               command: "prairielearn-navigator.showOccurrences",
-              arguments: [allOccurrences.map((occ) => occ.location)], // todo, maybe add def occurrence here
+              arguments: [instanceUses.map((occ) => occ.location)], // todo, maybe add def occurrence here
             })
           );
+
+          for (const use of instanceUses) {
+            if (use.location.uri !== document.uri) {
+              lenses.push(
+                new vscode.CodeLens(matchRange, {
+                  title: `(${getQualifiedAssessmentDisplayName(
+                    use.location.uri
+                  )})`,
+                  command: "prairielearn-navigator.openFile",
+                  arguments: [use.location.uri.fsPath, use.location.range],
+                })
+              );
+            }
+          }
         }
       }
 
