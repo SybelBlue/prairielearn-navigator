@@ -3,12 +3,6 @@ import * as vscode from "vscode";
 import { AssessmentCache, CourseCache } from "../filewatchers";
 import { questionFilePathsFromId } from "../utils";
 
-function getAssessmentCourseInstanceId(assessmentUri: vscode.Uri): string {
-  const pathParts = assessmentUri.fsPath.split(path.sep);
-  const assessmentsIndex = pathParts.indexOf("assessments");
-  return path.join(...pathParts.slice(0, assessmentsIndex));
-}
-
 function getAssessmentCourseInstanceDisplayName(
   assessmentUri: vscode.Uri
 ): string {

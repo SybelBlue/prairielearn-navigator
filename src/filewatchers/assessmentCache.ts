@@ -52,7 +52,7 @@ export class AssessmentCache {
     if (!doc) {
       return;
     }
-    const assessmentId = this.courseCache.getScopedIdFor(uri);
+    const assessmentId = this.getAssessmentIdFor(uri)!;
     let assessmentMap = this.assessmentUses.get(assessmentId.courseId);
     if (assessmentMap === undefined) {
       this.assessmentUses.set(

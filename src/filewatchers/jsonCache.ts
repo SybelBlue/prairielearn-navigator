@@ -6,8 +6,8 @@ import {
   QuestionCache,
 } from "./index";
 
-type AssessmentData = Map<LocalId, LocalIdUsage[]>;
-type InstanceData = Map<LocalId, AssessmentData[]>;
+type AssessmentData = LocalIdUsage[];
+type InstanceData = Map<LocalId, AssessmentData>;
 type CourseData = {
   instances: Map<LocalId, InstanceData>;
   questions: Set<LocalId>;
@@ -22,36 +22,61 @@ export class JsonCache {
     private assessmentCache: AssessmentCache,
     private questionCache: QuestionCache
   ) {
-    courseCache.onUpdated(() => console.debug(this.rebuild()));
-    courseInstanceCache.onUpdated(() => console.debug(this.rebuild()));
-    assessmentCache.onUpdated(() => console.debug(this.rebuild()));
-    questionCache.onUpdated(() => console.debug(this.rebuild()));
+    const onUpdate = () => {
+      const data = this.rebuild();
+      console.log(
+        JSON.stringify(
+          Object.fromEntries(
+            [...data.entries()].map(([k, v]) => [
+              k,
+              {
+                questions: [...v.questions],
+                instances: Object.fromEntries(
+                  [...v.instances.entries()].map(([k, v]) => [
+                    k,
+                    Object.fromEntries(
+                      [...v.entries()].map(([k, v]) => [
+                        k,
+                        v.map(({ localId, location }) => ({
+                          localId,
+                          at: location.range,
+                        })),
+                      ])
+                    ),
+                  ])
+                ),
+              },
+            ])
+          ),
+          undefined,
+          2
+        )
+      );
+    };
+    courseCache.onUpdated(() => onUpdate());
+    courseInstanceCache.onUpdated(() => onUpdate());
+    assessmentCache.onUpdated(() => onUpdate());
+    questionCache.onUpdated(() => onUpdate());
   }
 
   private rebuild(): JsonRegistry {
     const out: JsonRegistry = new Map();
 
     for (const courseId of this.courseCache.getCourseIds()) {
-      const instances = new Map();
+      const instances: Map<LocalId, InstanceData> = new Map();
       for (const instanceId of this.courseInstanceCache.getCourseInstancesFor(
         courseId
       )) {
-        const assessmentData = new Map();
+        const assessmentData: Map<LocalId, AssessmentData> = new Map();
         for (const assessmentId of this.assessmentCache.getAssessmentsFor(
           instanceId
         )) {
-          const references = [];
-          for (const use of this.assessmentCache.getQuestionUsesFor(
-            assessmentId
-          )) {
-            references.push({
-              questionId: use.localId,
-              location: use.location,
-            });
-          }
-          assessmentData.set(assessmentId, references);
+          assessmentData.set(
+            assessmentId.assessmentId,
+            this.assessmentCache.getQuestionUsesFor(assessmentId)
+          );
         }
-        instances.set(instanceId, assessmentData);
+        instances.set(instanceId.localId, assessmentData);
       }
 
       const questions: Set<LocalId> = new Set();

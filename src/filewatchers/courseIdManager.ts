@@ -58,7 +58,7 @@ export class CourseIdManager {
   }
 
   getScopedIdFor(filePath: vscode.Uri): ScopedId {
-    const p = path.normalize(filePath.fsPath);
+    const p = path.normalize(path.dirname(filePath.fsPath));
     const courseId = this.getCourseIdForNormalized(p);
     if (courseId === null || !p.startsWith(courseId)) {
       return { courseId: "", localId: p };
