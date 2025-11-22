@@ -1,5 +1,6 @@
+import * as path from "path";
 import * as vscode from "vscode";
-import { getLocalQuestionIdFromUri, QuestionId } from "../utils";
+import { getLocalQuestionIdFromUri, QuestionId, ScopedId } from "../utils";
 import { FileWatcher } from "./filewatcher";
 import { CourseIdManager } from "./courseIdManager";
 
@@ -33,14 +34,12 @@ export class CourseCache {
     return this.courseJsons.getDisplayNameFor(courseId);
   }
 
-  public getCourseIdFor(filePath: vscode.Uri | string): string {
-    return (
-      this.courseJsons.getCourseIdFor(filePath) ??
-      (filePath instanceof vscode.Uri
-        ? vscode.workspace.getWorkspaceFolder(filePath)?.uri.fsPath
-        : null) ??
-      (filePath instanceof vscode.Uri ? filePath.fsPath : filePath)
-    );
+  public getCourseIdFor(filePath: vscode.Uri): string {
+    return this.courseJsons.getCourseIdFor(filePath);
+  }
+
+  public getScopedIdFor(filePath: vscode.Uri): ScopedId {
+    return this.courseJsons.getScopedIdFor(filePath);
   }
 
   public getQuestionIdFor(questionUri: vscode.Uri): QuestionId {
@@ -48,5 +47,9 @@ export class CourseCache {
       courseId: this.getCourseIdFor(questionUri),
       localId: getLocalQuestionIdFromUri(questionUri),
     };
+  }
+
+  public getCourseIds() {
+    return this.courseJsons.getIds();
   }
 }

@@ -1,6 +1,6 @@
-import * as vscode from "vscode";
-import * as path from "path";
 import * as fs from "fs";
+import * as path from "path";
+import * as vscode from "vscode";
 
 type QuestionPaths = {
   dir: string;
@@ -46,8 +46,6 @@ function questionFilePathsFromId(
   };
 }
 
-type QuestionId = { courseId: string; localId: string };
-
 function getQuestionDirFromId(questionId: QuestionId): string {
   return path.join(questionId.courseId, "questions", questionId.localId);
 }
@@ -63,11 +61,31 @@ function makeRegexSafe(s: string) {
   return s.replaceAll(reTargets, "\\$&");
 }
 
+type LocalId = string;
+type CourseId = string;
+type ScopedId = { courseId: CourseId; localId: LocalId };
+type InstanceId = ScopedId;
+type AssessmentId = ScopedId & { instanceId: LocalId; assessmentId: LocalId };
+type QuestionId = ScopedId;
+
+type LocalIdUsage = {
+  localId: LocalId;
+  location: vscode.Location;
+};
+
 export {
-  getQuestionDirFromId,
-  questionFilePathsFromId,
   getLocalQuestionIdFromUri,
+  getQuestionDirFromId,
   makeRegexSafe,
-  type QuestionPaths,
-  type QuestionId,
+  questionFilePathsFromId,
+};
+
+export type {
+  AssessmentId,
+  CourseId,
+  InstanceId,
+  LocalId,
+  LocalIdUsage,
+  QuestionId,
+  ScopedId,
 };

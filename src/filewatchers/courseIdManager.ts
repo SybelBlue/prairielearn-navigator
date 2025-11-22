@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
+import { ScopedId } from "../utils";
 
 class CourseJsonPath {
   public readonly pathParts: number;
@@ -20,8 +21,8 @@ class CourseJsonPath {
 export class CourseIdManager {
   private paths: CourseJsonPath[] = [];
 
-  getPaths(): CourseJsonPath[] {
-    return [...this.paths];
+  getIds(): string[] {
+    return this.paths.map((cjp) => cjp.courseId);
   }
 
   clear() {
@@ -48,10 +49,28 @@ export class CourseIdManager {
     this.paths = this.paths.filter((cjp) => cjp.courseId !== courseId);
   }
 
-  getCourseIdFor(filePath: vscode.Uri | string): string | null {
-    const p = path.normalize(
-      filePath instanceof vscode.Uri ? filePath.fsPath : filePath
-    );
+  getCourseIdFor(filePath: vscode.Uri): string {
+    return this.getScopedIdFor(filePath).courseId;
+  }
+
+  getLocalIdFor(filePath: vscode.Uri): string {
+    return this.getScopedIdFor(filePath).localId;
+  }
+
+  getScopedIdFor(filePath: vscode.Uri): ScopedId {
+    const p = path.normalize(filePath.fsPath);
+    const courseId = this.getCourseIdForNormalized(p);
+    if (courseId === null || !p.startsWith(courseId)) {
+      return { courseId: "", localId: p };
+    }
+    const localId = p
+      .split(path.sep)
+      .slice(courseId.split(path.sep).length)
+      .join(path.sep);
+    return { courseId, localId };
+  }
+
+  private getCourseIdForNormalized(p: string): string | null {
     return (
       this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null
     );

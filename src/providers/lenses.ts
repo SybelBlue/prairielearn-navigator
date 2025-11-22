@@ -1,10 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import {
-  AssessmentCache,
-  CourseCache,
-  CourseInstanceCache,
-} from "../filewatchers";
+import { AssessmentCache, CourseCache } from "../filewatchers";
 import { questionFilePathsFromId } from "../utils";
 
 function getAssessmentCourseInstanceId(assessmentUri: vscode.Uri): string {
@@ -72,25 +68,30 @@ export class AssessmentQuestionIdCodeLensProvider
         continue;
       }
 
-      const courseInstanceId = getAssessmentCourseInstanceId(document.uri);
-      const allOccurrences = this.assessmentCache.getQuestionUses(questionId);
-      const instanceOccurrences = allOccurrences.filter(
-        (loc) => courseInstanceId === getAssessmentCourseInstanceId(loc.uri)
+      const assessmentId = this.assessmentCache.getAssessmentIdFor(
+        document.uri
       );
-      const filtered = instanceOccurrences.filter(
-        (loc) => loc.uri !== document.uri
-      );
-      if (filtered.length) {
-        const instDispName = getAssessmentCourseInstanceDisplayName(
-          document.uri
+      if (assessmentId !== null) {
+        const allOccurrences = this.assessmentCache.getQuestionUses(questionId);
+        const instanceOccurrences = allOccurrences.filter(
+          (use) => assessmentId.localId === use.localId
         );
-        lenses.push(
-          new vscode.CodeLens(matchRange, {
-            title: `${pluralize(filtered.length, "reuse")} in ${instDispName}!`,
-            command: "prairielearn-navigator.showOccurrences",
-            arguments: [allOccurrences], // todo, maybe add def occurrence here
-          })
-        );
+        const filtered = instanceOccurrences;
+        if (filtered.length) {
+          const instDispName = getAssessmentCourseInstanceDisplayName(
+            document.uri
+          );
+          lenses.push(
+            new vscode.CodeLens(matchRange, {
+              title: `${pluralize(
+                filtered.length,
+                "reuse"
+              )} in ${instDispName}!`,
+              command: "prairielearn-navigator.showOccurrences",
+              arguments: [allOccurrences.map((occ) => occ.location)], // todo, maybe add def occurrence here
+            })
+          );
+        }
       }
 
       // for (const [key, p] of Object.entries(questionPaths.strict())) {
@@ -130,18 +131,18 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
       new vscode.CodeLens(firstLine, {
         title: pluralize(occurrences.length, `reference`),
         command: "prairielearn-navigator.showOccurrences",
-        arguments: [occurrences], // todo, maybe add def occurrence here
+        arguments: [occurrences.map((occ) => occ.location)], // todo, maybe add def occurrence here
       })
     );
 
     if (occurrences.length < 5) {
       for (const occ of occurrences) {
-        const title = getQualifiedAssessmentDisplayName(occ.uri);
+        const title = getQualifiedAssessmentDisplayName(occ.location.uri);
         lenses.push(
           new vscode.CodeLens(firstLine, {
             title,
             command: "prairielearn-navigator.openFile",
-            arguments: [occ.uri.fsPath, occ.range],
+            arguments: [occ.location.uri.fsPath, occ.location.range],
           })
         );
       }

@@ -1,9 +1,11 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
+import { CourseId, InstanceId, LocalId } from "../utils";
 
 export class CourseInstanceCache {
-  private instancesByCourseId: Map<string, vscode.Uri[]> = new Map();
+  private instancesByCourseId: Map<CourseId, LocalId[]> = new Map();
   private fileWatcher: FileWatcher;
   private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
@@ -33,21 +35,28 @@ export class CourseInstanceCache {
   }
 
   private addToIndex(uri: vscode.Uri) {
-    const key = this.courseCache.getCourseIdFor(uri);
-    const valArr = this.instancesByCourseId.get(key);
+    const { courseId, localId } = this.getCourseInstanceIdFor(uri);
+    const valArr = this.instancesByCourseId.get(courseId);
     if (valArr) {
-      valArr.push(uri);
+      valArr.push(localId);
     } else {
-      this.instancesByCourseId.set(key, [uri]);
+      this.instancesByCourseId.set(courseId, [localId]);
     }
   }
 
-  public getCourseInstanceJsons(): vscode.Uri[] {
-    return this.fileWatcher.getUris();
+  private getCourseInstanceIdFor(instanceUri: vscode.Uri): InstanceId {
+    const { courseId, localId } = this.courseCache.getScopedIdFor(instanceUri);
+    return {
+      courseId,
+      localId: path.join(...localId.split(path.sep).slice(1)),
+    };
   }
 
-  public getCourseInstancesFor(courseId: string) {
-    return [...(this.instancesByCourseId.get(courseId) ?? [])];
+  getCourseInstancesFor(courseId: string): InstanceId[] {
+    return (this.instancesByCourseId.get(courseId) ?? []).map((localId) => ({
+      courseId,
+      localId,
+    }));
   }
 
   public dispose() {

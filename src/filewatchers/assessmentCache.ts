@@ -1,11 +1,21 @@
+import * as path from "path";
 import * as vscode from "vscode";
-import { getQuestionDirFromId, QuestionId } from "../utils";
-import { FileWatcher } from "./filewatcher";
+import {
+  AssessmentId,
+  CourseId,
+  InstanceId,
+  LocalId,
+  LocalIdUsage,
+  QuestionId,
+  ScopedId,
+} from "../utils";
 import { CourseCache } from "./courseCache";
+import { FileWatcher } from "./filewatcher";
 import { QuestionCache } from "./questionCache";
 
 export class AssessmentCache {
-  private questionUses: Map<string, vscode.Location[]> = new Map();
+  private assessmentUses: Map<LocalId, Map<LocalId, LocalIdUsage[]>> =
+    new Map();
   private fileWatcher: FileWatcher;
   private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
@@ -33,7 +43,7 @@ export class AssessmentCache {
   }
 
   private async rebuildIndex(uris: vscode.Uri[]) {
-    this.questionUses.clear();
+    this.assessmentUses.clear();
     await Promise.all(uris.map((uri) => this.addToIndex(uri)));
   }
 
@@ -42,38 +52,98 @@ export class AssessmentCache {
     if (!doc) {
       return;
     }
-    const courseId = this.courseCache.getCourseIdFor(uri);
+    const assessmentId = this.courseCache.getScopedIdFor(uri);
+    let assessmentMap = this.assessmentUses.get(assessmentId.courseId);
+    if (assessmentMap === undefined) {
+      this.assessmentUses.set(
+        assessmentId.courseId,
+        (assessmentMap = new Map())
+      );
+    }
+    assessmentMap.set(
+      assessmentId.localId,
+      this.getUsesIn(assessmentId.courseId, doc)
+    );
+  }
 
+  private getUsesIn(
+    courseId: CourseId,
+    doc: vscode.TextDocument
+  ): LocalIdUsage[] {
+    const docText = doc.getText();
     const questionIds = this.questionCache
       .getCourseRegexSafeQuestionIds(courseId)
       .join("|");
     const re = RegExp(`"id"\\s*:[\\s\\n]*"(${questionIds})"`, "gm");
-    const docText = doc.getText();
+    const out = [];
     let match;
     while ((match = re.exec(docText))) {
       const matchEnd = match.index + match[0].length;
       const localId = match[1];
-      const newLocation = new vscode.Location(
+      const location = new vscode.Location(
         doc.uri,
         new vscode.Range(
           doc.positionAt(matchEnd - (localId.length + 1)),
           doc.positionAt(matchEnd - 1)
         )
       );
-      const quid = { localId, courseId };
-      const key = getQuestionDirFromId(quid);
-      const value = this.questionUses.get(key);
-      if (value) {
-        value.push(newLocation);
-        console.log("reuse", key, newLocation);
-      } else {
-        this.questionUses.set(key, [newLocation]);
-      }
+      out.push({ localId, location });
     }
+    return out;
   }
 
-  public getQuestionUses(questionId: QuestionId): vscode.Location[] {
-    return [...(this.questionUses.get(getQuestionDirFromId(questionId)) || [])];
+  getQuestionUses(questionId: QuestionId): LocalIdUsage[] {
+    const assessmentMap = this.assessmentUses.get(questionId.courseId);
+    if (assessmentMap === undefined) {
+      return [];
+    }
+    const out = [];
+    for (const [assessmentLocalId, uses] of assessmentMap.entries()) {
+      for (const u of uses) {
+        if (u.localId === questionId.localId) {
+          out.push({
+            localId: assessmentLocalId,
+            location: u.location,
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  getQuestionUsesFor(assessmentId: AssessmentId): LocalIdUsage[] {
+    return [
+      ...(this.assessmentUses
+        .get(assessmentId.courseId)
+        ?.get(assessmentId.localId) ?? []),
+    ];
+  }
+
+  public getAssessmentIdFor(assessmentUri: vscode.Uri): AssessmentId | null {
+    const { courseId, localId } =
+      this.courseCache.getScopedIdFor(assessmentUri);
+    const parts = path.normalize(localId).split(path.sep);
+    const index = parts.indexOf("assessments");
+    if (index === -1) {
+      return null;
+    }
+    return {
+      courseId,
+      localId: path.join(...parts.slice(1)),
+      assessmentId: path.join(...parts.slice(index + 1)),
+      instanceId: path.join(...parts.slice(1, index)),
+    };
+  }
+
+  getAssessmentsFor(instanceId: InstanceId): AssessmentId[] {
+    return this.getAssessmentJsons()
+      .map((uri) => this.getAssessmentIdFor(uri))
+      .filter((aid) => aid !== null)
+      .filter(
+        (aid) =>
+          aid.courseId === instanceId.courseId &&
+          aid.instanceId === instanceId.localId
+      );
   }
 
   public getAssessmentJsons() {
