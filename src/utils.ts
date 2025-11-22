@@ -63,9 +63,15 @@ function makeRegexSafe(s: string) {
 
 type LocalId = string;
 type CourseId = string;
+type QualifiedId = string;
 type ScopedId = { courseId: CourseId; localId: LocalId };
 type InstanceId = ScopedId;
-type AssessmentId = ScopedId & { instanceId: LocalId; assessmentId: LocalId };
+type AssessmentId = {
+  courseId: CourseId;
+  qualifiedId: QualifiedId;
+  instanceId: LocalId;
+  assessmentId: LocalId;
+};
 type QuestionId = ScopedId;
 
 type LocalIdUsage = {
@@ -86,6 +92,7 @@ export type {
   InstanceId,
   LocalId,
   LocalIdUsage,
+  QualifiedId,
   QuestionId,
   ScopedId,
 };

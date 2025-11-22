@@ -6,6 +6,7 @@ import {
   InstanceId,
   LocalId,
   LocalIdUsage,
+  QualifiedId,
   QuestionId,
 } from "../utils";
 import { CourseCache } from "./courseCache";
@@ -13,7 +14,7 @@ import { FileWatcher } from "./filewatcher";
 import { QuestionCache } from "./questionCache";
 
 export class AssessmentCache {
-  private assessmentUses: Map<LocalId, Map<LocalId, LocalIdUsage[]>> =
+  private assessmentUses: Map<LocalId, Map<QualifiedId, LocalIdUsage[]>> =
     new Map();
   private fileWatcher: FileWatcher;
   private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
@@ -60,7 +61,7 @@ export class AssessmentCache {
       );
     }
     assessmentMap.set(
-      assessmentId.localId,
+      assessmentId.qualifiedId,
       this.getUsesIn(assessmentId.courseId, doc)
     );
   }
@@ -91,19 +92,16 @@ export class AssessmentCache {
     return out;
   }
 
-  getQuestionUses(questionId: QuestionId): LocalIdUsage[] {
+  getQuestionUseLocations(questionId: QuestionId): vscode.Location[] {
     const assessmentMap = this.assessmentUses.get(questionId.courseId);
     if (assessmentMap === undefined) {
       return [];
     }
     const out = [];
-    for (const [assessmentLocalId, uses] of assessmentMap.entries()) {
+    for (const [assessmentLocalId, uses] of assessmentMap) {
       for (const u of uses) {
         if (u.localId === questionId.localId) {
-          out.push({
-            localId: assessmentLocalId,
-            location: u.location,
-          });
+          out.push(u.location);
         }
       }
     }
@@ -114,7 +112,7 @@ export class AssessmentCache {
     return [
       ...(this.assessmentUses
         .get(assessmentId.courseId)
-        ?.get(assessmentId.localId) ?? []),
+        ?.get(assessmentId.qualifiedId) ?? []),
     ];
   }
 
@@ -128,7 +126,7 @@ export class AssessmentCache {
     }
     return {
       courseId,
-      localId: path.join(...parts.slice(1)),
+      qualifiedId: path.join(...parts.slice(1)),
       assessmentId: path.join(...parts.slice(index + 1)),
       instanceId: path.join(...parts.slice(1, index)),
     };
