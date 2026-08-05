@@ -3,6 +3,10 @@
   "displayName": "prairielearn-navigator",
   "description": "provides definitions and inlay hints for prairielearn assessments and questions",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SybelBlue/prairielearn-navigator.git"
+  },
   "engines": {
     "vscode": "^1.106.1"
   },
