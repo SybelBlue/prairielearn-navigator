@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 import * as vscode from "vscode";
 import { CourseCache, QuestionCache } from "../filewatchers";
 
@@ -170,8 +171,20 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
         ];
         diagnostics.push(diagnostic);
       }
-      if (!existingPaths.questionHtml) {
-        // TODO: should allow no html if json.text is set
+      let hasInlineQuestionText = false;
+      if (existingPaths.infoJson) {
+        try {
+          const info = JSON.parse(
+            fs.readFileSync(existingPaths.infoJson, "utf8")
+          ) as { text?: unknown };
+          hasInlineQuestionText = typeof info.text === "string";
+        } catch (e) {
+          console.error(
+            `prairielearn -- error reading question info.json: ${e}`
+          );
+        }
+      }
+      if (!existingPaths.questionHtml && !hasInlineQuestionText) {
         const diagnostic = new vscode.Diagnostic(
           range,
           `incomplete question: missing required html file`,
