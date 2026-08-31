@@ -171,6 +171,7 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
         diagnostics.push(diagnostic);
       }
       if (!existingPaths.questionHtml) {
+        // TODO: should allow no html if json.text is set
         const diagnostic = new vscode.Diagnostic(
           range,
           `incomplete question: missing required html file`,

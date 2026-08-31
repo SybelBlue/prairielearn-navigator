@@ -18,6 +18,7 @@ import {
   QuestionHeaderCodeLensProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
+import { QuestionCompletionItemProvider } from "./providers/completions";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -31,8 +32,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.commands.registerCommand(
         `prairielearn-navigator.${cmdName}`,
-        cmdImpl
-      )
+        cmdImpl,
+      ),
     );
   }
 
@@ -44,31 +45,32 @@ export function activate(context: vscode.ExtensionContext) {
 
   new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
   courseCache.onUpdated((ids) =>
-    console.info(`prairielearn -- course cache update: ${ids}`)
+    console.info(`prairielearn -- course cache update: ${ids}`),
   );
   instanceCache.onUpdated((uris) =>
     console.info(
       uris.length > 6
         ? `prairielearn -- course instance cache update: n=${uris.length}`
         : `prairielearn -- course instance cache update: ${uris.map(
-            (uris) => uris.fsPath
-          )}`
-    )
+            (uris) => uris.fsPath,
+          )}`,
+    ),
   );
   questionCache.onUpdated((ids) =>
     ids.length > 6
       ? console.info(`prairielearn -- question cache update: n=${ids.length}`)
       : console.info(
           `prairielearn -- question cache update: ${ids.map(
-            (qid) => qid.localId
-          )}`
-        )
+            (qid) => qid.localId,
+          )}`,
+        ),
   );
   assessmentCache.onUpdated((uris) =>
-    console.info(`prairielearn -- assessment cache update: n=${uris.length}`)
+    console.info(`prairielearn -- assessment cache update: n=${uris.length}`),
   );
 
-  // helpful constant
+  // helpful constants
+  const infoQuestionPatterns = [{ pattern: "**/questions/**/info.json" }];
   const infoAssessmentPatterns = [
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
@@ -83,30 +85,35 @@ export function activate(context: vscode.ExtensionContext) {
     // Diagnostics
     ...new DuplicatedQuestionDiagnosticCollection(
       courseCache,
-      questionCache
+      questionCache,
     ).subscriptions(),
     ...new IncompleteQuestionDiagnosticCollection(
       courseCache,
-      questionCache
+      questionCache,
     ).subscriptions(),
 
     // Jump-to-Definition Providers
     vscode.languages.registerDefinitionProvider(
       infoAssessmentPatterns,
-      new AssessmentDefinitionProvider(courseCache)
+      new AssessmentDefinitionProvider(courseCache),
     ),
 
     // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
       new AssessmentCompletionItemProvider(questionCache),
-      `"`
+      `"`,
+    ),
+    vscode.languages.registerCompletionItemProvider(
+      infoQuestionPatterns,
+      new QuestionCompletionItemProvider(questionCache),
+      `"`,
     ),
 
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(
       infoAssessmentPatterns,
-      new AssessmentQuestionIdCodeLensProvider(courseCache, assessmentCache)
+      new AssessmentQuestionIdCodeLensProvider(courseCache, assessmentCache),
     ),
     vscode.languages.registerCodeLensProvider(
       [
@@ -114,19 +121,19 @@ export function activate(context: vscode.ExtensionContext) {
         { pattern: "**/questions/**/question.html" },
         { pattern: "**/questions/**/server.py" },
       ],
-      new QuestionHeaderCodeLensProvider(courseCache, assessmentCache)
+      new QuestionHeaderCodeLensProvider(courseCache, assessmentCache),
     ),
     vscode.languages.registerCodeLensProvider(
       { pattern: "**/infoCourse.json" },
-      new CourseHeaderCodeLensProvider(courseCache, instanceCache)
+      new CourseHeaderCodeLensProvider(courseCache, instanceCache),
     ),
     vscode.languages.registerCodeLensProvider(
       { pattern: "**/infoCourseInstance.json" },
       new CourseInstanceHeaderCodeLensProvider(
         courseCache,
         instanceCache,
-        assessmentCache
-      )
+        assessmentCache,
+      ),
     ),
 
     // Code Action Providers
@@ -135,8 +142,8 @@ export function activate(context: vscode.ExtensionContext) {
       new IncompleteQuestionQuickFixProvider(),
       {
         providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
-      }
-    )
+      },
+    ),
   );
 }
 
