@@ -102,7 +102,7 @@ export class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagno
   }
 }
 
-export const incompleteQuestionDiagnosticCode =
+const incompleteQuestionDiagnosticCode =
   "prairielearn-navigator-incomplete";
 
 export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
@@ -176,8 +176,8 @@ export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagno
         try {
           const info = JSON.parse(
             fs.readFileSync(existingPaths.infoJson, "utf8")
-          ) as { text?: unknown };
-          hasInlineQuestionText = typeof info.text === "string";
+          ) as { options?: { text?: unknown } };
+          hasInlineQuestionText = typeof info.options?.text === "string";
         } catch (e) {
           console.error(
             `prairielearn -- error reading question info.json: ${e}`

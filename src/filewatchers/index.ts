@@ -14,4 +14,3 @@ export { AssessmentCache } from "./assessmentCache";
 export { CourseCache } from "./courseCache";
 export { CourseInstanceCache } from "./courseInstanceCache";
 export { QuestionCache } from "./questionCache";
-export { FileWatcher } from "./filewatcher";
