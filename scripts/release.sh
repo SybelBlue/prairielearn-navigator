@@ -97,7 +97,13 @@ approve_npm() {
     read -rp "Stage id for $NPM_PACKAGE@$version (empty to abort): " stage_id
     [[ -n $stage_id ]] || die "No stage approved, so the extension was NOT published. Finish later with: make publish-vscode"
   fi
-  npm stage approve "$stage_id" \
+  local otp=
+  printf '\n\033[1;33m  Approve %s@%s (stage %s).\033[0m\n' "$NPM_PACKAGE" "$version" "$stage_id"
+  echo "  Type a 2FA code from your authenticator app, or leave it empty to"
+  echo "  approve in the browser instead (finish there within 5 minutes)."
+  read -rsp "  npm 2FA code: " otp
+  echo
+  npm stage approve "$stage_id" ${otp:+--otp="$otp"} \
     || die "Approving stage $stage_id failed, so the extension was NOT published.
   Retry:  npm stage approve $stage_id
   Then:   make publish-vscode"
