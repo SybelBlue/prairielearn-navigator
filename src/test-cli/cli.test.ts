@@ -30,13 +30,37 @@ test("broken course exits 1 with code frames", () => {
   );
   assert.match(stdout, /13 \|\s+\{ "id": "noHtml", "points": 1 \},/);
   assert.match(stdout, /\s+\^{6} incomplete question/);
-  assert.match(stdout, /3 errors, 2 warnings in 1 file \(1 file checked\)/);
+  assert.match(stdout, /3 errors, 2 warnings in 1 file \(1 file, 6 questions checked\)/);
+});
+
+test("lists every question info.json verified under its assessment", () => {
+  const { stdout } = runCli("check", "broken");
+  const listing = stdout.split("\n\n")[0].split("\n");
+  assert.deepEqual(listing, [
+    "broken/courseInstances/Fa26/assessments/hw1/infoAssessment.json",
+    ...[
+      "good",
+      "topic/nested",
+      "inlineText",
+      "noHtml",
+      "noInfo",
+      "doesNotExist",
+    ].map((id) => `  broken/questions/${id}/info.json`),
+  ]);
+});
+
+test("--format github groups the checked files", () => {
+  const { stdout } = runCli("check", "--format", "github", "clean");
+  assert.match(
+    stdout,
+    /^::group::Checked files\nclean\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json\n {2}clean\/questions\/good\/info\.json\n::endgroup::$/m
+  );
 });
 
 test("--format github emits workflow annotations", () => {
   const { code, stdout } = runCli("check", "--format", "github", "broken");
   assert.equal(code, 1);
-  const lines = stdout.split("\n").filter((l) => l.startsWith("::"));
+  const lines = stdout.split("\n").filter((l) => /^::(error|warning) /.test(l));
   assert.equal(lines.length, 5);
   assert.match(
     lines[0],
@@ -48,7 +72,7 @@ test("--format github emits workflow annotations", () => {
 test("clean course exits 0", () => {
   const { code, stdout } = runCli("check", "clean");
   assert.equal(code, 0);
-  assert.match(stdout, /No errors found \(1 file checked\)/);
+  assert.match(stdout, /No errors found \(1 file, 1 question checked\)/);
 });
 
 test("assessment outside a course warns but does not fail", () => {
@@ -66,13 +90,13 @@ test("no matching files exits 1", () => {
 test("glob matching directories searches inside them", () => {
   const { code, stdout } = runCli("check", "{broken,clean}/courseInstances/*");
   assert.equal(code, 1);
-  assert.match(stdout, /3 errors, 2 warnings in 1 file \(2 files checked\)/);
+  assert.match(stdout, /3 errors, 2 warnings in 1 file \(2 files, 7 questions checked\)/);
 });
 
 test("glob matching files keeps only infoAssessment.json", () => {
   const { code, stdout } = runCli("check", "clean/**");
   assert.equal(code, 0);
-  assert.match(stdout, /No errors found \(1 file checked\)/);
+  assert.match(stdout, /No errors found \(1 file, 1 question checked\)/);
 });
 
 test("glob with no matches exits 1", () => {

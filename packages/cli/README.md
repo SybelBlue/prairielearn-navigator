@@ -18,7 +18,19 @@ it. Quote globs so the shell passes them through unexpanded:
 npx -y @sybelblue/prairielearn-navigator check "courseInstances/Fa26/**"
 ```
 
+Every file it verifies is listed first: each `infoAssessment.json`, followed by
+the `info.json` of each question it references (red if that question has an
+error). With `--format github` this list is a collapsible log group.
+
 ```
+courseInstances/Fa26/assessments/hw1/infoAssessment.json
+  questions/good/info.json
+  questions/topic/nested/info.json
+  questions/inlineText/info.json
+  questions/noHtml/info.json
+  questions/noInfo/info.json
+  questions/doesNotExist/info.json
+
 courseInstances/Fa26/assessments/hw1/infoAssessment.json:13:18 error: incomplete question: missing required html file
    |
 11 |         { "id": "topic/nested", "points": 1 },
@@ -26,7 +38,7 @@ courseInstances/Fa26/assessments/hw1/infoAssessment.json:13:18 error: incomplete
 13 |         { "id": "noHtml", "points": 1 },
    |                  ^^^^^^ incomplete question: missing required html file
 
-3 errors, 2 warnings in 1 file (1 file checked)
+3 errors, 2 warnings in 1 file (1 file, 6 questions checked)
 ```
 
 ## GitHub Actions

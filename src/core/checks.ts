@@ -8,6 +8,11 @@ export const incompleteQuestionDiagnosticCode =
 
 const idPattern = /"id"\s*:\s*"([^"]+)"/g;
 
+/** Unique question ids referenced by an infoAssessment.json, in order. */
+export function referencedQuestionIds(text: string): string[] {
+  return [...new Set(Array.from(text.matchAll(idPattern), (m) => m[1]))];
+}
+
 /** Warns on every occurrence of a question id that appears more than once. */
 export function checkDuplicateQuestionIds(text: string): Diagnostic[] {
   const idPositions = new Map<string, number[]>();

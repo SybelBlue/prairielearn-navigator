@@ -1,9 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { styleText } from "node:util";
-import { checkAssessment } from "../core/checks";
+import { checkAssessment, referencedQuestionIds } from "../core/checks";
 import { findCourseRoot } from "../core/course";
 import { Diagnostic, offsetToPosition } from "../core/diagnostic";
+import { questionFilePathsFromId } from "../core/questionPaths";
 
 // ── Types ──
 
@@ -17,28 +18,53 @@ interface CheckError {
   severity: Diagnostic["severity"];
 }
 
+/** A question info.json verified while checking an assessment. */
+interface CheckedQuestion {
+  /** Absolute path to the question's info.json (which may not exist). */
+  infoJson: string;
+  hasError: boolean;
+}
+
+interface FileResult {
+  errors: CheckError[];
+  questions: CheckedQuestion[];
+}
+
 type Format = "pretty" | "github";
 
 // ── Error collection ──
 
-function checkFile(file: string, displayPath: string): CheckError[] {
+function checkFile(file: string, displayPath: string): FileResult {
   const source = fs.readFileSync(file, "utf-8");
   const courseId = findCourseRoot(file);
   if (courseId === null) {
-    return [
-      {
-        file: displayPath,
-        line: 1,
-        column: 1,
-        endLine: 1,
-        endColumn: 1,
-        message:
-          "not inside a course (no infoCourse.json found in any parent directory); skipped",
-        severity: "warning",
-      },
-    ];
+    return {
+      errors: [
+        {
+          file: displayPath,
+          line: 1,
+          column: 1,
+          endLine: 1,
+          endColumn: 1,
+          message:
+            "not inside a course (no infoCourse.json found in any parent directory); skipped",
+          severity: "warning",
+        },
+      ],
+      questions: [],
+    };
   }
-  return checkAssessment(source, courseId).map((d) => {
+  const diagnostics = checkAssessment(source, courseId);
+  const erroredIds = new Set(
+    diagnostics
+      .filter((d) => d.severity === "error")
+      .map((d) => source.slice(d.startOffset, d.endOffset))
+  );
+  const questions = referencedQuestionIds(source).map((localId) => ({
+    infoJson: questionFilePathsFromId({ courseId, localId }).infoJson,
+    hasError: erroredIds.has(localId),
+  }));
+  const errors = diagnostics.map((d) => {
     const start = offsetToPosition(source, d.startOffset);
     const end = offsetToPosition(source, d.endOffset);
     return {
@@ -51,6 +77,7 @@ function checkFile(file: string, displayPath: string): CheckError[] {
       severity: d.severity,
     };
   });
+  return { errors, questions };
 }
 
 // ── Formatting ──
@@ -129,14 +156,14 @@ function formatSummary(
   totalErrors: number,
   filesWithErrors: number,
   totalFiles: number,
+  totalQuestions: number,
   totalWarnings = 0
 ): string {
-  const totalStr = totalFiles === 1 ? "file" : "files";
+  const checked =
+    `${totalFiles} ${totalFiles === 1 ? "file" : "files"}, ` +
+    `${totalQuestions} ${totalQuestions === 1 ? "question" : "questions"} checked`;
   if (totalErrors === 0 && totalWarnings === 0) {
-    return styleText(
-      "green",
-      `No errors found (${totalFiles} ${totalStr} checked)`
-    );
+    return styleText("green", `No errors found (${checked})`);
   }
   const parts: string[] = [];
   if (totalErrors > 0) {
@@ -148,10 +175,7 @@ function formatSummary(
     parts.push(styleText("yellow", `${totalWarnings} ${warnStr}`));
   }
   const errFileStr = filesWithErrors === 1 ? "file" : "files";
-  return (
-    `${parts.join(", ")} in ${filesWithErrors} ${errFileStr}` +
-    ` (${totalFiles} ${totalStr} checked)`
-  );
+  return `${parts.join(", ")} in ${filesWithErrors} ${errFileStr} (${checked})`;
 }
 
 // ── File resolution ──
@@ -284,12 +308,14 @@ export async function run(args: string[]): Promise<number> {
   let totalErrors = 0;
   let totalWarnings = 0;
   let filesWithErrors = 0;
+  const checkedQuestions = new Set<string>();
+  const listing: string[] = [];
   const output: string[] = [];
   const cwd = process.cwd();
 
   for (const file of files) {
     const displayPath = path.relative(cwd, file) || file;
-    const errors = checkFile(file, displayPath);
+    const { errors, questions } = checkFile(file, displayPath);
     const fileErrors = errors.filter((e) => e.severity === "error").length;
 
     if (errors.length > 0) {
@@ -304,13 +330,25 @@ export async function run(args: string[]): Promise<number> {
       }
     }
 
-    if (format === "pretty") {
-      console.log(
-        errors.length > 0
-          ? styleText(fileErrors > 0 ? "red" : "yellow", displayPath)
-          : styleText("dim", displayPath)
-      );
+    listing.push(
+      errors.length > 0
+        ? styleText(fileErrors > 0 ? "red" : "yellow", displayPath)
+        : styleText("dim", displayPath)
+    );
+    for (const q of questions) {
+      checkedQuestions.add(q.infoJson);
+      const questionPath = "  " + (path.relative(cwd, q.infoJson) || q.infoJson);
+      listing.push(styleText(q.hasError ? "red" : "dim", questionPath));
     }
+  }
+
+  // Every file verified, each assessment followed by its questions' info.json
+  if (format === "github") {
+    console.log("::group::Checked files");
+    listing.forEach((line) => console.log(line));
+    console.log("::endgroup::");
+  } else {
+    listing.forEach((line) => console.log(line));
   }
 
   if (output.length > 0) {
@@ -323,7 +361,13 @@ export async function run(args: string[]): Promise<number> {
   }
 
   console.log(
-    formatSummary(totalErrors, filesWithErrors, files.length, totalWarnings)
+    formatSummary(
+      totalErrors,
+      filesWithErrors,
+      files.length,
+      checkedQuestions.size,
+      totalWarnings
+    )
   );
   // Only errors affect exit code, not warnings
   return totalErrors > 0 ? 1 : 0;
