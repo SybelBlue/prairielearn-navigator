@@ -9,7 +9,8 @@
     "url": "https://github.com/SybelBlue/prairielearn-navigator.git"
   },
   "engines": {
-    "vscode": "^1.106.1"
+    "vscode": "^1.106.1",
+    "node": ">=22"
   },
   "categories": [
     "Other"
@@ -21,6 +22,9 @@
     "workspaceContains:**/questions/**/info.json"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "prairielearn-navigator": "dist/cli.js"
+  },
   "contributes": {
     "commands": [
       {
@@ -31,6 +35,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
+    "prepare": "webpack --mode production",
     "compile": "webpack",
     "watch": "webpack --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
@@ -39,6 +44,8 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
+    "test:cli": "vitest run",
+    "check": "node dist/cli.js check",
     "bundle": "npm test && vsce package",
     "publish:vscode": "npm test && vsce publish",
     "publish:vscode:patch": "npm test && vsce publish patch",
@@ -57,6 +64,7 @@
     "ts-loader": "^9.5.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3",
+    "vitest": "^5.0.3",
     "webpack": "^5.102.1",
     "webpack-cli": "^6.0.1"
   },

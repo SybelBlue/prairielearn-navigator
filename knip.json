@@ -1,0 +1,4 @@
+{
+  "entry": [".vscode-test.mjs", "src/test/**/*.test.ts"],
+  "ignoreDependencies": ["@vscode/test-electron"]
+}

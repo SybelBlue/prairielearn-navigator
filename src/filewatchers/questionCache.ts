@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { QuestionId } from "../common";
+import { questionFilePathsFromId } from "../core/questionPaths";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
 
@@ -9,13 +10,6 @@ const reTargets = /[\{\}\[\]\|\*\+\\\.\^]/g;
 function makeRegexSafe(s: string) {
   return s.replaceAll(reTargets, "\\$&");
 }
-
-type QuestionPaths = {
-  dir: string;
-  infoJson: string;
-  questionHtml: string;
-  serverPy: string;
-};
 
 export class QuestionCache {
   private static regexSafeIds: Map<string, string> = new Map();
@@ -112,37 +106,8 @@ export class QuestionCache {
     );
   }
 
-  static questionFilePathsFromId(
-    questionId: QuestionId
-  ): QuestionPaths & { strict(): Partial<QuestionPaths> } {
-    const dir = path.dirname(this.getUriFrom(questionId).fsPath);
-
-    const infoJson = path.join(dir, "info.json");
-    const html = path.join(dir, "question.html");
-    const serverPy = path.join(dir, "server.py");
-    return {
-      dir,
-      infoJson,
-      questionHtml: html,
-      serverPy,
-      /** Only returns existing file-paths */
-      strict(): Partial<QuestionPaths> {
-        const out: Partial<QuestionPaths> = {};
-        if (fs.existsSync(dir)) {
-          out.dir = dir;
-        }
-        if (fs.existsSync(infoJson)) {
-          out.infoJson = infoJson;
-        }
-        if (fs.existsSync(html)) {
-          out.questionHtml = html;
-        }
-        if (fs.existsSync(serverPy)) {
-          out.serverPy = serverPy;
-        }
-        return out;
-      },
-    };
+  static questionFilePathsFromId(questionId: QuestionId) {
+    return questionFilePathsFromId(questionId);
   }
 
   public dispose() {

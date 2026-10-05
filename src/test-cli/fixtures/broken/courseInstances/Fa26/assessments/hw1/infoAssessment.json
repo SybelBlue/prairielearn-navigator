@@ -1,0 +1,20 @@
+{
+  "uuid": "00000000-0000-0000-0000-000000000004",
+  "type": "Homework",
+  "title": "HW1",
+  "set": "Homework",
+  "number": "1",
+  "zones": [
+    {
+      "questions": [
+        { "id": "good", "points": 1 },
+        { "id": "topic/nested", "points": 1 },
+        { "id": "inlineText", "points": 1 },
+        { "id": "noHtml", "points": 1 },
+        { "id": "noInfo", "points": 1 },
+        { "id": "doesNotExist", "points": 1 },
+        { "id": "good", "points": 1 }
+      ]
+    }
+  ]
+}

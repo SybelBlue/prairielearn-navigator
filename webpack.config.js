@@ -3,6 +3,7 @@
 'use strict';
 
 const path = require('path');
+const webpack = require('webpack');
 
 //@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
@@ -45,4 +46,27 @@ const extensionConfig = {
     level: "log", // enables logging required for problem matchers
   },
 };
-module.exports = [ extensionConfig ];
+
+/** @type WebpackConfig */
+const cliConfig = {
+  name: 'cli',
+  target: 'node',
+  mode: 'none',
+
+  // Must not import 'vscode' (enforced by eslint): there is no external for it here.
+  entry: './src/cli/main.ts',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'cli.js',
+    libraryTarget: 'commonjs2'
+  },
+  resolve: {
+    extensions: ['.ts', '.js']
+  },
+  module: extensionConfig.module,
+  plugins: [
+    new webpack.BannerPlugin({ banner: '#!/usr/bin/env node', raw: true })
+  ],
+  devtool: 'nosources-source-map',
+};
+module.exports = [ extensionConfig, cliConfig ];

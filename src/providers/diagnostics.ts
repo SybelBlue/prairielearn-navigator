@@ -1,6 +1,11 @@
 import * as crypto from "node:crypto";
-import * as fs from "node:fs";
 import * as vscode from "vscode";
+import {
+  checkDuplicateQuestionIds,
+  checkIncompleteQuestions,
+  incompleteQuestionDiagnosticCode,
+} from "../core/checks";
+import type * as core from "../core/diagnostic";
 import { CourseCache, QuestionCache } from "../filewatchers";
 
 abstract class ReferenceBasedDiagnosticCollection {
@@ -52,160 +57,67 @@ abstract class ReferenceBasedDiagnosticCollection {
   ): vscode.Diagnostic[] | null | undefined;
 }
 
+function toVscodeDiagnostics(
+  document: vscode.TextDocument,
+  diagnostics: core.Diagnostic[]
+): vscode.Diagnostic[] {
+  return diagnostics.map((d) => {
+    const diagnostic = new vscode.Diagnostic(
+      new vscode.Range(
+        document.positionAt(d.startOffset),
+        document.positionAt(d.endOffset)
+      ),
+      d.message,
+      d.severity === "error"
+        ? vscode.DiagnosticSeverity.Error
+        : vscode.DiagnosticSeverity.Warning
+    );
+    if (d.code !== undefined) {
+      diagnostic.code = d.code;
+    }
+    if (d.related !== undefined) {
+      diagnostic.relatedInformation = d.related.map(
+        (r) =>
+          new vscode.DiagnosticRelatedInformation(
+            new vscode.Location(
+              vscode.Uri.file(r.path),
+              new vscode.Range(0, 0, 0, 0)
+            ),
+            r.message
+          )
+      );
+    }
+    return diagnostic;
+  });
+}
+
 export class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
   protected diagnosticsFor(document: vscode.TextDocument) {
     if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
       return;
     }
-    const diagnostics: vscode.Diagnostic[] = [];
-    const text = document.getText();
-
     try {
-      const idPositions = new Map<string, number[]>();
-
-      // Find all "id" field positions
-      const idMatches = Array.from(text.matchAll(/"id"\s*:\s*"([^"]+)"/g));
-
-      for (const match of idMatches) {
-        const id = match[1];
-        const offset = match.index! + match[0].indexOf(id);
-
-        if (!idPositions.has(id)) {
-          idPositions.set(id, []);
-        }
-        idPositions.get(id)!.push(offset);
-      }
-
-      // Create diagnostics for duplicates
-      for (const [id, positions] of idPositions) {
-        if (positions.length > 1) {
-          for (const offset of positions) {
-            const start = document.positionAt(offset);
-            const end = document.positionAt(offset + id.length);
-            const range = new vscode.Range(start, end);
-
-            const diagnostic = new vscode.Diagnostic(
-              range,
-              `Duplicate question ID: "${id}" appears ${positions.length} times`,
-              vscode.DiagnosticSeverity.Warning
-            );
-
-            diagnostics.push(diagnostic);
-          }
-        }
-      }
+      return toVscodeDiagnostics(
+        document,
+        checkDuplicateQuestionIds(document.getText())
+      );
     } catch (e) {
       console.error("prairielearn -- error in duplicate diagnostics: " + e);
+      return [];
     }
-
-    return diagnostics;
   }
 }
-
-const incompleteQuestionDiagnosticCode =
-  "prairielearn-navigator-incomplete";
 
 export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
   protected diagnosticsFor(document: vscode.TextDocument) {
     if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
       return;
     }
-    const diagnostics: vscode.Diagnostic[] = [];
-    const text = document.getText();
     const courseId = this.courseCache.getCourseIdFor(document.uri);
-
-    // Find all "id" field positions
-    const idMatches = Array.from(text.matchAll(/"id"\s*:\s*"([^"]+)"/g));
-
-    for (const match of idMatches) {
-      const id = { courseId, localId: match[1] };
-
-      const paths = QuestionCache.questionFilePathsFromId(id);
-
-      const endOffset = match.index + match[0].length;
-      const range = new vscode.Range(
-        document.positionAt(endOffset - (id.localId.length + 1)),
-        document.positionAt(endOffset - 1)
-      );
-
-      let existingPaths;
-      if (!paths || !(existingPaths = paths.strict()).dir) {
-        const diagnostic = new vscode.Diagnostic(
-          range,
-          `missing question: expected question directory ${
-            QuestionCache.questionFilePathsFromId(id).dir
-          }`,
-          vscode.DiagnosticSeverity.Error
-        );
-        if (paths) {
-          diagnostic.code = incompleteQuestionDiagnosticCode;
-          diagnostic.relatedInformation = [
-            new vscode.DiagnosticRelatedInformation(
-              new vscode.Location(
-                vscode.Uri.file(paths.infoJson),
-                new vscode.Range(0, 0, 0, 0)
-              ),
-              "Expected location of info.json"
-            ),
-          ];
-        }
-        diagnostics.push(diagnostic);
-        continue;
-      }
-      if (!existingPaths.infoJson) {
-        const diagnostic = new vscode.Diagnostic(
-          range,
-          `incomplete question: missing required JSON file`,
-          vscode.DiagnosticSeverity.Error
-        );
-
-        diagnostic.code = incompleteQuestionDiagnosticCode;
-        diagnostic.relatedInformation = [
-          new vscode.DiagnosticRelatedInformation(
-            new vscode.Location(
-              vscode.Uri.file(paths.infoJson),
-              new vscode.Range(0, 0, 0, 0)
-            ),
-            "Expected location of info.json"
-          ),
-        ];
-        diagnostics.push(diagnostic);
-      }
-      let hasInlineQuestionText = false;
-      if (existingPaths.infoJson) {
-        try {
-          const info = JSON.parse(
-            fs.readFileSync(existingPaths.infoJson, "utf8")
-          ) as { options?: { text?: unknown } };
-          hasInlineQuestionText = typeof info.options?.text === "string";
-        } catch (e) {
-          console.error(
-            `prairielearn -- error reading question info.json: ${e}`
-          );
-        }
-      }
-      if (!existingPaths.questionHtml && !hasInlineQuestionText) {
-        const diagnostic = new vscode.Diagnostic(
-          range,
-          `incomplete question: missing required html file`,
-          vscode.DiagnosticSeverity.Error
-        );
-
-        diagnostic.code = incompleteQuestionDiagnosticCode;
-        diagnostic.relatedInformation = [
-          new vscode.DiagnosticRelatedInformation(
-            new vscode.Location(
-              vscode.Uri.file(paths.questionHtml),
-              new vscode.Range(0, 0, 0, 0)
-            ),
-            "Expected location of question.html"
-          ),
-        ];
-        diagnostics.push(diagnostic);
-      }
-    }
-
-    return diagnostics;
+    return toVscodeDiagnostics(
+      document,
+      checkIncompleteQuestions(document.getText(), courseId)
+    );
   }
 }
 
