@@ -1,0 +1,33 @@
+{
+  "name": "@sybelblue/prairielearn-navigator",
+  "version": "0.3.0",
+  "description": "Check PrairieLearn courses for missing, incomplete, and duplicate questions",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SybelBlue/prairielearn-navigator.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "prairielearn-navigator": "dist/cli.js"
+  },
+  "files": [
+    "dist/cli.js"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "prairielearn",
+    "lint",
+    "cli",
+    "ci"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "npm --prefix ../.. run build:cli && cp ../../LICENSE .",
+    "prepublishOnly": "npm --prefix ../.. run lint && npm --prefix ../.. run test:cli"
+  }
+}

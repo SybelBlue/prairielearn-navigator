@@ -29,4 +29,7 @@ jobs:
       - name: Run core and CLI tests
         run: npm run test:cli
       - name: Smoke-test CLI on a clean course
-        run: node dist/cli.js check --format github src/test-cli/fixtures/clean
+        run: node packages/cli/dist/cli.js check --format github src/test-cli/fixtures/clean
+      - name: Check npm package contents
+        run: npm pack --dry-run
+        working-directory: packages/cli

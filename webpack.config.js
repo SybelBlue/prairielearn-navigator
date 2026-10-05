@@ -56,7 +56,8 @@ const cliConfig = {
   // Must not import 'vscode' (enforced by eslint): there is no external for it here.
   entry: './src/cli/main.ts',
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    // Published from packages/cli as @sybelblue/prairielearn-navigator.
+    path: path.resolve(__dirname, 'packages/cli/dist'),
     filename: 'cli.js',
     libraryTarget: 'commonjs2'
   },
@@ -67,6 +68,6 @@ const cliConfig = {
   plugins: [
     new webpack.BannerPlugin({ banner: '#!/usr/bin/env node', raw: true })
   ],
-  devtool: 'nosources-source-map',
+  devtool: false,
 };
 module.exports = [ extensionConfig, cliConfig ];

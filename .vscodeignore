@@ -12,7 +12,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
-dist/cli.*
+packages/**
 vitest.config.mts
 knip.json
 .github/**

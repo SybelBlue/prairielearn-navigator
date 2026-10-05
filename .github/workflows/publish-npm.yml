@@ -1,0 +1,42 @@
+name: Publish CLI to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    # Only publish for CLI releases (cli-v*), not extension releases.
+    # Allow manual dispatch (ref_name will be a branch or tag chosen by the operator).
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'cli-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - name: Check tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          version="cli-v$(node -p "require('./packages/cli/package.json').version")"
+          if [ "$version" != "${{ github.ref_name }}" ]; then
+            echo "::error::Release tag ${{ github.ref_name }} does not match packages/cli/package.json ($version)"
+            exit 1
+          fi
+
+      # prepublishOnly runs lint and the CLI tests; prepack builds the bundle.
+      - run: npm publish
+        working-directory: packages/cli
