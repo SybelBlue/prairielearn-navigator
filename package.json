@@ -42,11 +42,7 @@
     "test": "vscode-test",
     "test:cli": "vitest run",
     "check": "node packages/cli/dist/cli.js check",
-    "bundle": "npm test && vsce package",
-    "publish:vscode": "npm test && vsce publish",
-    "publish:vscode:patch": "npm test && vsce publish patch",
-    "publish:vscode:minor": "npm test && vsce publish minor",
-    "publish:vscode:major": "npm test && vsce publish major"
+    "bundle": "npm test && vsce package"
   },
   "devDependencies": {
     "@types/json-to-pretty-yaml": "^1.2.1",

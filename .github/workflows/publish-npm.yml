@@ -7,10 +7,12 @@ on:
 
 jobs:
   publish:
-    # Only publish for CLI releases (cli-v*), not extension releases.
+    # Releases are tagged vX.Y.Z by `make publish`; the extension and CLI share that version.
     # Allow manual dispatch (ref_name will be a branch or tag chosen by the operator).
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'cli-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
+    # Must match the environment on the npm trusted publisher.
+    environment: npm
     permissions:
       contents: read
       id-token: write
@@ -31,12 +33,19 @@ jobs:
       - name: Check tag matches package version
         if: github.event_name == 'release'
         run: |
-          version="cli-v$(node -p "require('./packages/cli/package.json').version")"
+          version="v$(node -p "require('./packages/cli/package.json').version")"
           if [ "$version" != "${{ github.ref_name }}" ]; then
             echo "::error::Release tag ${{ github.ref_name }} does not match packages/cli/package.json ($version)"
             exit 1
           fi
 
-      # prepublishOnly runs lint and the CLI tests; prepack builds the bundle.
-      - run: npm publish
+      - run: npm run lint
+      - run: npm run test:cli
+      - run: npm run build:cli
+      - run: cp LICENSE packages/cli/
+
+      # The trusted publisher only allows staged publishes: the version stays
+      # private until a maintainer runs `npm stage approve` with 2FA, which
+      # `make publish` does. Provenance requires this public repository.
+      - run: npm stage publish --provenance
         working-directory: packages/cli

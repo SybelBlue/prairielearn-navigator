@@ -16,3 +16,5 @@ packages/**
 vitest.config.mts
 knip.json
 .github/**
+Makefile
+scripts/**

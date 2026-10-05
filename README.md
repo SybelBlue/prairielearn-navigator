@@ -17,34 +17,55 @@ npx -y @sybelblue/prairielearn-navigator check --format github
 See [packages/cli/README.md](packages/cli/README.md) for options and a GitHub
 Actions example.
 
-## Test, bundle, and publish
+## Development
 
-Run the extension tests and checks:
-
-```sh
-npm test
-```
-
-Run the editor-independent core and CLI tests (no VS Code needed):
+Common commands are in the [Makefile](Makefile). Run `make help` to list them:
 
 ```sh
-npm run test:cli
+make install     # npm ci
+make test-all    # lint, CLI tests (Vitest), extension tests (VS Code)
+make package     # build a .vsix
+make check ARGS="path/to/course"   # run the CLI against a course
 ```
 
-Build a production bundle, rerun the checks, and create a `.vsix` file:
+## Releasing
+
+The extension and the npm CLI (`@sybelblue/prairielearn-navigator`) share one
+version. To release, put your notes under `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md), then run:
 
 ```sh
-npm run bundle
+make publish patch   # or: minor / major
 ```
 
-To publish a new version to the Visual Studio Marketplace, create a Marketplace
-publisher access token, export it as `VSCE_PAT`, and choose the appropriate
-semantic-version increment:
+This:
 
-```sh
-VSCE_PAT=your-token npm run publish:vscode:patch
-# or: publish:vscode:minor / publish:vscode:major
-```
+1. Checks you're on a clean `main` that matches `origin/main`, and runs lint
+   and all tests.
+2. Bumps both `package.json` files, dates the CHANGELOG entry, commits, tags
+   `vX.Y.Z`, and pushes.
+3. Creates the GitHub release, which runs
+   [publish-npm.yml](.github/workflows/publish-npm.yml) to stage the CLI on
+   npm (with provenance), and waits for that run.
+4. Approves the staged npm version with `npm stage approve`, which prompts for
+   your 2FA code, then waits until the version is public.
+5. Publishes the extension with `vsce publish`, **only once the npm version is
+   public**.
 
-Each publish command runs the tests first. To publish the version already set in
-`package.json` without incrementing it, use `npm run publish:vscode`.
+Use `make publish patch DRY_RUN=1` to run the checks and print the release
+steps without changing anything.
+
+If a step after the push fails, the tag and GitHub release already exist but
+the extension isn't published. Fix the problem (for a failed workflow, rerun it
+with `gh run rerun <id>`), then run `make publish-vscode` from the release
+commit. It approves the staged npm version if needed, then publishes the
+extension.
+
+One-time setup:
+
+- `gh auth login`
+- `npm login`, needed to approve staged publishes
+- `npx vsce login sybelblue`, using a Marketplace personal access token
+- On npmjs.com, the package's trusted publisher must be GitHub Actions,
+  `SybelBlue/prairielearn-navigator`, workflow `publish-npm.yml`, environment
+  `npm`, with stage-publish permission.
