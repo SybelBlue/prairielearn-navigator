@@ -161,16 +161,42 @@ const DEFAULT_EXCLUDE_SEGMENTS = [
   `${path.sep}.git${path.sep}`,
 ];
 
+const ASSESSMENT_FILE = "infoAssessment.json";
+
+function isGlob(p: string): boolean {
+  return /[*?[\]{}]/.test(p);
+}
+
+/**
+ * Expands a glob to infoAssessment.json files: matched files are kept by
+ * name, and matched directories are searched recursively.
+ */
+function expandGlob(pattern: string, cwd: string): string[] {
+  const matches = fs.globSync(
+    [pattern, `${pattern.replace(/\/+$/, "")}/**/${ASSESSMENT_FILE}`],
+    { cwd }
+  );
+  return matches
+    .filter((m) => path.basename(m) === ASSESSMENT_FILE)
+    .map((m) => path.resolve(cwd, m));
+}
+
 function resolveFiles(paths: string[]): string[] {
   const files = new Set<string>();
   const cwd = process.cwd();
   for (const p of paths) {
+    if (isGlob(p)) {
+      for (const f of expandGlob(p, cwd)) {
+        files.add(f);
+      }
+      continue;
+    }
     const resolved = path.resolve(cwd, p);
     if (!fs.existsSync(resolved)) {
       continue;
     }
     if (fs.statSync(resolved).isDirectory()) {
-      for (const match of fs.globSync("**/infoAssessment.json", {
+      for (const match of fs.globSync(`**/${ASSESSMENT_FILE}`, {
         cwd: resolved,
       })) {
         files.add(path.resolve(resolved, match));
@@ -191,7 +217,9 @@ const USAGE = `Usage: prairielearn-navigator check [options] [paths...]
 Check infoAssessment.json files for missing, incomplete, and duplicate questions.
 
 Arguments:
-  paths     Course directories to search, or infoAssessment.json files (default: .)
+  paths     Course directories to search, infoAssessment.json files, or glob
+            patterns matching either (default: .). Quote globs so the shell
+            does not expand them.
 
 Options:
   --format <pretty|github>  Output format (default: pretty). "github" emits
@@ -203,6 +231,8 @@ Exit status is 1 if any errors are found; warnings do not affect it.
 Examples:
   prairielearn-navigator check
   prairielearn-navigator check path/to/course
+  prairielearn-navigator check "courseInstances/Fa26/**"
+  prairielearn-navigator check "**/assessments/hw*/infoAssessment.json"
   prairielearn-navigator check --format github`;
 
 export async function run(args: string[]): Promise<number> {

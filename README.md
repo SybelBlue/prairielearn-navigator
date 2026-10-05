@@ -15,6 +15,13 @@ duplicate question IDs as warnings. Only errors make it exit non-zero.
 npx -y github:SybelBlue/prairielearn-navigator check [--format pretty|github] [paths...]
 ```
 
+Paths can be glob patterns. A glob that matches a directory searches inside
+it. Quote globs so the shell passes them through unexpanded:
+
+```sh
+npx -y github:SybelBlue/prairielearn-navigator check "courseInstances/Fa26/**"
+```
+
 ```
 courseInstances/Fa26/assessments/hw1/infoAssessment.json:13:18 error: incomplete question: missing required html file
    |

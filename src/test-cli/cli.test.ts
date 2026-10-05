@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { test } from "vitest";
 
-const cli = path.resolve(__dirname, "../../dist/cli.js");
+const cli = path.resolve(__dirname, "../../packages/cli/dist/cli.js");
 const fixtures = path.join(__dirname, "fixtures");
 
 function runCli(...args: string[]) {
@@ -59,6 +59,24 @@ test("assessment outside a course warns but does not fail", () => {
 
 test("no matching files exits 1", () => {
   const { code, stderr } = runCli("check", "broken/questions");
+  assert.equal(code, 1);
+  assert.match(stderr, /No infoAssessment\.json files found/);
+});
+
+test("glob matching directories searches inside them", () => {
+  const { code, stdout } = runCli("check", "{broken,clean}/courseInstances/*");
+  assert.equal(code, 1);
+  assert.match(stdout, /3 errors, 2 warnings in 1 file \(2 files checked\)/);
+});
+
+test("glob matching files keeps only infoAssessment.json", () => {
+  const { code, stdout } = runCli("check", "clean/**");
+  assert.equal(code, 0);
+  assert.match(stdout, /No errors found \(1 file checked\)/);
+});
+
+test("glob with no matches exits 1", () => {
+  const { code, stderr } = runCli("check", "nope/**/*.json");
   assert.equal(code, 1);
   assert.match(stderr, /No infoAssessment\.json files found/);
 });
