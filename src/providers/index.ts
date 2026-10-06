@@ -1,10 +1,15 @@
 export { AssessmentCompletionItemProvider } from "./completions";
-export { AssessmentDefinitionProvider } from "./definitions";
+export { ConfigProvider } from "./config";
 export {
-  DuplicatedQuestionDiagnosticCollection,
-  IncompleteQuestionDiagnosticCollection,
-  IncompleteQuestionQuickFixProvider,
+  MissingFileQuickFixProvider,
+  RuleDiagnosticCollection,
 } from "./diagnostics";
+export {
+  anyFileSelector,
+  FileReferenceProvider,
+  fileReferenceSelector,
+  findUsesCommand,
+} from "./fileReferences";
 export {
   AssessmentQuestionIdCodeLensProvider,
   QuestionHeaderCodeLensProvider,

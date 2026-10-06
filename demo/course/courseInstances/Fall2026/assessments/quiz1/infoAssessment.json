@@ -1,0 +1,8 @@
+{
+  "uuid": "c1b2c3d4-0002-4000-8000-000000000002",
+  "type": "Exam",
+  "title": "Quiz 1",
+  "set": "HW",
+  "number": "2",
+  "zones": [{ "questions": [{ "id": "addNumbers", "points": 5 }, { "id": "brokenJson", "points": 5 }] }]
+}

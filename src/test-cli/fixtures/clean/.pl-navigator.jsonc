@@ -1,0 +1,5 @@
+{
+  // Pinned to a vendored schema snapshot so tests never touch the network.
+  "plVersion": "151aabd1167dbdc170c50f71295a74de9f31db05",
+  "schemaCacheDir": "../schema-cache",
+}

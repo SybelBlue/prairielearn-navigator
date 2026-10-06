@@ -18,6 +18,18 @@
 			}
 		},
 		{
+			// One-off build. As a preLaunchTask it is judged by its exit code; the
+			// background watch task is judged by every error in the Problems panel,
+			// which in this repo includes the deliberately broken demo courses.
+			"type": "npm",
+			"script": "compile",
+			"problemMatcher": "$ts-webpack",
+			"presentation": {
+				"reveal": "silent"
+			},
+			"group": "build"
+		},
+		{
 			"type": "npm",
 			"script": "watch-tests",
 			"problemMatcher": "$tsc-watch",

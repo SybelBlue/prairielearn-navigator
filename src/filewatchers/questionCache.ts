@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { QuestionId } from "../common";
+import { parseJsonc } from "../core/json";
 import { questionFilePathsFromId } from "../core/questionPaths";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
@@ -62,7 +63,8 @@ export class QuestionCache {
       QuestionCache.regexSafeIds.set(quid.localId, makeRegexSafe(quid.localId));
     }
     const rawData = fs.readFileSync(uri.fsPath, 'utf-8');
-    const { tags = [] } = JSON.parse(rawData);
+    const info = parseJsonc(rawData) as { tags?: unknown } | undefined;
+    const tags = Array.isArray(info?.tags) ? info.tags : [];
     for (const t of tags) {
       const s = this.tagMap.get(t) ?? new Set();
       s.add(quid);

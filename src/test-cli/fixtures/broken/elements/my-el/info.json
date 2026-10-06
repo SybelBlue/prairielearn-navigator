@@ -1,0 +1,1 @@
+{ "controller": "my-el.py", "dependencies": { "elementScripts": ["missing.js"] }, "dynamicDependencies": { "elementScripts": { "self": "my-el.py" }, "clientFilesCourseScripts": { "css": "exists.css" } } }

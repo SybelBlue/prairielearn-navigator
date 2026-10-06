@@ -38,10 +38,10 @@ export class AssessmentQuestionIdCodeLensProvider
     private assessmentCache: AssessmentCache
   ) {}
 
-  provideCodeLenses(
+  async provideCodeLenses(
     document: vscode.TextDocument,
     token: vscode.CancellationToken
-  ): vscode.ProviderResult<vscode.CodeLens[]> {
+  ): Promise<vscode.CodeLens[]> {
     const lenses: vscode.CodeLens[] = [];
     const text = document.getText();
     const courseId = this.courseCache.getCourseIdFor(document.uri);
@@ -71,7 +71,7 @@ export class AssessmentQuestionIdCodeLensProvider
       );
       if (assessmentId !== null) {
         const allUses =
-          this.assessmentCache.getQuestionUseLocations(questionId);
+          await this.assessmentCache.getQuestionUseLocations(questionId);
         const instanceUses = allUses.filter(
           (loc) =>
             assessmentId.instanceId ===
@@ -137,7 +137,7 @@ export class QuestionHeaderCodeLensProvider implements vscode.CodeLensProvider {
 
     const questionId = this.courseCache.getQuestionIdFor(document.uri);
     const occurrences =
-      this.assessmentCache.getQuestionUseLocations(questionId);
+      await this.assessmentCache.getQuestionUseLocations(questionId);
     const firstLine = new vscode.Range(0, 0, 0, 0);
 
     lenses.push(

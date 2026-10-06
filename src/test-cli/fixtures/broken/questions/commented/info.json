@@ -1,0 +1,7 @@
+{
+  // PrairieLearn's JSON.parse rejects this comment
+  "uuid": "00000000-0000-0000-0000-000000000011",
+  "title": "Q",
+  "type": "v3",
+  "topic": "T",
+}

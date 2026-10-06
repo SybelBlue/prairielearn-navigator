@@ -18,7 +18,8 @@
     "workspaceContains:**/infoCourse.json",
     "workspaceContains:**/infoInstanceCourse.json",
     "workspaceContains:**/infoAssessment.json",
-    "workspaceContains:**/questions/**/info.json"
+    "workspaceContains:**/questions/**/info.json",
+    "workspaceContains:**/.pl-navigator.jsonc"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -26,8 +27,73 @@
       {
         "command": "prairielearn-navigator.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "prairielearn-navigator.reloadSchemas",
+        "title": "PrairieLearn: Reload Schemas and Config"
+      },
+      {
+        "command": "prairielearn-navigator.findUses",
+        "title": "PrairieLearn: Find Uses of File"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "PrairieLearn Navigator",
+      "properties": {
+        "prairielearn-navigator.plVersion": {
+          "type": "string",
+          "default": "latest",
+          "scope": "resource",
+          "pattern": "^(latest|\\d{4}-\\d{2}-\\d{2}|[0-9a-f]{40})$",
+          "patternErrorMessage": "Use \"latest\", a date (YYYY-MM-DD), or a 40-character commit sha.",
+          "markdownDescription": "PrairieLearn version to validate course JSON against: `latest`, a date (`YYYY-MM-DD`, the state of PrairieLearn's `master` that day), or a commit sha. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+        },
+        "prairielearn-navigator.schemaCacheDir": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Directory for downloaded PrairieLearn schemas, relative to the workspace folder. Empty uses the extension's global storage."
+        },
+        "prairielearn-navigator.rules": {
+          "type": "object",
+          "default": {},
+          "scope": "resource",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "off",
+              "warning",
+              "error"
+            ]
+          },
+          "markdownDescription": "Turn rules off or change their severity, by rule id, e.g. `{ \"schema\": \"off\" }`."
+        },
+        "prairielearn-navigator.excludes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "Glob patterns of files never to check, relative to the workspace folder, e.g. `courseInstances/Archive/**`. Added to the course's `.pl-navigator.jsonc` `excludes`."
+        }
+      }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "**/.pl-navigator.jsonc",
+        "url": "./schemas/pl-navigator.schema.json"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "prairielearn-navigator.findUses",
+          "when": "!explorerResourceIsFolder",
+          "group": "navigation@99"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -48,6 +114,7 @@
     "@types/json-to-pretty-yaml": "^1.2.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.20.1",
+    "@types/picomatch": "^4.0.3",
     "@types/vscode": "^1.106.1",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
@@ -61,6 +128,9 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
-    "json-to-pretty-yaml": "^1.2.2"
+    "ajv": "^8.20.0",
+    "json-to-pretty-yaml": "^1.2.2",
+    "jsonc-parser": "^3.3.1",
+    "picomatch": "^4.0.7"
   }
 }

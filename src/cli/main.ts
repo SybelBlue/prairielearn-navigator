@@ -4,7 +4,7 @@ import { run as runCheck } from "./check";
 const USAGE = `Usage: prairielearn-navigator <command> [options]
 
 Commands:
-  check   Check infoAssessment.json files for missing and duplicate questions
+  check   Check a course's JSON files against PrairieLearn's schemas and rules
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
 

@@ -1,0 +1,7 @@
+{
+  "uuid": "6c3e1b7a-0d3f-4c55-9c1e-1f2a3b4c5d6e",
+  "name": "DEMO 101",
+  "title": "PrairieLearn Navigator demo course",
+  "topics": [{ "name": "Demo", "color": "blue1" }],
+  "assessmentSets": [{ "abbreviation": "HW", "name": "Homework", "heading": "Homework", "color": "green1" }]
+}

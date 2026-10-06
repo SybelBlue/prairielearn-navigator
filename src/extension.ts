@@ -5,17 +5,21 @@ import {
   CourseCache,
   CourseInstanceCache,
   QuestionCache,
+  ReferenceIndexCache,
 } from "./filewatchers";
 import {
   AssessmentCompletionItemProvider,
-  AssessmentDefinitionProvider,
   AssessmentQuestionIdCodeLensProvider,
+  ConfigProvider,
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
-  DuplicatedQuestionDiagnosticCollection,
-  IncompleteQuestionDiagnosticCollection,
-  IncompleteQuestionQuickFixProvider,
+  anyFileSelector,
+  FileReferenceProvider,
+  fileReferenceSelector,
+  findUsesCommand,
+  MissingFileQuickFixProvider,
   QuestionHeaderCodeLensProvider,
+  RuleDiagnosticCollection,
 } from "./providers";
 import { DebugView } from "./debugView";
 import { QuestionCompletionItemProvider } from "./providers/completions";
@@ -41,7 +45,14 @@ export function activate(context: vscode.ExtensionContext) {
   const courseCache = new CourseCache();
   const instanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionCache(courseCache);
-  const assessmentCache = new AssessmentCache(courseCache, questionCache);
+  const configProvider = new ConfigProvider(context);
+  const referenceIndex = new ReferenceIndexCache(courseCache, configProvider);
+  const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
+  const fileReferenceProvider = new FileReferenceProvider(
+    courseCache,
+    configProvider,
+    referenceIndex,
+  );
 
   new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
   courseCache.onUpdated((ids) =>
@@ -81,21 +92,40 @@ export function activate(context: vscode.ExtensionContext) {
     instanceCache,
     questionCache,
     assessmentCache,
+    configProvider,
+    referenceIndex,
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.reloadSchemas",
+      () => configProvider.reset(true),
+    ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.findUses",
+      findUsesCommand(referenceIndex),
+    ),
 
     // Diagnostics
-    ...new DuplicatedQuestionDiagnosticCollection(
+    ...new RuleDiagnosticCollection(
       courseCache,
-      questionCache,
-    ).subscriptions(),
-    ...new IncompleteQuestionDiagnosticCollection(
-      courseCache,
-      questionCache,
+      referenceIndex,
+      configProvider,
     ).subscriptions(),
 
-    // Jump-to-Definition Providers
+    // Jump-to-File and Uses Providers
     vscode.languages.registerDefinitionProvider(
-      infoAssessmentPatterns,
-      new AssessmentDefinitionProvider(courseCache),
+      fileReferenceSelector,
+      fileReferenceProvider,
+    ),
+    vscode.languages.registerDocumentLinkProvider(
+      fileReferenceSelector,
+      fileReferenceProvider,
+    ),
+    vscode.languages.registerReferenceProvider(
+      anyFileSelector,
+      fileReferenceProvider,
+    ),
+    vscode.languages.registerCodeLensProvider(
+      anyFileSelector,
+      fileReferenceProvider,
     ),
 
     // IntelliSense Completion Providers
@@ -139,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Code Action Providers
     vscode.languages.registerCodeActionsProvider(
       "json",
-      new IncompleteQuestionQuickFixProvider(),
+      new MissingFileQuickFixProvider(),
       {
         providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
       },

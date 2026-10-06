@@ -1,0 +1,86 @@
+import { NavigatorConfig } from "../config";
+import { courseRelativePath, matchesGlob } from "../courseFiles";
+import { Diagnostic } from "../diagnostic";
+import { JsonDoc, parseJsonDoc } from "../json";
+import { IsoDate, matchesRange, versionDate } from "../plVersion";
+import { SchemaStore } from "../schemas";
+import { ruleDiagnosticCode, RuleId, rules } from "./registry";
+import { RuleEntry, RuleImpl, RuleTable } from "./types";
+
+/** The implementation of each rule that applies to `relPath` at `plDate`. */
+export function selectRules<Id extends string = RuleId>(
+  relPath: string,
+  plDate: IsoDate,
+  table: RuleTable = rules
+): [Id, RuleImpl][] {
+  const selected: [Id, RuleImpl][] = [];
+  for (const [id, entries] of Object.entries(table) as [Id, readonly RuleEntry[]][]) {
+    const entry = entries.find(
+      ([range, files]) => matchesGlob(relPath, files) && matchesRange(range, plDate)
+    );
+    if (entry) {
+      selected.push([id, entry[2]]);
+    }
+  }
+  return selected;
+}
+
+/** Globs, relative to a course root, of every file some rule applies to. */
+export function checkableGlobs(): string[] {
+  return [...new Set(Object.values(rules).flatMap((entries) => entries.map(([, files]) => files)))];
+}
+
+/** Whether any rule applies to this course-relative path, at any version. */
+export function isCheckable(relPath: string): boolean {
+  return Object.values(rules).some((entries: readonly RuleEntry[]) =>
+    entries.some(([, files]) => matchesGlob(relPath, files))
+  );
+}
+
+/** Runs every applicable, enabled rule on one file of a course. */
+export async function runRules(
+  filePath: string,
+  text: string,
+  options: { courseRoot: string; config: NavigatorConfig; schemas: SchemaStore }
+): Promise<Diagnostic[]> {
+  const { courseRoot, config, schemas } = options;
+  const relPath = courseRelativePath(courseRoot, filePath);
+  const plDate = versionDate(config.plVersion);
+  let doc: JsonDoc | undefined;
+  const ctx = {
+    courseRoot,
+    filePath,
+    relPath,
+    text,
+    // Parsed on first use: not every rule reads JSON
+    get doc() {
+      return (doc ??= parseJsonDoc(text));
+    },
+    plVersion: config.plVersion,
+    plDate,
+    schemas,
+  };
+
+  const results = await Promise.all(
+    selectRules<RuleId>(relPath, plDate)
+      .filter(([id]) => config.rules[id] !== "off")
+      .map(async ([id, impl]) => {
+        const setting = config.rules[id];
+        let diagnostics: Diagnostic[];
+        try {
+          diagnostics = await impl(ctx);
+        } catch (e) {
+          // One broken rule must not stop the others
+          diagnostics = [{ startOffset: 0, endOffset: 0, message: `internal error in rule: ${e}`, severity: "warning" }];
+        }
+        return diagnostics.map(
+          (d): Diagnostic => ({
+            ...d,
+            code: ruleDiagnosticCode(id),
+            severity: setting === "warning" || setting === "error" ? setting : d.severity,
+          })
+        );
+      })
+  );
+  return results.flat().sort((a, b) => a.startOffset - b.startOffset);
+}

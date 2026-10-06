@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "prairielearn-navigator config (.pl-navigator.jsonc)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "plVersion": {
+      "description": "PrairieLearn version to validate against: \"latest\", a date (YYYY-MM-DD, the state of PrairieLearn's master that day), or a 40-character commit sha.",
+      "type": "string",
+      "pattern": "^(latest|\\d{4}-\\d{2}-\\d{2}|[0-9a-f]{40})$",
+      "default": "latest"
+    },
+    "schemaCacheDir": {
+      "description": "Directory for downloaded PrairieLearn schemas, relative to this file.",
+      "type": "string"
+    },
+    "rules": {
+      "description": "Turn rules off or change their severity, by rule id.",
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "json-syntax",
+          "schema",
+          "duplicate-question-id",
+          "client-files-course-exist",
+          "client-files-question-exist",
+          "server-files-course-exist",
+          "question-exists",
+          "element-files-exist",
+          "pl-figure-file-exist",
+          "pl-file-download-file-exist",
+          "pl-code-file-exist",
+          "pl-file-editor-file-exist",
+          "pl-graph-file-exist",
+          "pl-rich-text-editor-file-exist",
+          "pl-excalidraw-file-exist",
+          "pl-xss-safe-file-exist",
+          "pl-template-file-exist"
+        ]
+      },
+      "additionalProperties": {
+        "enum": [
+          "off",
+          "warning",
+          "error"
+        ]
+      }
+    },
+    "excludes": {
+      "description": "Glob patterns of files never to check, relative to this file, e.g. \"courseInstances/Archive/**\".",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

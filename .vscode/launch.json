@@ -16,6 +16,22 @@
 				"${workspaceFolder}/dist/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
+		},
+		{
+			// Opens demo/course with only this extension enabled; see demo/course/TOUR.md
+			"name": "Run Extension (Demo Course)",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--disable-extensions",
+				"${workspaceFolder}/demo/course",
+				"${workspaceFolder}/demo/course/TOUR.md"
+			],
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"preLaunchTask": "npm: compile"
 		}
 	]
 }

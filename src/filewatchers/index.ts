@@ -10,7 +10,8 @@
  * | | "info.json"
  * |
  */
-export { AssessmentCache } from "./assessmentCache";
+export { AssessmentCache, useLocation } from "./assessmentCache";
 export { CourseCache } from "./courseCache";
 export { CourseInstanceCache } from "./courseInstanceCache";
 export { QuestionCache } from "./questionCache";
+export { ReferenceIndexCache } from "./referenceIndexCache";
