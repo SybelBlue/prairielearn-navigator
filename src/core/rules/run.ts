@@ -25,6 +25,11 @@ export function selectRules<Id extends string = RuleId>(
   return selected;
 }
 
+/** Globs, relative to a course root, of every file some rule applies to. */
+export function checkableGlobs(): string[] {
+  return [...new Set(Object.values(rules).flatMap((entries) => entries.map(([, files]) => files)))];
+}
+
 /** Whether any rule applies to this course-relative path, at any version. */
 export function isCheckable(relPath: string): boolean {
   return Object.values(rules).some((entries: readonly RuleEntry[]) =>

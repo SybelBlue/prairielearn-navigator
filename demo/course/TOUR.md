@@ -2,7 +2,7 @@
 
 This window runs the development build of the extension against a small demo
 course. Every problem in it is deliberate. Open **Problems** (⇧⌘M / Ctrl+Shift+M)
-to see them all at once; they appear as you open each file.
+to see them all: the whole course is checked on startup, not just open files.
 
 ## Diagnostics
 
@@ -48,6 +48,10 @@ Cmd/Ctrl-click, or F12 on:
 
 ## Same checks from the terminal
 
+From the repository root, run the CLI over the whole demo course, as CI
+would. It lists the same problems as the Problems panel:
+
 ```sh
-make check ARGS="demo/course"
+demo/check.sh                    # code frames for every problem
+demo/check.sh --format github    # GitHub Actions annotations
 ```

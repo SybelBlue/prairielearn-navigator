@@ -48,6 +48,16 @@ suite("PrairieLearn Navigator", () => {
     );
   });
 
+  test("files that were never opened are checked too", async () => {
+    const neverOpened = vscode.Uri.file(path.join(course, "questions/jsonRefs/info.json"));
+    assert.ok(!vscode.workspace.textDocuments.some((d) => d.uri.fsPath === neverOpened.fsPath));
+    const ds = await diagnosticsFor(neverOpened);
+    assert.deepStrictEqual(
+      ds.map((d) => String(d.code).replace("prairielearn-navigator/", "")).sort(),
+      ["client-files-question-exist", "client-files-question-exist", "server-files-course-exist"]
+    );
+  });
+
   test("clientFilesCourse dependencies jump to their file", async () => {
     const doc = await vscode.workspace.openTextDocument(depsInfo);
     const locations = await vscode.commands.executeCommand<vscode.Location[]>(

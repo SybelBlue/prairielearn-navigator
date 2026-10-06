@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { isExcluded } from "../core/config";
@@ -6,16 +7,24 @@ import { courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
 import { refSpecs } from "../core/references/specs";
 import { ruleDiagnosticCode } from "../core/rules/registry";
-import { isCheckable, runRules } from "../core/rules/run";
+import { checkableGlobs, isCheckable, runRules } from "../core/rules/run";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
 
 const debounceMs = 300;
+const batchSize = 32;
 
-/** Runs the core rule registry on every open course JSON document. */
+/**
+ * Runs the core rule registry on every checkable file of every course in
+ * the workspace, like the CLI: open documents from their live text, the
+ * rest from disk, kept current as either changes.
+ */
 export class RuleDiagnosticCollection {
   private collection: vscode.DiagnosticCollection;
   private timers = new Map<string, NodeJS.Timeout>();
+  /** Bumped per check of a file, so a slower, older check never wins. */
+  private generation = new Map<string, number>();
+  private checkAllTimer: NodeJS.Timeout | undefined;
 
   constructor(
     private courseCache: CourseCache,
@@ -27,82 +36,106 @@ export class RuleDiagnosticCollection {
     );
 
     // A referenced file appearing, changing, or disappearing only affects
-    // the open documents that reference it
-    references.onChanged(({ affected }) => {
-      const files = new Set(affected);
-      vscode.workspace.textDocuments
-        .filter((doc) => files.has(doc.uri.fsPath))
-        .forEach((doc) => this.update(doc));
-    });
-    configs.onChanged(() => this.updateOpenDocuments());
-    // Documents opened before their course was discovered
-    courseCache.onUpdated(() => this.updateOpenDocuments());
-
-    // Check already open documents once on init
-    this.updateOpenDocuments();
-  }
-
-  updateOpenDocuments() {
-    vscode.workspace.textDocuments.forEach((doc) => this.update(doc));
+    // the files that reference it
+    references.onChanged(({ affected }) => affected.forEach((f) => this.checkFile(f)));
+    configs.onChanged(() => this.scheduleCheckAll());
+    courseCache.onUpdated(() => this.scheduleCheckAll());
+    this.scheduleCheckAll();
   }
 
   subscriptions(): vscode.Disposable[] {
+    const watcher = vscode.workspace.createFileSystemWatcher("**/*.{json,html}");
+    const onDisk = (uri: vscode.Uri) => {
+      // Open documents are checked from their text as it changes
+      if (!this.openDocument(uri.fsPath)) {
+        this.checkFile(uri.fsPath);
+      }
+    };
     return [
       this.collection,
-      vscode.workspace.onDidOpenTextDocument((doc) => this.update(doc)),
-      vscode.workspace.onDidChangeTextDocument((e) =>
-        this.scheduleUpdate(e.document)
-      ),
-      vscode.workspace.onDidCloseTextDocument((doc) => {
-        clearTimeout(this.timers.get(doc.uri.toString()));
-        this.collection.delete(doc.uri);
-      }),
-      { dispose: () => this.timers.forEach((t) => clearTimeout(t)) },
+      watcher,
+      watcher.onDidCreate(onDisk),
+      watcher.onDidChange(onDisk),
+      watcher.onDidDelete((uri) => this.checkFile(uri.fsPath)),
+      vscode.workspace.onDidOpenTextDocument((doc) => this.checkFile(doc.uri.fsPath)),
+      vscode.workspace.onDidChangeTextDocument((e) => this.scheduleCheck(e.document)),
+      // Unsaved changes are discarded on close: go back to the disk
+      vscode.workspace.onDidCloseTextDocument((doc) => this.checkFile(doc.uri.fsPath)),
+      {
+        dispose: () => {
+          this.timers.forEach((t) => clearTimeout(t));
+          clearTimeout(this.checkAllTimer);
+        },
+      },
     ];
   }
 
-  private scheduleUpdate(document: vscode.TextDocument) {
-    const key = document.uri.toString();
+  private scheduleCheck(document: vscode.TextDocument) {
+    const key = document.uri.fsPath;
     clearTimeout(this.timers.get(key));
     this.timers.set(
       key,
       setTimeout(() => {
         this.timers.delete(key);
-        this.update(document);
+        this.checkFile(key);
       }, debounceMs)
     );
   }
 
-  private async update(document: vscode.TextDocument) {
-    if (document.uri.scheme !== "file") {
+  /** Courses are discovered a few at a time on startup, so settle first. */
+  private scheduleCheckAll() {
+    clearTimeout(this.checkAllTimer);
+    this.checkAllTimer = setTimeout(() => {
+      this.courseCache.getCourseIds().forEach((root) => this.checkCourse(root));
+    }, debounceMs);
+  }
+
+  private async checkCourse(courseRoot: string) {
+    const started = Date.now();
+    // Build the index, so changes to referenced files are reported
+    this.references.indexFor(vscode.Uri.file(courseRoot));
+    const files = checkableFiles(courseRoot);
+    const current = new Set(files);
+    // Forget files that are gone or no longer checkable
+    this.collection.forEach((uri) => {
+      if (uri.fsPath.startsWith(courseRoot + path.sep) && !current.has(uri.fsPath)) {
+        this.collection.delete(uri);
+      }
+    });
+    for (let i = 0; i < files.length; i += batchSize) {
+      await Promise.all(files.slice(i, i + batchSize).map((f) => this.checkFile(f)));
+    }
+    console.info(`prairielearn -- checked ${files.length} files in ${courseRoot} in ${Date.now() - started}ms`);
+  }
+
+  private openDocument(file: string): vscode.TextDocument | undefined {
+    return vscode.workspace.textDocuments.find(
+      (d) => d.uri.scheme === "file" && d.uri.fsPath === file && !d.isClosed
+    );
+  }
+
+  private async checkFile(file: string) {
+    const uri = vscode.Uri.file(file);
+    const generation = (this.generation.get(file) ?? 0) + 1;
+    this.generation.set(file, generation);
+    const courseRoot = this.courseCache.getCourseIdFor(uri);
+    if (!courseRoot || !isCheckable(courseRelativePath(courseRoot, file))) {
       return;
     }
-    const courseRoot = this.courseCache.getCourseIdFor(document.uri);
-    if (
-      !courseRoot ||
-      !isCheckable(courseRelativePath(courseRoot, document.uri.fsPath))
-    ) {
-      return;
-    }
-    const version = document.version;
-    // Build the index, so changes to this document's targets are reported
-    this.references.indexFor(document.uri);
     try {
       const config = this.configs.configFor(courseRoot);
-      if (isExcluded(config, document.uri.fsPath)) {
-        this.collection.delete(document.uri);
+      const text =
+        this.openDocument(file)?.getText() ??
+        (await fs.promises.readFile(file, "utf-8").catch(() => undefined));
+      if (text === undefined || isExcluded(config, file)) {
+        this.collection.delete(uri);
         return;
       }
       const schemas = this.configs.schemasFor(config);
-      const diagnostics = await runRules(
-        document.uri.fsPath,
-        document.getText(),
-        { courseRoot, config, schemas }
-      );
+      const diagnostics = await runRules(file, text, { courseRoot, config, schemas });
       this.configs.reportSchemaProblems(schemas);
-      // Drop results for text that has since changed or been closed
-      if (document.version === version && !document.isClosed) {
-        this.collection.set(document.uri, toVscodeDiagnostics(document, diagnostics));
+      if (this.generation.get(file) === generation) {
+        this.collection.set(uri, toVscodeDiagnostics(text, diagnostics));
       }
     } catch (e) {
       console.error("prairielearn -- error running rules: " + e);
@@ -110,16 +143,37 @@ export class RuleDiagnosticCollection {
   }
 }
 
+/** Every file in a course that some rule applies to. */
+function checkableFiles(courseRoot: string): string[] {
+  return fs
+    .globSync(checkableGlobs(), { cwd: courseRoot })
+    .map((rel) => path.join(courseRoot, rel));
+}
+
 function toVscodeDiagnostics(
-  document: vscode.TextDocument,
+  text: string,
   diagnostics: core.Diagnostic[]
 ): vscode.Diagnostic[] {
+  const lineStarts = [0];
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) {
+    lineStarts.push(i + 1);
+  }
+  const positionAt = (offset: number) => {
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= offset) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return new vscode.Position(lo, offset - lineStarts[lo]);
+  };
   return diagnostics.map((d) => {
     const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(
-        document.positionAt(d.startOffset),
-        document.positionAt(d.endOffset)
-      ),
+      new vscode.Range(positionAt(d.startOffset), positionAt(d.endOffset)),
       d.message,
       d.severity === "error"
         ? vscode.DiagnosticSeverity.Error
