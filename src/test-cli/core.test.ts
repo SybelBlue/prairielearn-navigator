@@ -4,10 +4,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "vitest";
 import { loadConfig } from "../core/config";
+import { findElements } from "../core/html";
 import { parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
-import { fileRefAt, findFileRefs, sourceOf } from "../core/references";
-import { rules } from "../core/rules/registry";
+import { indexCourse } from "../core/referenceIndex";
+import { fileRefAt, findFileRefs, openTarget, sourceOf } from "../core/references/extract";
+import { RefSpec, refSpecs } from "../core/references/specs";
+import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
@@ -130,7 +133,10 @@ test("the config file's JSON schema lists every rule id", () => {
   const schema = JSON.parse(
     fs.readFileSync(path.join(__dirname, "../../schemas/pl-navigator.schema.json"), "utf-8")
   );
-  assert.deepEqual(schema.properties.rules.propertyNames.enum, Object.keys(rules));
+  assert.deepEqual(
+    [...schema.properties.rules.propertyNames.enum].sort(),
+    Object.keys(rules).sort()
+  );
 });
 
 test("isCheckable covers every PL course JSON file", () => {
@@ -183,60 +189,90 @@ test("findFileRefs resolves every file-valued field", () => {
     },
     dynamicDependencies: { clientFilesCourseScripts: { lib: "lib/b.js" } },
   });
-  const course = "/course";
-  const fileDir = "/course/elements/el";
   const refs = findFileRefs(sourceOf(text), "elements/el/info.json", "2026-01-01", {
-    courseRoot: course,
-    fileDir,
+    courseRoot: "/course",
+    fileDir: "/course/elements/el",
   });
   assert.deepEqual(
-    refs.map((r) => [r.kind, r.jsonPath?.join("."), r.target]),
+    refs.map((r) => [r.spec.rule, r.value, r.target]),
     [
-      ["elementFile", "controller", "/course/elements/el/el.py"],
-      ["clientFilesCourse", "dependencies.clientFilesCourseScripts.0", "/course/clientFilesCourse/lib/a.js"],
-      ["elementFile", "dependencies.elementStyles.0", "/course/elements/el/el.css"],
-      ["clientFilesCourse", "dynamicDependencies.clientFilesCourseScripts.lib", "/course/clientFilesCourse/lib/b.js"],
+      ["element-files-exist", "el.py", "/course/elements/el/el.py"],
+      ["client-files-course-exist", "lib/a.js", "/course/clientFilesCourse/lib/a.js"],
+      ["element-files-exist", "el.css", "/course/elements/el/el.css"],
+      ["client-files-course-exist", "lib/b.js", "/course/clientFilesCourse/lib/b.js"],
     ]
   );
 });
 
-test("fileRefAt finds the reference under the cursor", () => {
-  const file = path.join(brokenCourse, "courseInstances/Fa26/assessments/hw1/infoAssessment.json");
-  const text = fs.readFileSync(file, "utf-8");
-  const doc = sourceOf(text);
-  const ctx = { courseRoot: brokenCourse, fileDir: path.dirname(file) };
+test("question references target the question directory and open its html", () => {
   const rel = "courseInstances/Fa26/assessments/hw1/infoAssessment.json";
-
-  const ref = fileRefAt(doc, rel, "2026-01-01", ctx, text.indexOf("topic/nested") + 3);
-  assert.equal(ref?.value, "topic/nested");
-  assert.equal(ref?.target, path.join(brokenCourse, "questions/topic/nested/question.html"));
-
-  const infoOnly = fileRefAt(doc, rel, "2026-01-01", ctx, text.indexOf("noHtml"));
-  assert.equal(infoOnly?.target, path.join(brokenCourse, "questions/noHtml/info.json"));
-
-  assert.equal(fileRefAt(doc, rel, "2026-01-01", ctx, text.indexOf("Homework")), undefined);
-});
-
-test("pl-figure references resolve by directory and skip what cannot be known", () => {
-  const file = path.join(brokenCourse, "questions/figures/question.html");
+  const file = path.join(brokenCourse, rel);
   const text = fs.readFileSync(file, "utf-8");
-  const refs = findFileRefs(sourceOf(text), "questions/figures/question.html", "2026-01-01", {
+  const refs = findFileRefs(sourceOf(text), rel, "2026-01-01", {
     courseRoot: brokenCourse,
     fileDir: path.dirname(file),
   });
-  const q = path.join(brokenCourse, "questions/figures/clientFilesQuestion");
-  const c = path.join(brokenCourse, "clientFilesCourse");
-  assert.deepEqual(
-    refs.map((r) => [text.slice(r.startOffset, r.endOffset), r.target, r.problem]),
-    [
-      ["img/here.png", path.join(q, "img/here.png"), undefined],
-      ["missing.png", path.join(q, "missing.png"), undefined],
-      ["exists.css", path.join(c, "exists.css"), undefined],
-      ["gone.png", path.join(c, "gone.png"), undefined],
-      ["serverFilesCourse", null, 'invalid pl-figure directory "serverFilesCourse": must be "clientFilesQuestion" or "clientFilesCourse"'],
-      ["../../escape.png", null, '"../../escape.png" must be a path inside clientFilesQuestion/'],
-    ]
-  );
+
+  const ref = fileRefAt(refs, text.indexOf("topic/nested") + 3);
+  assert.equal(ref?.value, "topic/nested");
+  assert.equal(ref?.target, path.join(brokenCourse, "questions/topic/nested"));
+  assert.equal(openTarget(ref!), path.join(brokenCourse, "questions/topic/nested/question.html"));
+
+  const infoOnly = fileRefAt(refs, text.indexOf("noHtml"));
+  assert.equal(openTarget(infoOnly!), path.join(brokenCourse, "questions/noHtml/info.json"));
+
+  assert.equal(fileRefAt(refs, text.indexOf("Homework")), undefined);
+});
+
+function htmlRefs(question: string) {
+  const file = path.join(brokenCourse, "questions", question, "question.html");
+  const text = fs.readFileSync(file, "utf-8");
+  const refs = findFileRefs(sourceOf(text), `questions/${question}/question.html`, "2026-01-01", {
+    courseRoot: brokenCourse,
+    fileDir: path.dirname(file),
+  });
+  const rel = (p: string | null) => p && path.relative(brokenCourse, p);
+  return refs.map((r) => [r.spec.id, text.slice(r.startOffset, r.endOffset), rel(r.target), r.problem]);
+}
+
+test("findElements is linear on unclosed and pathological tags", () => {
+  const started = Date.now();
+  findElements("<pl-figure ".repeat(100_000), "pl-figure");
+  findElements('<pl-figure a="' + "x".repeat(1_000_000), "pl-figure");
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started}ms`);
+  // A tag inside another tag's quoted value is not a tag
+  assert.equal(findElements('<pl-figure alt="<pl-figure file-name=x>" file-name="y">', "pl-figure").length, 1);
+  assert.equal(findElements("<pl-figure-like file-name=x>", "pl-figure").length, 0);
+});
+
+test("pl-figure references resolve by directory and skip what cannot be known", () => {
+  assert.deepEqual(htmlRefs("figures"), [
+    ["pl-figure", "img/here.png", "questions/figures/clientFilesQuestion/img/here.png", undefined],
+    ["pl-figure", "missing.png", "questions/figures/clientFilesQuestion/missing.png", undefined],
+    ["pl-figure", "exists.css", "clientFilesCourse/exists.css", undefined],
+    ["pl-figure", "gone.png", "clientFilesCourse/gone.png", undefined],
+    ["pl-figure", "serverFilesCourse", null, 'invalid pl-figure directory "serverFilesCourse": must be "clientFilesQuestion" or "clientFilesCourse"'],
+    ["pl-figure", "../../escape.png", null, '"../../escape.png" must be a path inside clientFilesQuestion/'],
+  ]);
+});
+
+test("every element with a source file resolves its directory like PrairieLearn", () => {
+  const q = "questions/allElements";
+  assert.deepEqual(htmlRefs("allElements"), [
+    ["pl-file-download", "data.csv", `${q}/clientFilesQuestion/data.csv`, undefined],
+    ["pl-file-download", "gone.csv", "clientFilesCourse/gone.csv", undefined],
+    ["pl-code", "code.py", `${q}/code.py`, undefined],
+    ["pl-code", "lib.py", "serverFilesCourse/lib.py", undefined],
+    ["pl-code", "../..", null, 'pl-code directory "../.." must be inside the question directory'],
+    ["pl-file-editor", "starter.py", `${q}/clientFilesQuestion/starter.py`, undefined],
+    ["pl-graph", "graph.dot", `${q}/graph.dot`, undefined],
+    ["pl-rich-text-editor", "code.py", `${q}/code.py`, undefined],
+    ["pl-excalidraw", "drawing.excalidraw", "clientFilesCourse/drawing.excalidraw", undefined],
+    ["pl-excalidraw", "somewhere", null, 'invalid pl-excalidraw directory "somewhere": must be one of ".", "clientFilesQuestion", "clientFilesCourse", "serverFilesCourse"'],
+    ["pl-xss-safe", "code.py", `${q}/code.py`, undefined],
+    ["pl-template", "tmpl.mustache", "serverFilesCourse/tmpl.mustache", undefined],
+    ["pl-template", "other.mustache", `${q}/other.mustache`, undefined],
+  ]);
 });
 
 test("references that escape their directory have no target", () => {
@@ -249,6 +285,73 @@ test("references that escape their directory have no target", () => {
     refs.map((r) => r.target),
     [null, null, "/course/clientFilesCourse/ok.css"]
   );
+});
+
+// ── Reference table invariants ──
+
+test("every reference spec has a registered rule, schema entry, and fixture", () => {
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "../../schemas/pl-navigator.schema.json"), "utf-8")
+  );
+  const fixtureText = fs
+    .globSync("**/{info.json,question.html,infoAssessment.json}", { cwd: brokenCourse })
+    .map((f) => fs.readFileSync(path.join(brokenCourse, f), "utf-8"))
+    .join("\n");
+  for (const spec of refSpecs as readonly RefSpec[]) {
+    assert.ok(isRuleId(spec.rule), `${spec.id}: unregistered rule ${spec.rule}`);
+    assert.ok(schema.properties.rules.propertyNames.enum.includes(spec.rule), `${spec.id}: ${spec.rule} missing from schema`);
+    if (spec.source === "html") {
+      assert.equal(spec.rule, `${spec.html.tag}-file-exist`);
+      assert.ok(fixtureText.includes(`<${spec.html.tag} `), `${spec.id}: no fixture`);
+    } else {
+      // The last literal key in the path, e.g. "clientFilesCourseScripts"
+      const key = [...spec.json.json].reverse().find((k) => typeof k === "string" && k !== "*") ??
+        String([...spec.json.json].reverse().find((k) => k instanceof RegExp)).replace(/^\/\^|\$\/$/g, "").replace(/\(.*$/, "");
+      assert.ok(fixtureText.includes(`"${key}"`), `${spec.id}: no fixture for "${key}"`);
+    }
+  }
+});
+
+// ── Reverse index ──
+
+test("the reference index answers uses of files and of directory targets", () => {
+  const index = indexCourse(brokenCourse, "2026-01-01");
+  const at = (rel: string) => path.join(brokenCourse, rel);
+  const usesOf = (rel: string) =>
+    index.usesOf(at(rel)).map((u) => `${path.relative(brokenCourse, u.file)}:${u.start.line}`);
+
+  assert.deepEqual(usesOf("clientFilesCourse/exists.css"), [
+    "elements/my-el/info.json:1",
+    "questions/deps/info.json:7",
+    "questions/figures/question.html:4",
+  ]);
+  // A question is used by everything referencing its directory
+  assert.deepEqual(usesOf("questions/good/question.html"), [
+    "courseInstances/Fa26/assessments/hw1/infoAssessment.json:10",
+    "courseInstances/Fa26/assessments/hw1/infoAssessment.json:16",
+    "questions/jsonRefs/info.json:6",
+  ]);
+  // A file reference does not make sibling files "used"
+  assert.deepEqual(usesOf("clientFilesCourse/other.css"), []);
+
+  const deps = at("questions/deps/info.json");
+  assert.deepEqual(index.filesAffectedBy(at("clientFilesCourse/missing.css")), [deps]);
+  // A file inside a referenced question, and a directory holding targets
+  assert.ok(index.filesAffectedBy(at("questions/good/info.json")).includes(
+    at("courseInstances/Fa26/assessments/hw1/infoAssessment.json")
+  ));
+  assert.deepEqual(
+    index.filesAffectedBy(at("questions/figures/clientFilesQuestion")),
+    [at("questions/figures/question.html")]
+  );
+  assert.deepEqual(index.filesAffectedBy(at("questions/nothing/here.txt")), []);
+  index.update(deps, "{}");
+  assert.deepEqual(usesOf("clientFilesCourse/exists.css"), [
+    "elements/my-el/info.json:1",
+    "questions/figures/question.html:4",
+  ]);
+  index.remove(at("questions/figures/question.html"));
+  assert.deepEqual(usesOf("clientFilesCourse/exists.css"), ["elements/my-el/info.json:1"]);
 });
 
 // ── Schemas ──

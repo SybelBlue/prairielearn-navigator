@@ -5,6 +5,7 @@ import {
   CourseCache,
   CourseInstanceCache,
   QuestionCache,
+  ReferenceIndexCache,
 } from "./filewatchers";
 import {
   AssessmentCompletionItemProvider,
@@ -12,8 +13,10 @@ import {
   ConfigProvider,
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
+  anyFileSelector,
   FileReferenceProvider,
   fileReferenceSelector,
+  findUsesCommand,
   MissingFileQuickFixProvider,
   QuestionHeaderCodeLensProvider,
   RuleDiagnosticCollection,
@@ -42,11 +45,13 @@ export function activate(context: vscode.ExtensionContext) {
   const courseCache = new CourseCache();
   const instanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionCache(courseCache);
-  const assessmentCache = new AssessmentCache(courseCache, questionCache);
   const configProvider = new ConfigProvider(context);
+  const referenceIndex = new ReferenceIndexCache(courseCache, configProvider);
+  const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
   const fileReferenceProvider = new FileReferenceProvider(
     courseCache,
     configProvider,
+    referenceIndex,
   );
 
   new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
@@ -88,25 +93,38 @@ export function activate(context: vscode.ExtensionContext) {
     questionCache,
     assessmentCache,
     configProvider,
+    referenceIndex,
     vscode.commands.registerCommand(
       "prairielearn-navigator.reloadSchemas",
       () => configProvider.reset(true),
+    ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.findUses",
+      findUsesCommand(referenceIndex),
     ),
 
     // Diagnostics
     ...new RuleDiagnosticCollection(
       courseCache,
-      questionCache,
+      referenceIndex,
       configProvider,
     ).subscriptions(),
 
-    // Jump-to-File Providers
+    // Jump-to-File and Uses Providers
     vscode.languages.registerDefinitionProvider(
       fileReferenceSelector,
       fileReferenceProvider,
     ),
     vscode.languages.registerDocumentLinkProvider(
       fileReferenceSelector,
+      fileReferenceProvider,
+    ),
+    vscode.languages.registerReferenceProvider(
+      anyFileSelector,
+      fileReferenceProvider,
+    ),
+    vscode.languages.registerCodeLensProvider(
+      anyFileSelector,
       fileReferenceProvider,
     ),
 

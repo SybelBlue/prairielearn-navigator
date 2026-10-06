@@ -1,21 +1,31 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import {
-  AssessmentId,
-  CourseId,
-  InstanceId,
-  LocalId,
-  LocalIdUsage,
-  QualifiedId,
-  QuestionId,
-} from "../common";
+import { AssessmentId, InstanceId, LocalIdUsage, QuestionId } from "../common";
+import { questionFilePathsFromId } from "../core/questionPaths";
+import { Use } from "../core/referenceIndex";
 import { CourseCache } from "./courseCache";
 import { FileWatcher } from "./filewatcher";
-import { QuestionCache } from "./questionCache";
+import { ReferenceIndexCache } from "./referenceIndexCache";
 
+const isAssessmentQuestionUse = (use: Use) =>
+  use.ref.spec.target === "question" &&
+  path.basename(use.file) === "infoAssessment.json";
+
+/** A Use as a VS Code location (Use positions are 1-based). */
+export function useLocation(use: Use): vscode.Location {
+  return new vscode.Location(
+    vscode.Uri.file(use.file),
+    new vscode.Range(
+      use.start.line - 1,
+      use.start.column - 1,
+      use.end.line - 1,
+      use.end.column - 1
+    )
+  );
+}
+
+/** Lists assessments, and answers question uses from the reference index. */
 export class AssessmentCache {
-  private assessmentUses: Map<LocalId, Map<QualifiedId, LocalIdUsage[]>> =
-    new Map();
   private fileWatcher: FileWatcher;
   private onUpdatedEmitter = new vscode.EventEmitter<vscode.Uri[]>();
 
@@ -23,97 +33,33 @@ export class AssessmentCache {
 
   constructor(
     private courseCache: CourseCache,
-    private questionCache: QuestionCache
+    private references: ReferenceIndexCache
   ) {
     this.fileWatcher = new FileWatcher("**/assessments/**/infoAssessment.json");
-
-    this.fileWatcher.onUpdated(async (event) => {
-      if (event.type === "refreshed") {
-        await this.rebuildIndex(event.uris);
-      } else {
-        await this.addToIndex(event.uri);
-      }
-      this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
-    });
-
-    this.questionCache.onUpdated(() => {
-      this.rebuildIndex(this.fileWatcher.getUris());
-      this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
-    });
-  }
-
-  private async rebuildIndex(uris: vscode.Uri[]) {
-    this.assessmentUses.clear();
-    await Promise.all(uris.map((uri) => this.addToIndex(uri)));
-  }
-
-  private async addToIndex(uri: vscode.Uri) {
-    const doc = await vscode.workspace.openTextDocument(uri);
-    if (!doc) {
-      return;
-    }
-    const assessmentId = this.getAssessmentIdFor(uri)!;
-    let assessmentMap = this.assessmentUses.get(assessmentId.courseId);
-    if (assessmentMap === undefined) {
-      this.assessmentUses.set(
-        assessmentId.courseId,
-        (assessmentMap = new Map())
-      );
-    }
-    assessmentMap.set(
-      assessmentId.qualifiedId,
-      this.getUsesIn(assessmentId.courseId, doc)
+    this.fileWatcher.onUpdated(() =>
+      this.onUpdatedEmitter.fire(this.fileWatcher.getUris())
     );
-  }
-
-  private getUsesIn(
-    courseId: CourseId,
-    doc: vscode.TextDocument
-  ): LocalIdUsage[] {
-    const docText = doc.getText();
-    const questionIds = this.questionCache
-      .getCourseRegexSafeQuestionIds(courseId)
-      .join("|");
-    const re = RegExp(`"id"\\s*:[\\s\\n]*"(${questionIds})"`, "gm");
-    const out = [];
-    let match;
-    while ((match = re.exec(docText))) {
-      const matchEnd = match.index + match[0].length;
-      const localId = match[1];
-      const location = new vscode.Location(
-        doc.uri,
-        new vscode.Range(
-          doc.positionAt(matchEnd - (localId.length + 1)),
-          doc.positionAt(matchEnd - 1)
-        )
-      );
-      out.push({ localId, location });
-    }
-    return out;
-  }
-
-  getQuestionUseLocations(questionId: QuestionId): vscode.Location[] {
-    const assessmentMap = this.assessmentUses.get(questionId.courseId);
-    if (assessmentMap === undefined) {
-      return [];
-    }
-    const out = [];
-    for (const [assessmentLocalId, uses] of assessmentMap) {
-      for (const u of uses) {
-        if (u.localId === questionId.localId) {
-          out.push(u.location);
-        }
+    this.references.onChanged(({ changed }) => {
+      if (path.basename(changed) === "infoAssessment.json") {
+        this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
       }
-    }
-    return out;
+    });
+  }
+
+  /** Where assessments use a question, once the course is indexed. */
+  async getQuestionUseLocations(questionId: QuestionId): Promise<vscode.Location[]> {
+    const dir = vscode.Uri.file(questionFilePathsFromId(questionId).dir);
+    const index = await this.references.whenIndexed(dir);
+    return (index?.usesOf(dir.fsPath) ?? [])
+      .filter(isAssessmentQuestionUse)
+      .map(useLocation);
   }
 
   getQuestionUsesFor(assessmentId: AssessmentId): LocalIdUsage[] {
-    return [
-      ...(this.assessmentUses
-        .get(assessmentId.courseId)
-        ?.get(assessmentId.qualifiedId) ?? []),
-    ];
+    const uri = AssessmentCache.getUriFrom(assessmentId);
+    return (this.references.indexFor(uri)?.usesIn(uri.fsPath) ?? [])
+      .filter(isAssessmentQuestionUse)
+      .map((use) => ({ localId: use.ref.value, location: useLocation(use) }));
   }
 
   getAssessmentIdFor(assessmentUri: vscode.Uri): AssessmentId | null {

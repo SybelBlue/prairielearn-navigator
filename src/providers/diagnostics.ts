@@ -1,12 +1,12 @@
 import * as crypto from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { incompleteQuestionDiagnosticCode } from "../core/checks";
 import { courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
+import { refSpecs } from "../core/references/specs";
 import { ruleDiagnosticCode } from "../core/rules/registry";
 import { isCheckable, runRules } from "../core/rules/run";
-import { CourseCache, QuestionCache } from "../filewatchers";
+import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
 
 const debounceMs = 300;
@@ -18,15 +18,21 @@ export class RuleDiagnosticCollection {
 
   constructor(
     private courseCache: CourseCache,
-    questionCache: QuestionCache,
+    private references: ReferenceIndexCache,
     private configs: ConfigProvider
   ) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"
     );
 
-    // Question files appearing or disappearing change assessment results
-    questionCache.onUpdated(() => this.updateOpenDocuments());
+    // A referenced file appearing, changing, or disappearing only affects
+    // the open documents that reference it
+    references.onChanged(({ affected }) => {
+      const files = new Set(affected);
+      vscode.workspace.textDocuments
+        .filter((doc) => files.has(doc.uri.fsPath))
+        .forEach((doc) => this.update(doc));
+    });
     configs.onChanged(() => this.updateOpenDocuments());
 
     // Check already open documents once on init
@@ -76,6 +82,8 @@ export class RuleDiagnosticCollection {
       return;
     }
     const version = document.version;
+    // Build the index, so changes to this document's targets are reported
+    this.references.indexFor(document.uri);
     try {
       const config = this.configs.configFor(courseRoot);
       const schemas = this.configs.schemasFor(config);
@@ -131,10 +139,11 @@ function toVscodeDiagnostics(
 }
 
 /** Diagnostics whose first related location is a file the fix can create. */
-const missingFileCodes: unknown[] = [
-  incompleteQuestionDiagnosticCode,
-  ruleDiagnosticCode("client-files-course-exist"),
-];
+const missingFileCodes = new Set<unknown>(
+  refSpecs
+    .filter((spec) => spec.target !== "fileOrDir")
+    .map((spec) => ruleDiagnosticCode(spec.rule))
+);
 
 export class MissingFileQuickFixProvider
   implements vscode.CodeActionProvider
@@ -148,7 +157,7 @@ export class MissingFileQuickFixProvider
     const quickFixes: vscode.CodeAction[] = [];
 
     for (const diagnostic of context.diagnostics) {
-      if (!missingFileCodes.includes(diagnostic.code)) {
+      if (!missingFileCodes.has(diagnostic.code)) {
         continue;
       }
       const diagInfo = diagnostic.relatedInformation?.at(0);

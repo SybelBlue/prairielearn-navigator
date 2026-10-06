@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { styleText } from "node:util";
-import { referencedQuestionIds } from "../core/checks";
 import {
   ConfigOverrides,
   ConfigProblem,
@@ -11,7 +10,9 @@ import {
 import { findCourseRoot } from "../core/course";
 import { courseRelativePath } from "../core/courseFiles";
 import { Diagnostic, offsetToPosition } from "../core/diagnostic";
+import { versionDate } from "../core/plVersion";
 import { questionFilePathsFromId } from "../core/questionPaths";
+import { findFileRefs, sourceOf } from "../core/references/extract";
 import { isCheckable, runRules } from "../core/rules/run";
 import { SchemaStore } from "../core/schemas";
 
@@ -135,13 +136,20 @@ async function checkFile(
       .filter((d) => d.severity === "error")
       .map((d) => source.slice(d.startOffset, d.endOffset))
   );
-  const questions =
+  const questionIds =
     path.basename(file) === ASSESSMENT_FILE
-      ? referencedQuestionIds(source).map((localId) => ({
-          infoJson: questionFilePathsFromId({ courseId, localId }).infoJson,
-          hasError: erroredIds.has(localId),
-        }))
+      ? findFileRefs(
+          sourceOf(source),
+          courseRelativePath(courseId, file),
+          versionDate(setup.loaded.config.plVersion),
+          { courseRoot: courseId, fileDir: path.dirname(file) },
+          (spec) => spec.target === "question"
+        ).map((ref) => ref.value)
       : [];
+  const questions = [...new Set(questionIds)].map((localId) => ({
+    infoJson: questionFilePathsFromId({ courseId, localId }).infoJson,
+    hasError: erroredIds.has(localId),
+  }));
   const errors = diagnostics.map((d) => toCheckError(d, source, displayPath));
   return { errors, questions };
 }
@@ -334,8 +342,9 @@ function resolveFiles(paths: string[]): string[] {
  */
 function courseFilesOf(files: string[]): [string, string | null][] {
   const out: [string, string | null][] = [];
+  const roots = new Map<string, string | null>();
   for (const file of files) {
-    const courseRoot = findCourseRoot(file);
+    const courseRoot = findCourseRoot(file, roots);
     if (courseRoot === null) {
       if (COURSE_ONLY_FILES.includes(path.basename(file))) {
         out.push([file, null]);

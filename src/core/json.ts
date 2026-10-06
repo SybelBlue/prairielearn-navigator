@@ -32,6 +32,20 @@ export function parseJsonDoc(text: string): JsonDoc {
   };
 }
 
+/**
+ * Syntax errors under strict JSON, as PrairieLearn parses course files
+ * (JSON.parse): comments and trailing commas are errors.
+ */
+export function strictJsonErrors(text: string): JsonDoc["errors"] {
+  const errors: ParseError[] = [];
+  parseTree(text, errors, { allowTrailingComma: false, disallowComments: true });
+  return errors.map((e) => ({
+    offset: e.offset,
+    length: e.length,
+    message: printParseErrorCode(e.error),
+  }));
+}
+
 /** Parses JSON with comments, returning undefined if it has syntax errors. */
 export function parseJsonc(text: string): unknown {
   const doc = parseJsonDoc(text);

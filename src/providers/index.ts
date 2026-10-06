@@ -5,8 +5,10 @@ export {
   RuleDiagnosticCollection,
 } from "./diagnostics";
 export {
+  anyFileSelector,
   FileReferenceProvider,
   fileReferenceSelector,
+  findUsesCommand,
 } from "./fileReferences";
 export {
   AssessmentQuestionIdCodeLensProvider,

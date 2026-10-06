@@ -28,34 +28,62 @@ function blankComments(text: string): string {
 /** Opening tags of `tagName` (case-insensitive), in document order. */
 export function findElements(text: string, tagName: string): HtmlElement[] {
   const source = blankComments(text);
-  const tagPattern = new RegExp(
-    `<${tagName}(?=[\\s/>])((?:[^>"']|"[^"]*"|'[^']*')*)>`,
-    "gi"
-  );
+  const lower = source.toLowerCase();
+  const open = `<${tagName.toLowerCase()}`;
   const elements: HtmlElement[] = [];
-  for (const tag of source.matchAll(tagPattern)) {
-    const attrsOffset = tag.index + 1 + tagName.length;
-    const attributes = new Map<string, HtmlAttribute>();
-    for (const attr of tag[1].matchAll(attributePattern)) {
-      const name = attr[1].toLowerCase();
-      if (attributes.has(name)) {
-        continue; // HTML keeps the first occurrence
-      }
-      const raw = attr[2] ?? attr[3] ?? attr[4];
-      const value = raw ?? "";
-      const quoted = attr[2] !== undefined || attr[3] !== undefined;
-      const valueEnd = attrsOffset + attr.index + attr[0].length - (quoted ? 1 : 0);
-      attributes.set(name, {
-        value,
-        startOffset: valueEnd - value.length,
-        endOffset: valueEnd,
-      });
+  // One forward pass, never rescanning: linear even for unclosed tags
+  for (let start = lower.indexOf(open); start !== -1; start = lower.indexOf(open, start + 1)) {
+    const attrsOffset = start + open.length;
+    if (!/[\s/>]/.test(source[attrsOffset] ?? "")) {
+      continue; // e.g. <pl-figure-like
+    }
+    const end = tagEnd(source, attrsOffset);
+    if (end === -1) {
+      break; // unterminated: nothing after it can be a complete tag either
     }
     elements.push({
-      startOffset: tag.index,
-      endOffset: tag.index + tag[0].length,
-      attributes,
+      startOffset: start,
+      endOffset: end + 1,
+      attributes: parseAttributes(source.slice(attrsOffset, end), attrsOffset),
     });
+    start = end;
   }
   return elements;
+}
+
+/** Index of the ">" closing a tag whose attributes start at `from`, skipping quoted values. */
+function tagEnd(source: string, from: number): number {
+  let quote: string | undefined;
+  for (let i = from; i < source.length; i++) {
+    const c = source[i];
+    if (quote) {
+      if (c === quote) {
+        quote = undefined;
+      }
+    } else if (c === '"' || c === "'") {
+      quote = c;
+    } else if (c === ">") {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function parseAttributes(attrs: string, offset: number): Map<string, HtmlAttribute> {
+  const attributes = new Map<string, HtmlAttribute>();
+  for (const attr of attrs.matchAll(attributePattern)) {
+    const name = attr[1].toLowerCase();
+    if (attributes.has(name)) {
+      continue; // HTML keeps the first occurrence
+    }
+    const value = attr[2] ?? attr[3] ?? attr[4] ?? "";
+    const quoted = attr[2] !== undefined || attr[3] !== undefined;
+    const valueEnd = offset + attr.index + attr[0].length - (quoted ? 1 : 0);
+    attributes.set(name, {
+      value,
+      startOffset: valueEnd - value.length,
+      endOffset: valueEnd,
+    });
+  }
+  return attributes;
 }

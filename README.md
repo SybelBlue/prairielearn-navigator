@@ -6,14 +6,16 @@ This extension is still experimental and may change or break.
 
 ## Features
 
-- Diagnostics for course JSON: PrairieLearn schema validation for a chosen
-  PrairieLearn version, missing, incomplete, and duplicate questions in
-  assessments, and `clientFilesCourse` dependencies and `<pl-figure>` files
-  that don't exist.
-- Jump to file (go-to-definition and Ctrl/Cmd-click) from every JSON field that
-  names a file: question ids in assessments, `clientFilesCourse*` and
-  `clientFilesQuestion*` dependencies, element controllers and dependencies,
-  and `<pl-figure>` files in `question.html`.
+- Diagnostics for course files: PrairieLearn schema validation for a chosen
+  PrairieLearn version; missing, incomplete, and duplicate questions; and every
+  file a course names that doesn't exist (see the
+  [rules](packages/cli/README.md#rules)).
+- For every one of those file references:
+  - **jump to the file**: go-to-definition and Ctrl/Cmd-click;
+  - **find its uses**: Find All References on a reference or inside the
+    referenced file, a "N uses" CodeLens at the top of referenced files, and
+    **PrairieLearn: Find Uses of File** in the explorer's context menu (works
+    for images too).
 - Completions, code lenses, and quick fixes that create missing files.
 
 ### Settings
@@ -57,7 +59,7 @@ make check ARGS="path/to/course"   # run the CLI against a course
 
 ### Adding a rule
 
-Rules live in [src/core/rules/registry.ts](src/core/rules/registry.ts). Each
+Other rules live in [src/core/rules/registry.ts](src/core/rules/registry.ts). Each
 rule id maps to an ordered list of `[plVersionRange, courseRelativeGlob, impl]`
 entries, and for each file the first entry that matches both runs.
 Version ranges compare dates, e.g. `">=2025-04-17"`. When PrairieLearn changes,
@@ -65,9 +67,11 @@ add a newer entry above the old one instead of editing it. Also add a new rule
 id to [schemas/pl-navigator.schema.json](schemas/pl-navigator.schema.json); a
 test checks the two agree.
 
-Fields and element attributes that name files are listed once, in
-[src/core/references.ts](src/core/references.ts). That table drives both the
-"file exists" rules and the editor's jump-to-file.
+Every JSON field and element attribute that names a file is one entry in
+[src/core/references/specs.ts](src/core/references/specs.ts). Each entry gets
+its existence rule, jump-to-file, and uses from that table, so adding a
+reference is one entry there plus its rule id in the config schema. Tests
+check every entry has a registered rule, a schema entry, and a fixture.
 
 ## Releasing
 

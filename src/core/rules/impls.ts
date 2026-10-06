@@ -1,20 +1,43 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { checkDuplicateQuestionIds, checkIncompleteQuestions } from "../checks";
 import { Diagnostic } from "../diagnostic";
-import { pointerToPath, rangeOf } from "../json";
-import { findFileRefs, RefKind } from "../references";
+import { parseJsonc, pointerToPath, rangeOf, strictJsonErrors } from "../json";
+import { questionFilePathsFromId } from "../questionPaths";
+import { FileRef, findFileRefs } from "../references/extract";
+import { RefSpec, TargetKind } from "../references/specs";
 import { SchemaName } from "../schemas";
-import { RuleImpl } from "./types";
+import { RuleContext, RuleImpl } from "./types";
 
-/** Reports JSON syntax errors (comments and trailing commas are allowed). */
-export const jsonSyntax: RuleImpl = ({ doc }) =>
-  doc.errors.map((e) => ({
-    startOffset: e.offset,
-    endOffset: e.offset + Math.max(1, e.length),
-    message: `invalid JSON: ${e.message}`,
-    severity: "error",
-  }));
+/**
+ * Reports JSON syntax errors. PrairieLearn reads course JSON with JSON.parse,
+ * so comments and trailing commas fail its sync. (Other rules still read
+ * such files tolerantly.)
+ */
+export const jsonSyntax: RuleImpl = ({ text }) => {
+  const seen = new Set<number>();
+  const diagnostics: Diagnostic[] = [];
+  for (const e of strictJsonErrors(text)) {
+    if (seen.has(e.offset)) {
+      continue; // one error per position is enough
+    }
+    seen.add(e.offset);
+    const comma = /,\s*$/.exec(text.slice(0, e.offset));
+    const range = comma && e.message !== "InvalidCommentToken"
+      ? { startOffset: comma.index, endOffset: comma.index + 1 }
+      : { startOffset: e.offset, endOffset: e.offset + Math.max(1, e.length) };
+    diagnostics.push({
+      ...range,
+      message:
+        e.message === "InvalidCommentToken"
+          ? "comments are not allowed: PrairieLearn reads course JSON with JSON.parse"
+          : comma
+            ? "trailing commas are not allowed: PrairieLearn reads course JSON with JSON.parse"
+            : `invalid JSON: ${e.message}`,
+      severity: "error",
+    });
+  }
+  return diagnostics;
+};
 
 /** Validates the file against PrairieLearn's JSON schema for the PL version. */
 export function schemaRule(name: SchemaName): RuleImpl {
@@ -63,34 +86,90 @@ export function schemaRule(name: SchemaName): RuleImpl {
   };
 }
 
-/** Errors on file references of the given kinds whose target does not exist. */
-export function referencesExist(kinds: readonly RefKind[]): RuleImpl {
+function refsOf(ctx: RuleContext, filter: (spec: RefSpec) => boolean): FileRef[] {
+  const { relPath, plDate, courseRoot, filePath } = ctx;
+  return findFileRefs(ctx, relPath, plDate, { courseRoot, fileDir: path.dirname(filePath) }, filter);
+}
+
+function existsAs(target: string, kind: Exclude<TargetKind, "question">): boolean {
+  const stat = fs.statSync(target, { throwIfNoEntry: false });
+  return kind === "file" ? !!stat?.isFile() : !!stat;
+}
+
+/** A missing or incomplete question directory, or undefined if it is fine. */
+function questionProblem(
+  ref: FileRef & { target: string },
+  courseRoot: string
+): Omit<Diagnostic, "startOffset" | "endOffset" | "severity"> | undefined {
+  const paths = questionFilePathsFromId({ courseId: courseRoot, localId: ref.value });
+  const existing = paths.strict();
+  if (!existing.dir) {
+    return {
+      message: `missing question: expected question directory ${paths.dir}`,
+      related: [{ path: paths.infoJson, message: "Expected location of info.json" }],
+    };
+  }
+  if (!existing.infoJson) {
+    return {
+      message: "incomplete question: missing required JSON file",
+      related: [{ path: paths.infoJson, message: "Expected location of info.json" }],
+    };
+  }
+  if (!existing.questionHtml) {
+    const info = parseJsonc(fs.readFileSync(existing.infoJson, "utf8")) as
+      | { options?: { text?: unknown } }
+      | undefined;
+    if (typeof info?.options?.text !== "string") {
+      return {
+        message: "incomplete question: missing required html file",
+        related: [{ path: paths.questionHtml, message: "Expected location of question.html" }],
+      };
+    }
+  }
+  return undefined;
+}
+
+/** Reports every reference governed by `rule` whose target is missing or invalid. */
+export function referencesExist(rule: string): RuleImpl {
   return (ctx) => {
-    const { relPath, plDate, courseRoot, filePath } = ctx;
-    const fileDir = path.dirname(filePath);
-    return findFileRefs(ctx, relPath, plDate, { courseRoot, fileDir }, kinds)
-      .filter((ref) => ref.target === null || !fs.existsSync(ref.target))
-      .map((ref): Diagnostic => {
-        const range = { startOffset: ref.startOffset, endOffset: ref.endOffset };
-        if (ref.target === null) {
-          return {
-            ...range,
-            message: ref.problem ?? `"${ref.value}" must be a path inside ${ref.kind}/`,
-            severity: "error",
-          };
+    const diagnostics: Diagnostic[] = [];
+    for (const ref of refsOf(ctx, (s) => s.rule === rule)) {
+      const range = { startOffset: ref.startOffset, endOffset: ref.endOffset };
+      const severity = ref.spec.severity ?? "error";
+      if (ref.target === null) {
+        diagnostics.push({ ...range, message: ref.problem ?? `invalid path "${ref.value}"`, severity: "error" });
+      } else if (ref.spec.target === "question") {
+        const problem = questionProblem(ref as FileRef & { target: string }, ctx.courseRoot);
+        if (problem) {
+          diagnostics.push({ ...range, ...problem, severity });
         }
-        return {
+      } else if (!existsAs(ref.target, ref.spec.target)) {
+        diagnostics.push({
           ...range,
-          message: `file not found: ${path.relative(courseRoot, ref.target)}`,
-          severity: "error",
+          message: `${ref.spec.target === "file" ? "file" : "file or directory"} not found: ${path.relative(ctx.courseRoot, ref.target)}`,
+          severity,
           related: [{ path: ref.target, message: "Expected location of file" }],
-        };
-      });
+        });
+      }
+    }
+    return diagnostics;
   };
 }
 
-export const duplicateQuestionIds: RuleImpl = ({ text }) =>
-  checkDuplicateQuestionIds(text);
-
-export const incompleteQuestions: RuleImpl = ({ text, courseRoot }) =>
-  checkIncompleteQuestions(text, courseRoot);
+/** Warns on every occurrence of a question used more than once in a file. */
+export const duplicateQuestionIds: RuleImpl = (ctx) => {
+  const byId = new Map<string, FileRef[]>();
+  for (const ref of refsOf(ctx, (s) => s.target === "question")) {
+    byId.set(ref.value, [...(byId.get(ref.value) ?? []), ref]);
+  }
+  return [...byId.values()]
+    .filter((refs) => refs.length > 1)
+    .flatMap((refs) =>
+      refs.map((ref): Diagnostic => ({
+        startOffset: ref.startOffset,
+        endOffset: ref.endOffset,
+        message: `Duplicate question ID: "${ref.value}" appears ${refs.length} times`,
+        severity: "warning",
+      }))
+    );
+};

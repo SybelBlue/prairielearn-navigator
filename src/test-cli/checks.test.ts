@@ -2,13 +2,12 @@ import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "vitest";
-import {
-  checkAssessment,
-  checkDuplicateQuestionIds,
-  incompleteQuestionDiagnosticCode,
-} from "../core/checks";
+import { loadConfig } from "../core/config";
 import { findCourseRoot } from "../core/course";
 import { offsetToPosition } from "../core/diagnostic";
+import { ruleDiagnosticCode } from "../core/rules/registry";
+import { runRules } from "../core/rules/run";
+import { SchemaStore } from "../core/schemas";
 
 const fixtures = path.join(__dirname, "fixtures");
 const brokenCourse = path.join(fixtures, "broken");
@@ -18,8 +17,13 @@ const brokenAssessment = path.join(
 );
 const brokenText = fs.readFileSync(brokenAssessment, "utf-8");
 
-function idsOf(text: string, ds: { startOffset: number; endOffset: number }[]) {
-  return ds.map((d) => text.slice(d.startOffset, d.endOffset));
+async function checkAssessment() {
+  const { config } = loadConfig(brokenCourse);
+  return runRules(brokenAssessment, brokenText, {
+    courseRoot: brokenCourse,
+    config: { ...config, rules: { schema: "off" } },
+    schemas: new SchemaStore({ cacheDir: config.schemaCacheDir }),
+  });
 }
 
 test("findCourseRoot finds the nearest infoCourse.json", () => {
@@ -32,15 +36,8 @@ test("findCourseRoot finds the nearest infoCourse.json", () => {
   );
 });
 
-test("duplicate ids warn on every occurrence", () => {
-  const ds = checkDuplicateQuestionIds(brokenText);
-  assert.deepEqual(idsOf(brokenText, ds), ["good", "good"]);
-  assert.ok(ds.every((d) => d.severity === "warning"));
-  assert.equal(ds[0].message, 'Duplicate question ID: "good" appears 2 times');
-});
-
-test("checkAssessment reports missing and incomplete questions", () => {
-  const ds = checkAssessment(brokenText, brokenCourse);
+test("assessments report missing, incomplete, and duplicate questions", async () => {
+  const ds = await checkAssessment();
   const summary = ds.map((d) => [
     brokenText.slice(d.startOffset, d.endOffset),
     d.severity,
@@ -63,7 +60,7 @@ test("checkAssessment reports missing and incomplete questions", () => {
   ]);
 
   const errors = ds.filter((d) => d.severity === "error");
-  assert.ok(errors.every((d) => d.code === incompleteQuestionDiagnosticCode));
+  assert.ok(errors.every((d) => d.code === ruleDiagnosticCode("question-exists")));
   assert.equal(
     errors[0].related?.[0].path,
     path.join(brokenCourse, "questions/noHtml/question.html")

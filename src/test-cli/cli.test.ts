@@ -30,7 +30,7 @@ test("broken course exits 1 with code frames", () => {
   );
   assert.match(stdout, /13 \|\s+\{ "id": "noHtml", "points": 1 \},/);
   assert.match(stdout, /\s+\^{6} incomplete question/);
-  assert.match(stdout, /10 errors, 3 warnings in 4 files \(15 files, 6 questions checked\)/);
+  assert.match(stdout, /23 errors, 4 warnings in 8 files \(22 files, 6 questions checked\)/);
 });
 
 test("lists every checked file, with each assessment's questions under it", () => {
@@ -46,10 +46,15 @@ test("lists every checked file, with each assessment's questions under it", () =
       "noInfo",
       "doesNotExist",
     ].map((id) => `  broken/questions/${id}/info.json`),
+    "broken/elements/my-el/info.json",
     "broken/infoCourse.json",
     ...[
+      "allElements/info.json",
+      "allElements/question.html",
       "badSchema/info.json",
       "badSchema/question.html",
+      "commented/info.json",
+      "commented/question.html",
       "deps/info.json",
       "deps/question.html",
       "figures/info.json",
@@ -57,6 +62,8 @@ test("lists every checked file, with each assessment's questions under it", () =
       "good/info.json",
       "good/question.html",
       "inlineText/info.json",
+      "jsonRefs/info.json",
+      "jsonRefs/question.html",
       "noHtml/info.json",
       "noInfo/question.html",
       "topic/nested/info.json",
@@ -69,7 +76,7 @@ test("missing clientFilesCourse dependencies are errors", () => {
   const { stdout } = runCli("check", "broken/questions/deps");
   assert.match(
     stdout,
-    /broken\/questions\/deps\/info\.json:8:48 error: file not found: clientFilesCourse\/missing\.css \[client-files-course-exist\]/
+    /broken\/questions\/deps\/info\.json:7:48 error: file not found: clientFilesCourse\/missing\.css \[client-files-course-exist\]/
   );
   assert.match(stdout, /"\.\.\/escape\.js" must be a path inside clientFilesCourse\//);
   assert.doesNotMatch(stdout, /not found: clientFilesCourse\/exists\.css/);
@@ -86,6 +93,27 @@ test("missing pl-figure files are errors", () => {
   assert.match(stdout, /4 errors in 1 file \(2 files, 0 questions checked\)/);
 });
 
+test("every element and JSON field that names a file is checked", () => {
+  const { stdout } = runCli("check", "broken/questions/allElements", "broken/questions/jsonRefs", "broken/elements");
+  for (const rule of [
+    "pl-file-download", "pl-code", "pl-file-editor", "pl-graph", "pl-excalidraw", "pl-template",
+  ]) {
+    assert.match(stdout, new RegExp(`error: .* \\[${rule}-file-exist\\]`), rule);
+  }
+  assert.match(stdout, /warning: file not found: questions\/jsonRefs\/client\.js \[client-files-question-exist\]/);
+  assert.match(stdout, /error: file not found: questions\/jsonRefs\/clientFilesQuestion\/missing\.css/);
+  assert.match(stdout, /error: file or directory not found: serverFilesCourse\/graders \[server-files-course-exist\]/);
+  assert.match(stdout, /error: file not found: elements\/my-el\/missing\.js \[element-files-exist\]/);
+  assert.match(stdout, /11 errors, 1 warning in 3 files/);
+});
+
+test("comments and trailing commas in course JSON are errors, as in PrairieLearn", () => {
+  const { stdout } = runCli("check", "broken/questions/commented");
+  assert.match(stdout, /info\.json:2:3 error: comments are not allowed/);
+  assert.match(stdout, /info\.json:6:15 error: trailing commas are not allowed/);
+  assert.match(stdout, /2 errors in 1 file/);
+});
+
 test("validates against the pinned PrairieLearn schema", () => {
   const { stdout } = runCli("check", "broken/questions/badSchema");
   assert.match(
@@ -100,7 +128,9 @@ test("--config can turn rules off or change their severity", () => {
     "check",
     "--config",
     "configs/relaxed.jsonc",
-    "broken/questions"
+    "broken/questions/deps",
+    "broken/questions/figures",
+    "broken/questions/badSchema"
   );
   assert.equal(code, 0);
   assert.doesNotMatch(stdout, /\[schema\]/);
@@ -138,12 +168,12 @@ test("--format github emits workflow annotations", () => {
   const { code, stdout } = runCli("check", "--format", "github", "broken");
   assert.equal(code, 1);
   const lines = stdout.split("\n").filter((l) => /^::(error|warning) /.test(l));
-  assert.equal(lines.length, 13);
+  assert.equal(lines.length, 27);
   assert.match(
     lines[0],
     /^::warning file=broken\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json,line=10,col=18,endLine=10,endColumn=22,title=prairielearn-navigator::Duplicate question ID.* \[duplicate-question-id\]$/
   );
-  assert.equal(lines.filter((l) => l.startsWith("::error ")).length, 10);
+  assert.equal(lines.filter((l) => l.startsWith("::error ")).length, 23);
 });
 
 test("clean course exits 0", () => {

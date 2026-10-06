@@ -4,7 +4,7 @@ import { IsoDate, PlVersion, VersionRange } from "../plVersion";
 import { SchemaStore } from "../schemas";
 
 /** Everything a rule may inspect about the file being checked. */
-interface RuleContext {
+export interface RuleContext {
   courseRoot: string;
   filePath: string;
   /** Posix path relative to the course root, as matched by rule globs. */

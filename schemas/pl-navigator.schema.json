@@ -24,10 +24,21 @@
         "enum": [
           "json-syntax",
           "schema",
-          "client-files-course-exist",
-          "pl-figure-file-exist",
           "duplicate-question-id",
-          "incomplete-question"
+          "client-files-course-exist",
+          "client-files-question-exist",
+          "server-files-course-exist",
+          "question-exists",
+          "element-files-exist",
+          "pl-figure-file-exist",
+          "pl-file-download-file-exist",
+          "pl-code-file-exist",
+          "pl-file-editor-file-exist",
+          "pl-graph-file-exist",
+          "pl-rich-text-editor-file-exist",
+          "pl-excalidraw-file-exist",
+          "pl-xss-safe-file-exist",
+          "pl-template-file-exist"
         ]
       },
       "additionalProperties": {
