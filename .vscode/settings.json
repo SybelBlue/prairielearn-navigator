@@ -16,6 +16,7 @@
 	// When this extension runs in its own repo, skip the courses that are broken on purpose
 	"prairielearn-navigator.excludes": [
 		"demo/**",
-		"src/test-cli/fixtures/broken/**"
+		"src/test-cli/fixtures/broken/**",
+		"src/test-cli/fixtures/schema-cache/**"
 	]
 }
