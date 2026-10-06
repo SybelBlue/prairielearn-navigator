@@ -43,6 +43,11 @@ test("version ranges are conjunctions of date comparisons", () => {
 
 // ── JSON ──
 
+test("parsed values are plain objects (ajv's deep equality needs valueOf)", () => {
+  const { value } = parseJsonDoc('{ "a": { "b": 1 } }');
+  assert.equal(Object.getPrototypeOf((value as { a: object }).a), Object.prototype);
+});
+
 test("rangeOf locates values and keys, falling back to ancestors", () => {
   const text = '{\n  // comment\n  "a": { "b": [1, "x"] }\n}';
   const doc = parseJsonDoc(text);

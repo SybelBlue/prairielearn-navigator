@@ -1,8 +1,8 @@
 import {
   findNodeAtLocation,
-  getNodeValue,
   JSONPath,
   Node,
+  parse,
   ParseError,
   parseTree,
   printParseErrorCode,
@@ -18,12 +18,11 @@ export interface JsonDoc {
 
 export function parseJsonDoc(text: string): JsonDoc {
   const errors: ParseError[] = [];
-  const tree = parseTree(text, errors, {
-    allowTrailingComma: true,
-    disallowComments: false,
-  });
+  const options = { allowTrailingComma: true, disallowComments: false };
+  const tree = parseTree(text, errors, options);
   return {
-    value: tree ? getNodeValue(tree) : undefined,
+    // Not getNodeValue: its null-prototype objects break ajv's deep equality
+    value: tree ? parse(text, [], options) : undefined,
     tree,
     errors: errors.map((e) => ({
       offset: e.offset,

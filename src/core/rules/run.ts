@@ -61,7 +61,14 @@ export async function runRules(
       .filter(([id]) => config.rules[id] !== "off")
       .map(async ([id, impl]) => {
         const setting = config.rules[id];
-        return (await impl(ctx)).map(
+        let diagnostics: Diagnostic[];
+        try {
+          diagnostics = await impl(ctx);
+        } catch (e) {
+          // One broken rule must not stop the others
+          diagnostics = [{ startOffset: 0, endOffset: 0, message: `internal error in rule: ${e}`, severity: "warning" }];
+        }
+        return diagnostics.map(
           (d): Diagnostic => ({
             ...d,
             code: ruleDiagnosticCode(id),
