@@ -2,7 +2,7 @@
   "name": "prairielearn-navigator",
   "displayName": "prairielearn-navigator",
   "description": "provides definitions and inlay hints for prairielearn assessments and questions",
-  "version": "0.3.1",
+  "version": "1.0.0",
   "publisher": "sybelblue",
   "repository": {
     "type": "git",

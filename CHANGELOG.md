@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-06
+
 - Validate all course JSON files against PrairieLearn's JSON schemas for a
   chosen PrairieLearn version: `latest`, a date, or a commit sha. Schemas are
   downloaded from GitHub and cached.
