@@ -1,1 +1,1 @@
-{ "uuid": "00000000-0000-0000-0000-000000000001", "name": "TEST 101", "title": "Broken course" }
+{ "uuid": "00000000-0000-0000-0000-000000000001", "name": "TEST 101", "title": "Test course", "topics": [{ "name": "T", "color": "red1" }] }

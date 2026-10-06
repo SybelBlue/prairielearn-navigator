@@ -8,14 +8,15 @@ import {
 } from "./filewatchers";
 import {
   AssessmentCompletionItemProvider,
-  AssessmentDefinitionProvider,
   AssessmentQuestionIdCodeLensProvider,
+  ConfigProvider,
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
-  DuplicatedQuestionDiagnosticCollection,
-  IncompleteQuestionDiagnosticCollection,
-  IncompleteQuestionQuickFixProvider,
+  FileReferenceProvider,
+  fileReferenceSelector,
+  MissingFileQuickFixProvider,
   QuestionHeaderCodeLensProvider,
+  RuleDiagnosticCollection,
 } from "./providers";
 import { DebugView } from "./debugView";
 import { QuestionCompletionItemProvider } from "./providers/completions";
@@ -42,6 +43,11 @@ export function activate(context: vscode.ExtensionContext) {
   const instanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionCache(courseCache);
   const assessmentCache = new AssessmentCache(courseCache, questionCache);
+  const configProvider = new ConfigProvider(context);
+  const fileReferenceProvider = new FileReferenceProvider(
+    courseCache,
+    configProvider,
+  );
 
   new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
   courseCache.onUpdated((ids) =>
@@ -81,21 +87,27 @@ export function activate(context: vscode.ExtensionContext) {
     instanceCache,
     questionCache,
     assessmentCache,
+    configProvider,
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.reloadSchemas",
+      () => configProvider.reset(true),
+    ),
 
     // Diagnostics
-    ...new DuplicatedQuestionDiagnosticCollection(
+    ...new RuleDiagnosticCollection(
       courseCache,
       questionCache,
-    ).subscriptions(),
-    ...new IncompleteQuestionDiagnosticCollection(
-      courseCache,
-      questionCache,
+      configProvider,
     ).subscriptions(),
 
-    // Jump-to-Definition Providers
+    // Jump-to-File Providers
     vscode.languages.registerDefinitionProvider(
-      infoAssessmentPatterns,
-      new AssessmentDefinitionProvider(courseCache),
+      fileReferenceSelector,
+      fileReferenceProvider,
+    ),
+    vscode.languages.registerDocumentLinkProvider(
+      fileReferenceSelector,
+      fileReferenceProvider,
     ),
 
     // IntelliSense Completion Providers
@@ -139,7 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Code Action Providers
     vscode.languages.registerCodeActionsProvider(
       "json",
-      new IncompleteQuestionQuickFixProvider(),
+      new MissingFileQuickFixProvider(),
       {
         providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
       },

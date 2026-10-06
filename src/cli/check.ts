@@ -1,10 +1,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { styleText } from "node:util";
-import { checkAssessment, referencedQuestionIds } from "../core/checks";
+import { referencedQuestionIds } from "../core/checks";
+import {
+  ConfigOverrides,
+  ConfigProblem,
+  LoadedConfig,
+  loadConfig,
+} from "../core/config";
 import { findCourseRoot } from "../core/course";
+import { courseRelativePath } from "../core/courseFiles";
 import { Diagnostic, offsetToPosition } from "../core/diagnostic";
 import { questionFilePathsFromId } from "../core/questionPaths";
+import { isCheckable, runRules } from "../core/rules/run";
+import { SchemaStore } from "../core/schemas";
 
 // ── Types ──
 
@@ -34,50 +43,125 @@ type Format = "pretty" | "github";
 
 // ── Error collection ──
 
-function checkFile(file: string, displayPath: string): FileResult {
-  const source = fs.readFileSync(file, "utf-8");
-  const courseId = findCourseRoot(file);
-  if (courseId === null) {
-    return {
-      errors: [
-        {
-          file: displayPath,
-          line: 1,
-          column: 1,
-          endLine: 1,
-          endColumn: 1,
-          message:
-            "not inside a course (no infoCourse.json found in any parent directory); skipped",
-          severity: "warning",
-        },
-      ],
-      questions: [],
-    };
+/** Config and schema store shared by every file of one course. */
+interface CourseSetup {
+  loaded: LoadedConfig;
+  schemas: SchemaStore;
+}
+
+class Setups {
+  private byCourse = new Map<string, CourseSetup>();
+  private stores = new Map<string, SchemaStore>();
+
+  constructor(
+    private configPath: string | undefined,
+    private overrides: ConfigOverrides
+  ) {}
+
+  get(courseRoot: string): CourseSetup {
+    let setup = this.byCourse.get(courseRoot);
+    if (!setup) {
+      const loaded = loadConfig(courseRoot, {
+        configPath: this.configPath,
+        overrides: this.overrides,
+      });
+      const { schemaCacheDir } = loaded.config;
+      let schemas = this.stores.get(schemaCacheDir);
+      if (!schemas) {
+        schemas = new SchemaStore({
+          cacheDir: schemaCacheDir,
+          githubToken: process.env.GITHUB_TOKEN,
+        });
+        this.stores.set(schemaCacheDir, schemas);
+      }
+      setup = { loaded, schemas };
+      this.byCourse.set(courseRoot, setup);
+    }
+    return setup;
   }
-  const diagnostics = checkAssessment(source, courseId);
+
+  /** Config files that were read, with their problems. */
+  configProblems(): Map<string, ConfigProblem[]> {
+    const out = new Map<string, ConfigProblem[]>();
+    for (const { loaded } of this.byCourse.values()) {
+      if (loaded.file && loaded.problems.some((p) => p.file)) {
+        out.set(
+          loaded.file,
+          loaded.problems.filter((p) => p.file)
+        );
+      }
+    }
+    return out;
+  }
+
+  schemaProblems(): string[] {
+    return [...this.stores.values()].flatMap((s) => [...s.problems]);
+  }
+}
+
+function toCheckError(
+  d: Diagnostic,
+  source: string,
+  displayPath: string
+): CheckError {
+  const start = offsetToPosition(source, d.startOffset);
+  const end = offsetToPosition(source, d.endOffset);
+  const rule = d.code?.replace(/^prairielearn-navigator\//, "");
+  return {
+    file: displayPath,
+    line: start.line,
+    column: start.column,
+    endLine: end.line,
+    endColumn: end.column,
+    message: rule ? `${d.message} [${rule}]` : d.message,
+    severity: d.severity,
+  };
+}
+
+async function checkFile(
+  file: string,
+  courseId: string,
+  displayPath: string,
+  setup: CourseSetup
+): Promise<FileResult> {
+  const source = fs.readFileSync(file, "utf-8");
+  const diagnostics = await runRules(file, source, {
+    courseRoot: courseId,
+    config: setup.loaded.config,
+    schemas: setup.schemas,
+  });
   const erroredIds = new Set(
     diagnostics
       .filter((d) => d.severity === "error")
       .map((d) => source.slice(d.startOffset, d.endOffset))
   );
-  const questions = referencedQuestionIds(source).map((localId) => ({
-    infoJson: questionFilePathsFromId({ courseId, localId }).infoJson,
-    hasError: erroredIds.has(localId),
-  }));
-  const errors = diagnostics.map((d) => {
-    const start = offsetToPosition(source, d.startOffset);
-    const end = offsetToPosition(source, d.endOffset);
-    return {
-      file: displayPath,
-      line: start.line,
-      column: start.column,
-      endLine: end.line,
-      endColumn: end.column,
-      message: d.message,
-      severity: d.severity,
-    };
-  });
+  const questions =
+    path.basename(file) === ASSESSMENT_FILE
+      ? referencedQuestionIds(source).map((localId) => ({
+          infoJson: questionFilePathsFromId({ courseId, localId }).infoJson,
+          hasError: erroredIds.has(localId),
+        }))
+      : [];
+  const errors = diagnostics.map((d) => toCheckError(d, source, displayPath));
   return { errors, questions };
+}
+
+function notInCourse(displayPath: string): FileResult {
+  return {
+    errors: [
+      {
+        file: displayPath,
+        line: 1,
+        column: 1,
+        endLine: 1,
+        endColumn: 1,
+        message:
+          "not inside a course (no infoCourse.json found in any parent directory); skipped",
+        severity: "warning",
+      },
+    ],
+    questions: [],
+  };
 }
 
 // ── Formatting ──
@@ -175,7 +259,8 @@ function formatSummary(
     parts.push(styleText("yellow", `${totalWarnings} ${warnStr}`));
   }
   const errFileStr = filesWithErrors === 1 ? "file" : "files";
-  return `${parts.join(", ")} in ${filesWithErrors} ${errFileStr} (${checked})`;
+  const where = filesWithErrors > 0 ? ` in ${filesWithErrors} ${errFileStr}` : "";
+  return `${parts.join(", ")}${where} (${checked})`;
 }
 
 // ── File resolution ──
@@ -186,22 +271,32 @@ const DEFAULT_EXCLUDE_SEGMENTS = [
 ];
 
 const ASSESSMENT_FILE = "infoAssessment.json";
+/** Basenames of every file a rule may apply to. */
+const COURSE_FILES = [
+  "infoCourse.json",
+  "infoCourseInstance.json",
+  ASSESSMENT_FILE,
+  "info.json",
+];
+/** Outside a course these are reported; a stray info.json is not. */
+const COURSE_ONLY_FILES = ["infoCourseInstance.json", ASSESSMENT_FILE];
+const COURSE_FILES_GLOB = `**/{${COURSE_FILES.map((f) => f.replace(".json", "")).join(",")}}.json`;
 
 function isGlob(p: string): boolean {
   return /[*?[\]{}]/.test(p);
 }
 
 /**
- * Expands a glob to infoAssessment.json files: matched files are kept by
+ * Expands a glob to PrairieLearn JSON files: matched files are kept by
  * name, and matched directories are searched recursively.
  */
 function expandGlob(pattern: string, cwd: string): string[] {
   const matches = fs.globSync(
-    [pattern, `${pattern.replace(/\/+$/, "")}/**/${ASSESSMENT_FILE}`],
+    [pattern, `${pattern.replace(/\/+$/, "")}/${COURSE_FILES_GLOB}`],
     { cwd }
   );
   return matches
-    .filter((m) => path.basename(m) === ASSESSMENT_FILE)
+    .filter((m) => COURSE_FILES.includes(path.basename(m)))
     .map((m) => path.resolve(cwd, m));
 }
 
@@ -220,9 +315,7 @@ function resolveFiles(paths: string[]): string[] {
       continue;
     }
     if (fs.statSync(resolved).isDirectory()) {
-      for (const match of fs.globSync(`**/${ASSESSMENT_FILE}`, {
-        cwd: resolved,
-      })) {
+      for (const match of fs.globSync(COURSE_FILES_GLOB, { cwd: resolved })) {
         files.add(path.resolve(resolved, match));
       }
     } else {
@@ -234,30 +327,88 @@ function resolveFiles(paths: string[]): string[] {
     .sort();
 }
 
+/**
+ * Pairs each file with its course root, dropping files no rule applies to.
+ * Files outside any course map to null.
+ */
+function courseFilesOf(files: string[]): [string, string | null][] {
+  const out: [string, string | null][] = [];
+  for (const file of files) {
+    const courseRoot = findCourseRoot(file);
+    if (courseRoot === null) {
+      if (COURSE_ONLY_FILES.includes(path.basename(file))) {
+        out.push([file, null]);
+      }
+    } else if (isCheckable(courseRelativePath(courseRoot, file))) {
+      out.push([file, courseRoot]);
+    }
+  }
+  return out;
+}
+
 // ── Main ──
 
 const USAGE = `Usage: prairielearn-navigator check [options] [paths...]
 
-Check infoAssessment.json files for missing, incomplete, and duplicate questions.
+Check a PrairieLearn course's JSON files against PrairieLearn's schemas and
+the navigator's rules: missing, incomplete, and duplicate questions, and
+clientFilesCourse dependencies that do not exist.
 
 Arguments:
-  paths     Course directories to search, infoAssessment.json files, or glob
+  paths     Course directories to search, course JSON files, or glob
             patterns matching either (default: .). Quote globs so the shell
             does not expand them.
 
 Options:
   --format <pretty|github>  Output format (default: pretty). "github" emits
                             GitHub Actions annotations.
+  --config <path>           Config file (default: .pl-navigator.jsonc in each
+                            course root)
+  --pl-version <version>    PrairieLearn version to check against: "latest",
+                            a date (YYYY-MM-DD), or a commit sha
+  --schema-cache <dir>      Where downloaded schemas are cached
   --help                    Show this help message
+
+Dated versions are resolved with the GitHub API; set GITHUB_TOKEN to avoid
+its rate limit.
 
 Exit status is 1 if any errors are found; warnings do not affect it.
 
 Examples:
   prairielearn-navigator check
   prairielearn-navigator check path/to/course
+  prairielearn-navigator check --pl-version 2025-06-01
   prairielearn-navigator check "courseInstances/Fa26/**"
   prairielearn-navigator check "**/assessments/hw*/infoAssessment.json"
   prairielearn-navigator check --format github`;
+
+const VALUE_OPTIONS = ["--format", "--config", "--pl-version", "--schema-cache"];
+
+/** Parses `--opt value` and `--opt=value` pairs; returns an error message on failure. */
+function parseArgs(
+  args: string[]
+): { options: Record<string, string>; paths: string[] } | string {
+  const options: Record<string, string> = {};
+  const paths: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith("-")) {
+      paths.push(arg);
+      continue;
+    }
+    const eq = arg.indexOf("=");
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    if (!VALUE_OPTIONS.includes(name)) {
+      return `Unknown option: ${arg}`;
+    }
+    const value = eq === -1 ? args[++i] : arg.slice(eq + 1);
+    if (value === undefined) {
+      return `Missing value for ${name}`;
+    }
+    options[name] = value;
+  }
+  return { options, paths };
+}
 
 export async function run(args: string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
@@ -265,39 +416,41 @@ export async function run(args: string[]): Promise<number> {
     return 0;
   }
 
-  let format: Format = "pretty";
-  const paths: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    let value: string | undefined;
-    if (arg === "--format") {
-      value = args[++i];
-    } else if (arg.startsWith("--format=")) {
-      value = arg.slice("--format=".length);
-    } else if (arg.startsWith("-")) {
-      console.error(styleText("red", `Unknown option: ${arg}`));
-      console.error(USAGE);
-      return 1;
-    } else {
-      paths.push(arg);
-      continue;
-    }
-    if (value !== "pretty" && value !== "github") {
-      console.error(
-        styleText("red", `Invalid --format: ${value ?? "(missing)"}`)
-      );
-      return 1;
-    }
-    format = value;
+  const parsed = parseArgs(args);
+  if (typeof parsed === "string") {
+    console.error(styleText("red", parsed));
+    console.error(USAGE);
+    return 1;
+  }
+  const { options, paths } = parsed;
+  const format = (options["--format"] ?? "pretty") as Format;
+  if (format !== "pretty" && format !== "github") {
+    console.error(styleText("red", `Invalid --format: ${format}`));
+    return 1;
   }
   if (paths.length === 0) {
     paths.push(".");
   }
 
-  const files = resolveFiles(paths);
+  const overrides: ConfigOverrides = {
+    plVersion: options["--pl-version"],
+    schemaCacheDir: options["--schema-cache"],
+  };
+  // Surface bad flags (and a missing --config) before doing any work
+  const flagProblems = loadConfig(null, {
+    configPath: options["--config"],
+    overrides,
+  }).problems.filter((p) => !p.file);
+  if (flagProblems.length > 0) {
+    flagProblems.forEach((p) => console.error(styleText("red", p.message)));
+    return 1;
+  }
+  const setups = new Setups(options["--config"], overrides);
+
+  const files = courseFilesOf(resolveFiles(paths));
   if (files.length === 0) {
     console.error(
-      styleText("yellow", "No infoAssessment.json files found in:")
+      styleText("yellow", "No PrairieLearn course JSON files found in:")
     );
     for (const p of paths) {
       console.error(styleText("yellow", `  ${p}`));
@@ -312,12 +465,10 @@ export async function run(args: string[]): Promise<number> {
   const listing: string[] = [];
   const output: string[] = [];
   const cwd = process.cwd();
+  const displayPathOf = (file: string) => path.relative(cwd, file) || file;
 
-  for (const file of files) {
-    const displayPath = path.relative(cwd, file) || file;
-    const { errors, questions } = checkFile(file, displayPath);
+  const report = (errors: CheckError[], source: () => string) => {
     const fileErrors = errors.filter((e) => e.severity === "error").length;
-
     if (errors.length > 0) {
       filesWithErrors++;
       totalErrors += fileErrors;
@@ -325,10 +476,20 @@ export async function run(args: string[]): Promise<number> {
       if (format === "github") {
         output.push(...errors.map(formatGithubAnnotation));
       } else {
-        const source = fs.readFileSync(file, "utf-8");
-        output.push(...errors.map((e) => formatError(e, source) + "\n"));
+        const text = source();
+        output.push(...errors.map((e) => formatError(e, text) + "\n"));
       }
     }
+    return fileErrors;
+  };
+
+  for (const [file, courseRoot] of files) {
+    const displayPath = displayPathOf(file);
+    const { errors, questions } =
+      courseRoot === null
+        ? notInCourse(displayPath)
+        : await checkFile(file, courseRoot, displayPath, setups.get(courseRoot));
+    const fileErrors = report(errors, () => fs.readFileSync(file, "utf-8"));
 
     listing.push(
       errors.length > 0
@@ -340,6 +501,24 @@ export async function run(args: string[]): Promise<number> {
       const questionPath = "  " + (path.relative(cwd, q.infoJson) || q.infoJson);
       listing.push(styleText(q.hasError ? "red" : "dim", questionPath));
     }
+  }
+
+  for (const [configFile, problems] of setups.configProblems()) {
+    const text = fs.readFileSync(configFile, "utf-8");
+    report(
+      problems.map((p) => toCheckError(p, text, displayPathOf(configFile))),
+      () => text
+    );
+  }
+
+  // Unavailable schemas are reported once, not on every file
+  for (const problem of setups.schemaProblems()) {
+    totalWarnings++;
+    output.push(
+      format === "github"
+        ? `::warning title=prairielearn-navigator::${escapeGithubData(problem)}`
+        : styleText("yellow", "warning") + `: ${problem}\n`
+    );
   }
 
   // Every file verified, each assessment followed by its questions' info.json

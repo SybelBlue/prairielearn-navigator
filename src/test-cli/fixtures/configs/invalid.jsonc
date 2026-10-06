@@ -1,0 +1,6 @@
+{
+  "schemaCacheDir": "../schema-cache",
+  "plVersion": "v1.2.3",
+  "colour": "blue",
+  "rules": { "nope": "off" }
+}

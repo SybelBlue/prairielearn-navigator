@@ -1,0 +1,8 @@
+{
+  "plVersion": "151aabd1167dbdc170c50f71295a74de9f31db05",
+  "schemaCacheDir": "../schema-cache", // relative to this file
+  "rules": {
+    "schema": "off",
+    "client-files-course-exist": "warning",
+  },
+}

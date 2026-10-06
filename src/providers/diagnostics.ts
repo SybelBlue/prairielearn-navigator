@@ -1,60 +1,98 @@
 import * as crypto from "node:crypto";
+import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-  checkDuplicateQuestionIds,
-  checkIncompleteQuestions,
-  incompleteQuestionDiagnosticCode,
-} from "../core/checks";
+import { incompleteQuestionDiagnosticCode } from "../core/checks";
+import { courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
+import { ruleDiagnosticCode } from "../core/rules/registry";
+import { isCheckable, runRules } from "../core/rules/run";
 import { CourseCache, QuestionCache } from "../filewatchers";
+import { ConfigProvider } from "./config";
 
-abstract class ReferenceBasedDiagnosticCollection {
-  protected collection: vscode.DiagnosticCollection;
+const debounceMs = 300;
+
+/** Runs the core rule registry on every open course JSON document. */
+export class RuleDiagnosticCollection {
+  private collection: vscode.DiagnosticCollection;
+  private timers = new Map<string, NodeJS.Timeout>();
+
   constructor(
-    protected courseCache: CourseCache,
-    questionCache: QuestionCache
+    private courseCache: CourseCache,
+    questionCache: QuestionCache,
+    private configs: ConfigProvider
   ) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"
     );
 
+    // Question files appearing or disappearing change assessment results
     questionCache.onUpdated(() => this.updateOpenDocuments());
+    configs.onChanged(() => this.updateOpenDocuments());
 
     // Check already open documents once on init
     this.updateOpenDocuments();
   }
 
   updateOpenDocuments() {
-    vscode.workspace.textDocuments.forEach((doc) => {
-      this.update(doc);
-    });
+    vscode.workspace.textDocuments.forEach((doc) => this.update(doc));
   }
 
   subscriptions(): vscode.Disposable[] {
     return [
       this.collection,
-
-      vscode.workspace.onDidOpenTextDocument((doc) => {
-        this.update(doc);
+      vscode.workspace.onDidOpenTextDocument((doc) => this.update(doc)),
+      vscode.workspace.onDidChangeTextDocument((e) =>
+        this.scheduleUpdate(e.document)
+      ),
+      vscode.workspace.onDidCloseTextDocument((doc) => {
+        clearTimeout(this.timers.get(doc.uri.toString()));
+        this.collection.delete(doc.uri);
       }),
-
-      vscode.workspace.onDidChangeTextDocument((e) => {
-        this.update(e.document);
-      }),
+      { dispose: () => this.timers.forEach((t) => clearTimeout(t)) },
     ];
   }
 
-  private update(document: vscode.TextDocument) {
-    const ds = this.diagnosticsFor(document);
-    if (ds === null || ds === undefined) {
-      return;
-    }
-    this.collection.set(document.uri, ds);
+  private scheduleUpdate(document: vscode.TextDocument) {
+    const key = document.uri.toString();
+    clearTimeout(this.timers.get(key));
+    this.timers.set(
+      key,
+      setTimeout(() => {
+        this.timers.delete(key);
+        this.update(document);
+      }, debounceMs)
+    );
   }
 
-  protected abstract diagnosticsFor(
-    document: vscode.TextDocument
-  ): vscode.Diagnostic[] | null | undefined;
+  private async update(document: vscode.TextDocument) {
+    if (document.uri.scheme !== "file") {
+      return;
+    }
+    const courseRoot = this.courseCache.getCourseIdFor(document.uri);
+    if (
+      !courseRoot ||
+      !isCheckable(courseRelativePath(courseRoot, document.uri.fsPath))
+    ) {
+      return;
+    }
+    const version = document.version;
+    try {
+      const config = this.configs.configFor(courseRoot);
+      const schemas = this.configs.schemasFor(config);
+      const diagnostics = await runRules(
+        document.uri.fsPath,
+        document.getText(),
+        { courseRoot, config, schemas }
+      );
+      this.configs.reportSchemaProblems(schemas);
+      // Drop results for text that has since changed or been closed
+      if (document.version === version && !document.isClosed) {
+        this.collection.set(document.uri, toVscodeDiagnostics(document, diagnostics));
+      }
+    } catch (e) {
+      console.error("prairielearn -- error running rules: " + e);
+    }
+  }
 }
 
 function toVscodeDiagnostics(
@@ -72,6 +110,7 @@ function toVscodeDiagnostics(
         ? vscode.DiagnosticSeverity.Error
         : vscode.DiagnosticSeverity.Warning
     );
+    diagnostic.source = "prairielearn-navigator";
     if (d.code !== undefined) {
       diagnostic.code = d.code;
     }
@@ -91,37 +130,13 @@ function toVscodeDiagnostics(
   });
 }
 
-export class DuplicatedQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
-  protected diagnosticsFor(document: vscode.TextDocument) {
-    if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
-      return;
-    }
-    try {
-      return toVscodeDiagnostics(
-        document,
-        checkDuplicateQuestionIds(document.getText())
-      );
-    } catch (e) {
-      console.error("prairielearn -- error in duplicate diagnostics: " + e);
-      return [];
-    }
-  }
-}
+/** Diagnostics whose first related location is a file the fix can create. */
+const missingFileCodes: unknown[] = [
+  incompleteQuestionDiagnosticCode,
+  ruleDiagnosticCode("client-files-course-exist"),
+];
 
-export class IncompleteQuestionDiagnosticCollection extends ReferenceBasedDiagnosticCollection {
-  protected diagnosticsFor(document: vscode.TextDocument) {
-    if (!document.uri.fsPath.endsWith("infoAssessment.json")) {
-      return;
-    }
-    const courseId = this.courseCache.getCourseIdFor(document.uri);
-    return toVscodeDiagnostics(
-      document,
-      checkIncompleteQuestions(document.getText(), courseId)
-    );
-  }
-}
-
-export class IncompleteQuestionQuickFixProvider
+export class MissingFileQuickFixProvider
   implements vscode.CodeActionProvider
 {
   provideCodeActions(
@@ -133,14 +148,14 @@ export class IncompleteQuestionQuickFixProvider
     const quickFixes: vscode.CodeAction[] = [];
 
     for (const diagnostic of context.diagnostics) {
-      if (diagnostic.code !== incompleteQuestionDiagnosticCode) {
+      if (!missingFileCodes.includes(diagnostic.code)) {
         continue;
       }
       const diagInfo = diagnostic.relatedInformation?.at(0);
       if (diagInfo === undefined) {
         continue;
       }
-      const fileName = diagInfo.message.split(" ").at(-1) ?? "file";
+      const fileName = path.basename(diagInfo.location.uri.fsPath);
       const fix = new vscode.CodeAction(
         "create missing " + fileName,
         vscode.CodeActionKind.QuickFix

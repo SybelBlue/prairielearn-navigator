@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
 import { CourseId } from "../common";
 import { Diagnostic } from "./diagnostic";
+import { parseJsonc } from "./json";
 import { questionFilePathsFromId } from "./questionPaths";
 
+/** Matches the "incomplete-question" rule's code in ./rules/registry. */
 export const incompleteQuestionDiagnosticCode =
-  "prairielearn-navigator-incomplete";
+  "prairielearn-navigator/incomplete-question";
 
 const idPattern = /"id"\s*:\s*"([^"]+)"/g;
 
@@ -85,14 +87,10 @@ export function checkIncompleteQuestions(
     }
     let hasInlineQuestionText = false;
     if (existingPaths.infoJson) {
-      try {
-        const info = JSON.parse(
-          fs.readFileSync(existingPaths.infoJson, "utf8")
-        ) as { options?: { text?: unknown } };
-        hasInlineQuestionText = typeof info.options?.text === "string";
-      } catch (e) {
-        console.error(`prairielearn -- error reading question info.json: ${e}`);
-      }
+      const info = parseJsonc(
+        fs.readFileSync(existingPaths.infoJson, "utf8")
+      ) as { options?: { text?: unknown } } | undefined;
+      hasInlineQuestionText = typeof info?.options?.text === "string";
     }
     if (!existingPaths.questionHtml && !hasInlineQuestionText) {
       diagnostics.push({

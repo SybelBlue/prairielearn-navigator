@@ -4,6 +4,32 @@ A prototype VS Code extension that provides definitions and inlay hints for Prai
 
 This extension is still experimental and may change or break.
 
+## Features
+
+- Diagnostics for course JSON: PrairieLearn schema validation for a chosen
+  PrairieLearn version, missing, incomplete, and duplicate questions in
+  assessments, and `clientFilesCourse` dependencies that don't exist.
+- Jump to file (go-to-definition and Ctrl/Cmd-click) from every JSON field that
+  names a file: question ids in assessments, `clientFilesCourse*` and
+  `clientFilesQuestion*` dependencies, and element controllers and
+  dependencies.
+- Completions, code lenses, and quick fixes that create missing files.
+
+### Settings
+
+Set these in `.vscode/settings.json`. They take precedence over the course's
+[`.pl-navigator.jsonc`](packages/cli/README.md#configuration), which the CLI
+also reads. User-level settings rank below that file.
+
+| Setting | |
+| --- | --- |
+| `prairielearn-navigator.plVersion` | `latest` (default), a date (`YYYY-MM-DD`), or a commit sha |
+| `prairielearn-navigator.schemaCacheDir` | Schema cache, relative to the workspace folder. Default: the extension's storage |
+| `prairielearn-navigator.rules` | Rule id → `off` / `warning` / `error` |
+
+Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
+back online.
+
 ## CLI
 
 The extension's diagnostics are also published as a CLI,
@@ -27,6 +53,20 @@ make test-all    # lint, CLI tests (Vitest), extension tests (VS Code)
 make package     # build a .vsix
 make check ARGS="path/to/course"   # run the CLI against a course
 ```
+
+### Adding a rule
+
+Rules live in [src/core/rules/registry.ts](src/core/rules/registry.ts). Each
+rule id maps to an ordered list of `[plVersionRange, courseRelativeGlob, impl]`
+entries, and for each file the first entry that matches both runs.
+Version ranges compare dates, e.g. `">=2025-04-17"`. When PrairieLearn changes,
+add a newer entry above the old one instead of editing it. Also add a new rule
+id to [schemas/pl-navigator.schema.json](schemas/pl-navigator.schema.json); a
+test checks the two agree.
+
+Fields that name files are listed once, in
+[src/core/references.ts](src/core/references.ts). That table drives both the
+"file exists" rules and the editor's jump-to-file.
 
 ## Releasing
 
