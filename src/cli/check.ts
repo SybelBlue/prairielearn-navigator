@@ -277,10 +277,11 @@ const COURSE_FILES = [
   "infoCourseInstance.json",
   ASSESSMENT_FILE,
   "info.json",
+  "question.html",
 ];
-/** Outside a course these are reported; a stray info.json is not. */
+/** Outside a course these are reported; a stray info.json or html is not. */
 const COURSE_ONLY_FILES = ["infoCourseInstance.json", ASSESSMENT_FILE];
-const COURSE_FILES_GLOB = `**/{${COURSE_FILES.map((f) => f.replace(".json", "")).join(",")}}.json`;
+const COURSE_FILES_GLOB = `**/{${COURSE_FILES.join(",")}}`;
 
 function isGlob(p: string): boolean {
   return /[*?[\]{}]/.test(p);

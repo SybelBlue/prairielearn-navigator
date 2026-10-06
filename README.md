@@ -8,11 +8,12 @@ This extension is still experimental and may change or break.
 
 - Diagnostics for course JSON: PrairieLearn schema validation for a chosen
   PrairieLearn version, missing, incomplete, and duplicate questions in
-  assessments, and `clientFilesCourse` dependencies that don't exist.
+  assessments, and `clientFilesCourse` dependencies and `<pl-figure>` files
+  that don't exist.
 - Jump to file (go-to-definition and Ctrl/Cmd-click) from every JSON field that
   names a file: question ids in assessments, `clientFilesCourse*` and
-  `clientFilesQuestion*` dependencies, and element controllers and
-  dependencies.
+  `clientFilesQuestion*` dependencies, element controllers and dependencies,
+  and `<pl-figure>` files in `question.html`.
 - Completions, code lenses, and quick fixes that create missing files.
 
 ### Settings
@@ -64,7 +65,7 @@ add a newer entry above the old one instead of editing it. Also add a new rule
 id to [schemas/pl-navigator.schema.json](schemas/pl-navigator.schema.json); a
 test checks the two agree.
 
-Fields that name files are listed once, in
+Fields and element attributes that name files are listed once, in
 [src/core/references.ts](src/core/references.ts). That table drives both the
 "file exists" rules and the editor's jump-to-file.
 

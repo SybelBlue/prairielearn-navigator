@@ -4,7 +4,9 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "plVersion": {
       "description": "PrairieLearn version to validate against: \"latest\", a date (YYYY-MM-DD, the state of PrairieLearn's master that day), or a 40-character commit sha.",
       "type": "string",
@@ -19,9 +21,22 @@
       "description": "Turn rules off or change their severity, by rule id.",
       "type": "object",
       "propertyNames": {
-        "enum": ["json-syntax", "schema", "client-files-course-exist", "duplicate-question-id", "incomplete-question"]
+        "enum": [
+          "json-syntax",
+          "schema",
+          "client-files-course-exist",
+          "pl-figure-file-exist",
+          "duplicate-question-id",
+          "incomplete-question"
+        ]
       },
-      "additionalProperties": { "enum": ["off", "warning", "error"] }
+      "additionalProperties": {
+        "enum": [
+          "off",
+          "warning",
+          "error"
+        ]
+      }
     }
   }
 }

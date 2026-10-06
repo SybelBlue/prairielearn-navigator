@@ -65,16 +65,17 @@ export function schemaRule(name: SchemaName): RuleImpl {
 
 /** Errors on file references of the given kinds whose target does not exist. */
 export function referencesExist(kinds: readonly RefKind[]): RuleImpl {
-  return ({ doc, relPath, plDate, courseRoot, filePath }) => {
+  return (ctx) => {
+    const { relPath, plDate, courseRoot, filePath } = ctx;
     const fileDir = path.dirname(filePath);
-    return findFileRefs(doc, relPath, plDate, { courseRoot, fileDir }, kinds)
+    return findFileRefs(ctx, relPath, plDate, { courseRoot, fileDir }, kinds)
       .filter((ref) => ref.target === null || !fs.existsSync(ref.target))
       .map((ref): Diagnostic => {
         const range = { startOffset: ref.startOffset, endOffset: ref.endOffset };
         if (ref.target === null) {
           return {
             ...range,
-            message: `"${ref.value}" must be a path inside ${ref.kind}/`,
+            message: ref.problem ?? `"${ref.value}" must be a path inside ${ref.kind}/`,
             severity: "error",
           };
         }

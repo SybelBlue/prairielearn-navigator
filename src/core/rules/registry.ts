@@ -1,4 +1,4 @@
-import { courseFiles } from "../courseFiles";
+import { courseFiles, questionHtml } from "../courseFiles";
 import {
   duplicateQuestionIds,
   incompleteQuestions,
@@ -37,6 +37,10 @@ export const rules = {
     ["*", courseFiles.question, referencesExist(["clientFilesCourse"])],
     ["*", courseFiles.element, referencesExist(["clientFilesCourse"])],
     ["*", courseFiles.elementExtension, referencesExist(["clientFilesCourse"])],
+  ],
+
+  "pl-figure-file-exist": [
+    ["*", questionHtml, referencesExist(["plFigure"])],
   ],
 
   "duplicate-question-id": [

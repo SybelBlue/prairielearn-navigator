@@ -30,7 +30,7 @@ test("broken course exits 1 with code frames", () => {
   );
   assert.match(stdout, /13 \|\s+\{ "id": "noHtml", "points": 1 \},/);
   assert.match(stdout, /\s+\^{6} incomplete question/);
-  assert.match(stdout, /6 errors, 3 warnings in 3 files \(8 files, 6 questions checked\)/);
+  assert.match(stdout, /10 errors, 3 warnings in 4 files \(15 files, 6 questions checked\)/);
 });
 
 test("lists every checked file, with each assessment's questions under it", () => {
@@ -47,9 +47,21 @@ test("lists every checked file, with each assessment's questions under it", () =
       "doesNotExist",
     ].map((id) => `  broken/questions/${id}/info.json`),
     "broken/infoCourse.json",
-    ...["badSchema", "deps", "good", "inlineText", "noHtml", "topic/nested"].map(
-      (id) => `broken/questions/${id}/info.json`
-    ),
+    ...[
+      "badSchema/info.json",
+      "badSchema/question.html",
+      "deps/info.json",
+      "deps/question.html",
+      "figures/info.json",
+      "figures/question.html",
+      "good/info.json",
+      "good/question.html",
+      "inlineText/info.json",
+      "noHtml/info.json",
+      "noInfo/question.html",
+      "topic/nested/info.json",
+      "topic/nested/question.html",
+    ].map((f) => `broken/questions/${f}`),
   ]);
 });
 
@@ -61,6 +73,17 @@ test("missing clientFilesCourse dependencies are errors", () => {
   );
   assert.match(stdout, /"\.\.\/escape\.js" must be a path inside clientFilesCourse\//);
   assert.doesNotMatch(stdout, /not found: clientFilesCourse\/exists\.css/);
+});
+
+test("missing pl-figure files are errors", () => {
+  const { stdout } = runCli("check", "broken/questions/figures");
+  assert.match(
+    stdout,
+    /question\.html:3:23 error: file not found: questions\/figures\/clientFilesQuestion\/missing\.png \[pl-figure-file-exist\]/
+  );
+  assert.match(stdout, /5:64 error: file not found: clientFilesCourse\/gone\.png/);
+  assert.match(stdout, /invalid pl-figure directory "serverFilesCourse"/);
+  assert.match(stdout, /4 errors in 1 file \(2 files, 0 questions checked\)/);
 });
 
 test("validates against the pinned PrairieLearn schema", () => {
@@ -107,7 +130,7 @@ test("--format github groups the checked files", () => {
   const { stdout } = runCli("check", "--format", "github", "clean");
   assert.match(
     stdout,
-    /^::group::Checked files\nclean\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json\n {2}clean\/questions\/good\/info\.json\nclean\/infoCourse\.json\nclean\/questions\/good\/info\.json\n::endgroup::$/m
+    /^::group::Checked files\nclean\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json\n {2}clean\/questions\/good\/info\.json\nclean\/infoCourse\.json\nclean\/questions\/good\/info\.json\nclean\/questions\/good\/question\.html\n::endgroup::$/m
   );
 });
 
@@ -115,18 +138,18 @@ test("--format github emits workflow annotations", () => {
   const { code, stdout } = runCli("check", "--format", "github", "broken");
   assert.equal(code, 1);
   const lines = stdout.split("\n").filter((l) => /^::(error|warning) /.test(l));
-  assert.equal(lines.length, 9);
+  assert.equal(lines.length, 13);
   assert.match(
     lines[0],
     /^::warning file=broken\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json,line=10,col=18,endLine=10,endColumn=22,title=prairielearn-navigator::Duplicate question ID.* \[duplicate-question-id\]$/
   );
-  assert.equal(lines.filter((l) => l.startsWith("::error ")).length, 6);
+  assert.equal(lines.filter((l) => l.startsWith("::error ")).length, 10);
 });
 
 test("clean course exits 0", () => {
   const { code, stdout } = runCli("check", "clean");
   assert.equal(code, 0);
-  assert.match(stdout, /No errors found \(3 files, 1 question checked\)/);
+  assert.match(stdout, /No errors found \(4 files, 1 question checked\)/);
 });
 
 test("assessment outside a course warns but does not fail", () => {
@@ -150,7 +173,7 @@ test("glob matching directories searches inside them", () => {
 test("glob matching files keeps only course JSON files", () => {
   const { code, stdout } = runCli("check", "clean/**");
   assert.equal(code, 0);
-  assert.match(stdout, /No errors found \(3 files, 1 question checked\)/);
+  assert.match(stdout, /No errors found \(4 files, 1 question checked\)/);
 });
 
 test("glob with no matches exits 1", () => {

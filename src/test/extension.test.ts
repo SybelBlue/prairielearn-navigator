@@ -62,6 +62,23 @@ suite("PrairieLearn Navigator", () => {
     assert.ok(!targets.some((t) => t?.endsWith("missing.css")));
   });
 
+  test("pl-figure file names jump to the figure", async () => {
+    const html = vscode.Uri.file(path.join(course, "questions/figures/question.html"));
+    const doc = await vscode.workspace.openTextDocument(html);
+    const locations = await vscode.commands.executeCommand<vscode.Location[]>(
+      "vscode.executeDefinitionProvider",
+      doc.uri,
+      positionOf(doc, "img/here.png")
+    );
+    assert.deepStrictEqual(
+      locations.map((l) => l.uri.fsPath),
+      [path.join(course, "questions/figures/clientFilesQuestion/img/here.png")]
+    );
+    const ds = await diagnosticsFor(html);
+    assert.strictEqual(ds.length, 4);
+    assert.ok(ds.every((d) => d.code === "prairielearn-navigator/pl-figure-file-exist"));
+  });
+
   test("assessment question ids jump to the question", async () => {
     const doc = await vscode.workspace.openTextDocument(assessment);
     const locations = await vscode.commands.executeCommand<vscode.Location[]>(

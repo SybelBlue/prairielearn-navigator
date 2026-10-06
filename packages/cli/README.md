@@ -4,8 +4,9 @@ Checks a [PrairieLearn](https://www.prairielearn.com) course for problems that
 should fail CI. These are the same diagnostics the
 [PrairieLearn Navigator](https://github.com/SybelBlue/prairielearn-navigator)
 VS Code extension shows. `check` looks at every course JSON file
-(`infoCourse.json`, `infoCourseInstance.json`, `infoAssessment.json`, and the
-`info.json` of questions, elements, and element extensions) under the given
+(`infoCourse.json`, `infoCourseInstance.json`, `infoAssessment.json`, the
+`info.json` of questions, elements, and element extensions, and each
+question's `question.html`) under the given
 paths (default: `.`). Only errors make it exit non-zero.
 
 ```sh
@@ -28,6 +29,7 @@ Each diagnostic ends with its rule id, e.g. `[schema]`.
 | `json-syntax` | all | JSON syntax errors (comments and trailing commas are allowed) |
 | `schema` | all | Violations of PrairieLearn's own JSON schema for the selected version. Unknown properties are warnings. |
 | `client-files-course-exist` | question, element, and element extension `info.json` | `clientFilesCourseStyles`/`Scripts` entries that do not exist in `clientFilesCourse/` |
+| `pl-figure-file-exist` | `question.html` | Static `<pl-figure>` files missing from `clientFilesQuestion/` or `clientFilesCourse/`, and invalid `directory` values. Values containing mustache (`{{`) are skipped. |
 | `duplicate-question-id` | `infoAssessment.json` | Question ids used more than once (warning) |
 | `incomplete-question` | `infoAssessment.json` | Question ids with no directory, `info.json`, or `question.html` |
 

@@ -1,7 +1,7 @@
 import { NavigatorConfig } from "../config";
 import { courseRelativePath, matchesGlob } from "../courseFiles";
 import { Diagnostic } from "../diagnostic";
-import { parseJsonDoc } from "../json";
+import { JsonDoc, parseJsonDoc } from "../json";
 import { IsoDate, matchesRange, versionDate } from "../plVersion";
 import { SchemaStore } from "../schemas";
 import { ruleDiagnosticCode, RuleId, rules } from "./registry";
@@ -41,12 +41,16 @@ export async function runRules(
   const { courseRoot, config, schemas } = options;
   const relPath = courseRelativePath(courseRoot, filePath);
   const plDate = versionDate(config.plVersion);
+  let doc: JsonDoc | undefined;
   const ctx = {
     courseRoot,
     filePath,
     relPath,
     text,
-    doc: parseJsonDoc(text),
+    // Parsed on first use: not every rule reads JSON
+    get doc() {
+      return (doc ??= parseJsonDoc(text));
+    },
     plVersion: config.plVersion,
     plDate,
     schemas,

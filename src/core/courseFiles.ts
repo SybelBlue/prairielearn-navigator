@@ -11,6 +11,8 @@ export const courseFiles = {
   elementExtension: "elementExtensions/*/*/info.json",
 } as const;
 
+export const questionHtml = "questions/**/question.html";
+
 const matchers = new Map<string, picomatch.Matcher>();
 
 /** Matches a posix path relative to the course root against a glob. */

@@ -1,10 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { courseFiles, courseRelativePath } from "../core/courseFiles";
-import { parseJsonDoc } from "../core/json";
+import { courseFiles, courseRelativePath, questionHtml } from "../core/courseFiles";
 import { versionDate } from "../core/plVersion";
-import { FileRef, fileRefAt, findFileRefs } from "../core/references";
+import { FileRef, fileRefAt, findFileRefs, sourceOf } from "../core/references";
 import { CourseCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
 
@@ -14,6 +13,7 @@ export const fileReferenceSelector: vscode.DocumentFilter[] = [
   courseFiles.element,
   courseFiles.elementExtension,
   courseFiles.assessment,
+  questionHtml,
 ].map((glob) => ({ pattern: `**/${glob}` }));
 
 /**
@@ -35,7 +35,7 @@ export class FileReferenceProvider
     }
     const { plVersion } = this.configs.configFor(courseRoot);
     return {
-      doc: parseJsonDoc(document.getText()),
+      source: sourceOf(document.getText()),
       relPath: courseRelativePath(courseRoot, document.uri.fsPath),
       plDate: versionDate(plVersion),
       refContext: { courseRoot, fileDir: path.dirname(document.uri.fsPath) },
@@ -51,7 +51,7 @@ export class FileReferenceProvider
       return undefined;
     }
     const ref = fileRefAt(
-      ctx.doc,
+      ctx.source,
       ctx.relPath,
       ctx.plDate,
       ctx.refContext,
@@ -68,7 +68,7 @@ export class FileReferenceProvider
       return [];
     }
     // Missing targets are left to the diagnostics
-    return findFileRefs(ctx.doc, ctx.relPath, ctx.plDate, ctx.refContext)
+    return findFileRefs(ctx.source, ctx.relPath, ctx.plDate, ctx.refContext)
       .filter(exists)
       .map((ref) => {
         const link = new vscode.DocumentLink(

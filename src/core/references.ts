@@ -1,21 +1,24 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { JSONPath, Node } from "jsonc-parser";
-import { courseFiles, matchesGlob } from "./courseFiles";
-import { JsonDoc } from "./json";
+import { courseFiles, matchesGlob, questionHtml } from "./courseFiles";
+import { findElements, HtmlElement } from "./html";
+import { JsonDoc, parseJsonDoc } from "./json";
 import { IsoDate, matchesRange, VersionRange } from "./plVersion";
 import { questionFilePathsFromId } from "./questionPaths";
 
 /**
- * Every JSON field that names another file in the course. This one table
- * drives both "does the file exist" rules and editor jump-to-file.
+ * Every JSON field and element attribute that names another file in the
+ * course. These tables drive both "does the file exist" rules and editor
+ * jump-to-file.
  */
 
 export type RefKind =
   | "clientFilesCourse"
   | "clientFilesQuestion"
   | "elementFile"
-  | "question";
+  | "question"
+  | "plFigure";
 
 /** Matches a property key or array index; "*" matches any key or index. */
 type PathSegment = string | RegExp;
@@ -23,8 +26,25 @@ type PathPattern = readonly PathSegment[];
 
 interface RefContext {
   courseRoot: string;
-  /** Directory containing the JSON file. */
+  /** Directory containing the file being read. */
   fileDir: string;
+}
+
+/** The file references are read from; `doc` is only read for JSON files. */
+interface SourceFile {
+  text: string;
+  readonly doc: JsonDoc;
+}
+
+/** A SourceFile that parses its JSON on first use. */
+export function sourceOf(text: string): SourceFile {
+  let doc: JsonDoc | undefined;
+  return {
+    text,
+    get doc() {
+      return (doc ??= parseJsonDoc(text));
+    },
+  };
 }
 
 /** Resolves a string value to an absolute path, or null if invalid. */
@@ -40,14 +60,27 @@ type RefSpec = readonly [
 
 export interface FileRef {
   kind: RefKind;
-  jsonPath: JSONPath;
+  /** Where a JSON reference was found. */
+  jsonPath?: JSONPath;
   value: string;
   /** Offsets of the string value, excluding quotes. */
   startOffset: number;
   endOffset: number;
   /** Absolute path the value points to; null if it escapes its directory. */
   target: string | null;
+  /** Why the reference is invalid regardless of the file system. */
+  problem?: string;
 }
+
+/** Collects the references made by one element tag. */
+type HtmlRefs = (element: HtmlElement, ctx: RefContext) => FileRef[];
+
+type HtmlRefSpec = readonly [
+  range: VersionRange,
+  files: string,
+  tagName: string,
+  refs: HtmlRefs,
+];
 
 /** `base/value`, or null if that escapes `base`. */
 function inside(base: string, value: string): string | null {
@@ -99,6 +132,50 @@ const fileReferences: readonly RefSpec[] = [
   ["*", courseFiles.assessment, ["zones", "*", "questions", "*", "alternatives", "*", "id"], "question", toQuestion],
 ];
 
+/** Mustache is rendered before elements are, so these values are unknowable. */
+const isTemplated = (value: string) => value.includes("{{");
+
+/** pl-figure: static figures in clientFilesQuestion (default) or clientFilesCourse. */
+const plFigureRefs: HtmlRefs = (element, ctx) => {
+  const fileName = element.attributes.get("file-name");
+  const type = element.attributes.get("type")?.value ?? "static";
+  const directory = element.attributes.get("directory");
+  const dirName = directory?.value ?? "clientFilesQuestion";
+  if (
+    !fileName ||
+    [fileName.value, type, dirName].some(isTemplated) ||
+    type.trim().toLowerCase() !== "static"
+  ) {
+    return [];
+  }
+
+  const ref = { kind: "plFigure" as const, value: fileName.value, startOffset: fileName.startOffset, endOffset: fileName.endOffset };
+  const base =
+    dirName === "clientFilesQuestion" ? path.join(ctx.fileDir, "clientFilesQuestion")
+    : dirName === "clientFilesCourse" ? path.join(ctx.courseRoot, "clientFilesCourse")
+    : undefined;
+  if (!base) {
+    return [{
+      ...ref,
+      value: dirName,
+      startOffset: directory?.startOffset ?? ref.startOffset,
+      endOffset: directory?.endOffset ?? ref.endOffset,
+      target: null,
+      problem: `invalid pl-figure directory "${dirName}": must be "clientFilesQuestion" or "clientFilesCourse"`,
+    }];
+  }
+  const target = inside(base, fileName.value);
+  return [{
+    ...ref,
+    target,
+    problem: target ? undefined : `"${fileName.value}" must be a path inside ${dirName}/`,
+  }];
+};
+
+const htmlReferences: readonly HtmlRefSpec[] = [
+  ["*", questionHtml, "pl-figure", plFigureRefs],
+];
+
 function segmentMatches(segment: PathSegment, key: string | number): boolean {
   if (segment === "*") {
     return true;
@@ -139,28 +216,35 @@ function matchPattern(
   }
 }
 
-/** All file references in a course JSON file, in document order. */
+/** All file references in a course file, in document order. */
 export function findFileRefs(
-  doc: JsonDoc,
+  source: SourceFile,
   relPath: string,
   plDate: IsoDate,
   ctx: RefContext,
   kinds?: readonly RefKind[]
 ): FileRef[] {
-  if (!doc.tree) {
-    return [];
-  }
+  const applies = (range: VersionRange, files: string, kind?: RefKind) =>
+    (!kinds || !kind || kinds.includes(kind)) &&
+    matchesGlob(relPath, files) &&
+    matchesRange(range, plDate);
+
   const refs: FileRef[] = [];
-  for (const [range, files, pattern, kind, resolve] of fileReferences) {
-    if (
-      (kinds && !kinds.includes(kind)) ||
-      !matchesGlob(relPath, files) ||
-      !matchesRange(range, plDate)
-    ) {
+  for (const [range, files, tagName, collect] of htmlReferences) {
+    if (applies(range, files)) {
+      for (const element of findElements(source.text, tagName)) {
+        refs.push(...collect(element, ctx).filter((r) => !kinds || kinds.includes(r.kind)));
+      }
+    }
+  }
+
+  const tree = relPath.endsWith(".json") ? source.doc.tree : undefined;
+  for (const [range, files, pattern, kind, resolve] of tree ? fileReferences : []) {
+    if (!applies(range, files, kind)) {
       continue;
     }
     const matches: { node: Node; jsonPath: JSONPath }[] = [];
-    matchPattern(doc.tree, pattern, [], matches);
+    matchPattern(tree!, pattern, [], matches);
     for (const { node, jsonPath } of matches) {
       const value = node.value as string;
       refs.push({
@@ -178,13 +262,13 @@ export function findFileRefs(
 
 /** The file reference whose string value contains `offset`, if any. */
 export function fileRefAt(
-  doc: JsonDoc,
+  source: SourceFile,
   relPath: string,
   plDate: IsoDate,
   ctx: RefContext,
   offset: number
 ): FileRef | undefined {
-  return findFileRefs(doc, relPath, plDate, ctx).find(
+  return findFileRefs(source, relPath, plDate, ctx).find(
     (r) => r.startOffset - 1 <= offset && offset <= r.endOffset + 1
   );
 }

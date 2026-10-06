@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { loadConfig } from "../core/config";
 import { parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
-import { fileRefAt, findFileRefs } from "../core/references";
+import { fileRefAt, findFileRefs, sourceOf } from "../core/references";
 import { rules } from "../core/rules/registry";
 import { isCheckable, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
@@ -136,6 +136,7 @@ test("isCheckable covers every PL course JSON file", () => {
     "questions/topic/q1/info.json",
     "elements/my-element/info.json",
     "elementExtensions/pl-thing/ext/info.json",
+    "questions/topic/q1/question.html",
   ]) {
     assert.ok(isCheckable(p), p);
   }
@@ -179,12 +180,12 @@ test("findFileRefs resolves every file-valued field", () => {
   });
   const course = "/course";
   const fileDir = "/course/elements/el";
-  const refs = findFileRefs(parseJsonDoc(text), "elements/el/info.json", "2026-01-01", {
+  const refs = findFileRefs(sourceOf(text), "elements/el/info.json", "2026-01-01", {
     courseRoot: course,
     fileDir,
   });
   assert.deepEqual(
-    refs.map((r) => [r.kind, r.jsonPath.join("."), r.target]),
+    refs.map((r) => [r.kind, r.jsonPath?.join("."), r.target]),
     [
       ["elementFile", "controller", "/course/elements/el/el.py"],
       ["clientFilesCourse", "dependencies.clientFilesCourseScripts.0", "/course/clientFilesCourse/lib/a.js"],
@@ -197,7 +198,7 @@ test("findFileRefs resolves every file-valued field", () => {
 test("fileRefAt finds the reference under the cursor", () => {
   const file = path.join(brokenCourse, "courseInstances/Fa26/assessments/hw1/infoAssessment.json");
   const text = fs.readFileSync(file, "utf-8");
-  const doc = parseJsonDoc(text);
+  const doc = sourceOf(text);
   const ctx = { courseRoot: brokenCourse, fileDir: path.dirname(file) };
   const rel = "courseInstances/Fa26/assessments/hw1/infoAssessment.json";
 
@@ -211,9 +212,31 @@ test("fileRefAt finds the reference under the cursor", () => {
   assert.equal(fileRefAt(doc, rel, "2026-01-01", ctx, text.indexOf("Homework")), undefined);
 });
 
+test("pl-figure references resolve by directory and skip what cannot be known", () => {
+  const file = path.join(brokenCourse, "questions/figures/question.html");
+  const text = fs.readFileSync(file, "utf-8");
+  const refs = findFileRefs(sourceOf(text), "questions/figures/question.html", "2026-01-01", {
+    courseRoot: brokenCourse,
+    fileDir: path.dirname(file),
+  });
+  const q = path.join(brokenCourse, "questions/figures/clientFilesQuestion");
+  const c = path.join(brokenCourse, "clientFilesCourse");
+  assert.deepEqual(
+    refs.map((r) => [text.slice(r.startOffset, r.endOffset), r.target, r.problem]),
+    [
+      ["img/here.png", path.join(q, "img/here.png"), undefined],
+      ["missing.png", path.join(q, "missing.png"), undefined],
+      ["exists.css", path.join(c, "exists.css"), undefined],
+      ["gone.png", path.join(c, "gone.png"), undefined],
+      ["serverFilesCourse", null, 'invalid pl-figure directory "serverFilesCourse": must be "clientFilesQuestion" or "clientFilesCourse"'],
+      ["../../escape.png", null, '"../../escape.png" must be a path inside clientFilesQuestion/'],
+    ]
+  );
+});
+
 test("references that escape their directory have no target", () => {
   const text = '{ "dependencies": { "clientFilesCourseStyles": ["../x.css", "/etc/passwd", "ok.css"] } }';
-  const refs = findFileRefs(parseJsonDoc(text), "questions/q/info.json", "2026-01-01", {
+  const refs = findFileRefs(sourceOf(text), "questions/q/info.json", "2026-01-01", {
     courseRoot: "/course",
     fileDir: "/course/questions/q",
   });

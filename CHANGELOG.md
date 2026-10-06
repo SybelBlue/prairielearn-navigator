@@ -13,6 +13,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   per-rule `off`/`warning`/`error`. In VS Code, `.vscode/settings.json` takes
   precedence over it.
 - New rule: `clientFilesCourseStyles`/`Scripts` dependencies must exist.
+- New rule: static `<pl-figure>` files in `question.html` must exist, with a
+  valid `directory`. `<pl-figure>` file names also jump to the file.
 - Jump to file from every file-valued JSON field (question ids,
   `clientFilesCourse*`, `clientFilesQuestion*`, element files).
 - CLI: checks every course JSON file, not just `infoAssessment.json`; new

@@ -4,5 +4,6 @@
   "rules": {
     "schema": "off",
     "client-files-course-exist": "warning",
+    "pl-figure-file-exist": "warning",
   },
 }
