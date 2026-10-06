@@ -4,3 +4,5 @@ node_modules
 .vscode-test/
 *.vsix
 packages/cli/LICENSE
+# Schemas downloaded for "latest" (tests must use the pinned snapshot)
+src/test-cli/fixtures/schema-cache/master-*

@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "vitest";
 
@@ -138,13 +139,22 @@ test("--config can turn rules off or change their severity", () => {
 });
 
 test("config problems are reported on the config file", () => {
+  // The file's invalid plVersion would fall back to "latest" and download
+  // schemas; pin the version so the test stays offline
   const { code, stdout } = runCli(
     "check",
     "--config",
     "configs/invalid.jsonc",
+    "--pl-version",
+    "151aabd1167dbdc170c50f71295a74de9f31db05",
     "clean"
   );
   assert.equal(code, 1);
+  assert.deepEqual(
+    fs.readdirSync(path.join(fixtures, "schema-cache")).filter((d) => d.startsWith("master-")),
+    [],
+    "a test downloaded schemas instead of using the pinned snapshot"
+  );
   assert.match(stdout, /configs\/invalid\.jsonc:3:16 error: invalid plVersion "v1\.2\.3"/);
   assert.match(stdout, /configs\/invalid\.jsonc:4:3 warning: unknown config key "colour"/);
   assert.match(stdout, /invalid\.jsonc:5:14 warning: unknown rule "nope"/);
