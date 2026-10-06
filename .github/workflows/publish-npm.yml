@@ -45,7 +45,7 @@ jobs:
       - run: cp LICENSE packages/cli/
 
       # The trusted publisher only allows staged publishes: the version stays
-      # private until a maintainer runs `npm stage approve` with 2FA, which
-      # `make publish` does. Provenance requires this public repository.
+      # private until a maintainer approves it with 2FA on npmjs.com, which
+      # `make publish` opens. Provenance requires this public repository.
       - run: npm stage publish --provenance
         working-directory: packages/cli

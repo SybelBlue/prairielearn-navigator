@@ -52,7 +52,7 @@ publish: ## Release both packages: make publish patch|minor|major [DRY_RUN=1]
 	fi
 	scripts/release.sh $(BUMP)
 
-publish-vscode: ## Publish only the extension, after a failed npm workflow was rerun
+publish-vscode: ## Resume Marketplace publishing after npm approval or workflow recovery
 	scripts/release.sh --resume-vscode
 
 # Bump words for `make publish <bump>`; they do nothing on their own.

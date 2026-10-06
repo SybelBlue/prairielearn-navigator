@@ -3,11 +3,12 @@
 #
 #   scripts/release.sh patch|minor|major   full release (see `make publish`)
 #   scripts/release.sh --resume-vscode     finish a release whose npm workflow
-#                                          succeeded: approve npm, then vsce
+#                                          succeeded: verify npm, then vsce
 #
 # Order: preflight -> tests -> bump + commit + tag + push -> GitHub release
 # (triggers .github/workflows/publish-npm.yml, which stages the npm version)
-# -> wait for it -> `npm stage approve` (2FA) -> wait until public -> vsce publish.
+# -> wait for it -> open npm's staged-packages page -> wait for confirmation
+# that the version is public -> vsce publish.
 # The extension is never published unless the npm version is public.
 #
 # DRY_RUN=1 runs preflight and tests, then prints every command that would
@@ -18,6 +19,9 @@ cd "$(dirname "$0")/.."
 
 NPM_WORKFLOW=publish-npm.yml
 NPM_PACKAGE=@sybelblue/prairielearn-navigator
+NPM_OWNER=${NPM_PACKAGE%%/*}
+NPM_OWNER=${NPM_OWNER#@}
+NPM_STAGED_URL="https://www.npmjs.com/settings/$NPM_OWNER/staged-packages"
 DRY_RUN=${DRY_RUN:-}
 
 step() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -59,62 +63,63 @@ npm_is_public() {
   [[ $(npm view "$NPM_PACKAGE@$1" version --prefer-online 2>/dev/null) == "$1" ]]
 }
 
-staged_id_for() {
-  # The stage id of $NPM_PACKAGE@$1, or nothing. Accepts a few JSON shapes.
-  npm stage list "$NPM_PACKAGE" --json 2>/dev/null | node -e '
-    let input = "";
-    process.stdin.on("data", (d) => (input += d)).on("end", () => {
-      let data;
-      try { data = JSON.parse(input); } catch { return; }
-      const entries = Array.isArray(data) ? data : data.stages ?? data.objects ?? Object.values(data);
-      const version = process.argv[1];
-      const entry = entries.find((e) => (e?.version ?? e?.package?.version ?? e?.manifest?.version) === version);
-      const id = entry?.id ?? entry?.stageId ?? entry?.stage_id;
-      if (id) console.log(id);
-    });
-  ' "$1"
+open_url() {
+  local url=$1 opener=
+  if command -v open >/dev/null 2>&1; then
+    opener=open
+  elif command -v xdg-open >/dev/null 2>&1; then
+    opener=xdg-open
+  fi
+
+  if [[ -z $opener ]]; then
+    echo "  Open this URL: $url"
+  elif [[ -n $DRY_RUN ]]; then
+    run "$opener" "$url"
+  elif ! "$opener" "$url"; then
+    echo "  Could not open your browser. Open this URL manually: $url" >&2
+  fi
 }
 
-approve_npm() {
-  local version=$1 stage_id=
+wait_for_npm_publish() {
+  local version=$1 action=
   if [[ -z $DRY_RUN ]] && npm_is_public "$version"; then
     echo "  $NPM_PACKAGE@$version is already public."
     return
   fi
 
-  step "Approving staged $NPM_PACKAGE@$version (needs your 2FA)"
+  step "Reviewing staged $NPM_PACKAGE@$version on npmjs.com"
+  echo "  $NPM_STAGED_URL"
+  open_url "$NPM_STAGED_URL"
   if [[ -n $DRY_RUN ]]; then
-    run npm stage approve "<stage id for $version>"
+    echo "  [dry run] wait for input: [quit/check published]"
     return
   fi
-  for _ in $(seq 1 12); do
-    stage_id=$(staged_id_for "$version")
-    [[ -n $stage_id ]] && break
-    sleep 5
-  done
-  if [[ -z $stage_id ]]; then
-    npm stage list "$NPM_PACKAGE" || true
-    read -rp "Stage id for $NPM_PACKAGE@$version (empty to abort): " stage_id
-    [[ -n $stage_id ]] || die "No stage approved, so the extension was NOT published. Finish later with: make publish-vscode"
-  fi
-  local otp=
-  printf '\n\033[1;33m  Approve %s@%s (stage %s).\033[0m\n' "$NPM_PACKAGE" "$version" "$stage_id"
-  echo "  Type a 2FA code from your authenticator app, or leave it empty to"
-  echo "  approve in the browser instead (finish there within 5 minutes)."
-  read -rsp "  npm 2FA code: " otp
-  echo
-  npm stage approve "$stage_id" ${otp:+--otp="$otp"} \
-    || die "Approving stage $stage_id failed, so the extension was NOT published.
-  Retry:  npm stage approve $stage_id
-  Then:   make publish-vscode"
 
-  step "Waiting for $NPM_PACKAGE@$version to be public"
-  for _ in $(seq 1 60); do
-    npm_is_public "$version" && return
-    sleep 10
+  echo "  Approve the staged package in your browser, then return here."
+  echo "  The VS Code extension will not publish until npm reports this version as public."
+  while true; do
+    if ! read -rp "  [quit/check published] " action; then
+      echo
+      die "Input closed, so the extension was NOT published. Finish later with: make publish-vscode"
+    fi
+    case $action in
+      quit)
+        step "Release paused before VS Code Marketplace publication"
+        echo "  After approving the npm package, finish with: make publish-vscode"
+        exit 0
+        ;;
+      "check published")
+        if npm_is_public "$version"; then
+          echo "  $NPM_PACKAGE@$version is public."
+          return
+        fi
+        echo "  $NPM_PACKAGE@$version is not public yet. Approve it or wait, then check again."
+        ;;
+      *)
+        echo "  Enter exactly 'quit' or 'check published'."
+        ;;
+    esac
   done
-  die "Approved, but $NPM_PACKAGE@$version is still not visible after 10 minutes, so the extension was NOT published.
-  Once it shows up: make publish-vscode"
 }
 
 publish_vscode() {
@@ -145,10 +150,9 @@ if [[ ${1:-} == --resume-vscode ]]; then
   read -r _ status conclusion url <<<"$(npm_run_for "$sha")" || true
   [[ ${status:-} == completed && ${conclusion:-} == success ]] \
     || die "The $NPM_WORKFLOW run for $tag has not succeeded (${status:-no run}/${conclusion:-}). ${url:-}"
-  npm whoami >/dev/null 2>&1 || die "npm is not logged in. Run: npm login"
   require_vsce_login
 
-  approve_npm "$version"
+  wait_for_npm_publish "$version"
   publish_vscode "$version"
   [[ -n $DRY_RUN ]] || finish "$version"
   exit 0
@@ -176,7 +180,6 @@ grep -q '^## \[Unreleased\]' CHANGELOG.md || die "CHANGELOG.md has no '## [Unrel
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && die "Tag $tag already exists locally."
 git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null && die "Tag $tag already exists on origin."
 gh auth status >/dev/null 2>&1 || die "gh is not logged in. Run: gh auth login"
-npm whoami >/dev/null 2>&1 || die "npm is not logged in (needed to approve the staged publish). Run: npm login"
 require_vsce_login
 
 step "Running lint and tests"
@@ -229,6 +232,6 @@ Check https://github.com/$(gh repo view --json nameWithOwner --jq .nameWithOwner
   fi
 fi
 
-approve_npm "$version"
+wait_for_npm_publish "$version"
 publish_vscode "$version"
 [[ -n $DRY_RUN ]] || finish "$version"

@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- The release pipeline now opens npm's Staged Packages page for browser-based
+  approval and waits for an explicit publish check before releasing to the VS
+  Code Marketplace.
+
 ## [1.0.0] - 2026-10-06
 
 - Validate all course JSON files against PrairieLearn's JSON schemas for a

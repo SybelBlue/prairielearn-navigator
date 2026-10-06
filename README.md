@@ -101,8 +101,9 @@ This:
 3. Creates the GitHub release, which runs
    [publish-npm.yml](.github/workflows/publish-npm.yml) to stage the CLI on
    npm (with provenance), and waits for that run.
-4. Approves the staged npm version with `npm stage approve`, which prompts for
-   your 2FA code, then waits until the version is public.
+4. Opens your npmjs.com Staged Packages page so you can review and approve the
+   version with 2FA. The script then waits for `quit` or `check published`;
+   the latter verifies the version is public before continuing.
 5. Publishes the extension with `vsce publish`, **only once the npm version is
    public**.
 
@@ -112,13 +113,15 @@ steps without changing anything.
 If a step after the push fails, the tag and GitHub release already exist but
 the extension isn't published. Fix the problem (for a failed workflow, rerun it
 with `gh run rerun <id>`), then run `make publish-vscode` from the release
-commit. It approves the staged npm version if needed, then publishes the
-extension.
+commit. It opens the staged npm version for approval if needed, then publishes
+the extension after you confirm npm has made the version public. If you chose
+`quit` at the npm prompt, use this command when you're ready to resume; it
+reopens the Staged Packages page unless the version is already public.
 
 One-time setup:
 
 - `gh auth login`
-- `npm login`, needed to approve staged publishes
+- Sign in to npmjs.com with 2FA enabled, needed to approve staged publishes
 - `npx vsce login sybelblue`, using a Marketplace personal access token
 - On npmjs.com, the package's trusted publisher must be GitHub Actions,
   `SybelBlue/prairielearn-navigator`, workflow `publish-npm.yml`, environment
