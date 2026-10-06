@@ -29,6 +29,7 @@ also reads. User-level settings rank below that file.
 | `prairielearn-navigator.plVersion` | `latest` (default), a date (`YYYY-MM-DD`), or a commit sha |
 | `prairielearn-navigator.schemaCacheDir` | Schema cache, relative to the workspace folder. Default: the extension's storage |
 | `prairielearn-navigator.rules` | Rule id → `off` / `warning` / `error` |
+| `prairielearn-navigator.excludes` | Glob patterns of files never to check, relative to the workspace folder. Adds to the course file's `excludes` rather than replacing them. |
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
 back online.
@@ -56,6 +57,14 @@ make test-all    # lint, CLI tests (Vitest), extension tests (VS Code)
 make package     # build a .vsix
 make check ARGS="path/to/course"   # run the CLI against a course
 ```
+
+To try every feature, run the **Run Extension (Demo Course)** launch
+configuration (F5 in the Run and Debug view). It opens
+[demo/course](demo/course), a small course with deliberate problems, and its
+[TOUR.md](demo/course/TOUR.md). This repo's own
+[.vscode/settings.json](.vscode/settings.json) excludes `demo/` and the
+broken test fixtures, so they don't fill the Problems panel while you work on
+the extension itself.
 
 ### Adding a rule
 

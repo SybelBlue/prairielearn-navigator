@@ -1,6 +1,7 @@
 import * as crypto from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { isExcluded } from "../core/config";
 import { courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
 import { refSpecs } from "../core/references/specs";
@@ -34,6 +35,8 @@ export class RuleDiagnosticCollection {
         .forEach((doc) => this.update(doc));
     });
     configs.onChanged(() => this.updateOpenDocuments());
+    // Documents opened before their course was discovered
+    courseCache.onUpdated(() => this.updateOpenDocuments());
 
     // Check already open documents once on init
     this.updateOpenDocuments();
@@ -86,6 +89,10 @@ export class RuleDiagnosticCollection {
     this.references.indexFor(document.uri);
     try {
       const config = this.configs.configFor(courseRoot);
+      if (isExcluded(config, document.uri.fsPath)) {
+        this.collection.delete(document.uri);
+        return;
+      }
       const schemas = this.configs.schemasFor(config);
       const diagnostics = await runRules(
         document.uri.fsPath,

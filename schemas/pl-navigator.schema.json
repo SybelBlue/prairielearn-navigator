@@ -48,6 +48,14 @@
           "error"
         ]
       }
+    },
+    "excludes": {
+      "description": "Glob patterns of files never to check, relative to this file, e.g. \"courseInstances/Archive/**\".",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   }
 }

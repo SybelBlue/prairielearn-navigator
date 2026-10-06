@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "vitest";
-import { loadConfig } from "../core/config";
+import { isExcluded, loadConfig } from "../core/config";
 import { findElements } from "../core/html";
 import { parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
@@ -88,6 +88,28 @@ test("without a config file, defaults apply", () => {
   assert.deepEqual(problems, []);
   assert.equal(config.plVersion, "latest");
   assert.match(config.schemaCacheDir, /prairielearn-navigator/);
+});
+
+test("excludes add up across sources and match relative to where they are declared", () => {
+  const dir = tmpDir();
+  fs.writeFileSync(
+    path.join(dir, ".pl-navigator.jsonc"),
+    '{ "excludes": ["questions/archive/**"] }'
+  );
+  // Declared relative to the parent directory, as a workspace setting would be
+  const { config, problems } = loadConfig(dir, {
+    overrides: { excludes: [`${path.basename(dir)}/**/*.html`] },
+    overridesBaseDir: path.dirname(dir),
+  });
+  assert.deepEqual(problems, []);
+  const at = (rel: string) => path.join(dir, rel);
+  assert.ok(isExcluded(config, at("questions/archive/old/info.json")));
+  assert.ok(!isExcluded(config, at("questions/current/info.json")));
+  assert.ok(isExcluded(config, at("questions/current/question.html")));
+  assert.ok(!isExcluded(config, "/elsewhere/questions/archive/q/info.json"));
+
+  const bad = loadConfig(null, { overrides: { excludes: "questions/**" } });
+  assert.match(bad.problems[0].message, /excludes must be an array/);
 });
 
 test("invalid config values are reported and replaced by defaults", () => {
@@ -331,8 +353,12 @@ test("the reference index answers uses of files and of directory targets", () =>
     "courseInstances/Fa26/assessments/hw1/infoAssessment.json:16",
     "questions/jsonRefs/info.json:6",
   ]);
-  // A file reference does not make sibling files "used"
+  // A file reference does not make sibling files "used", and a question
+  // only covers its own top-level files
   assert.deepEqual(usesOf("clientFilesCourse/other.css"), []);
+  assert.deepEqual(usesOf("questions/figures/clientFilesQuestion/img/here.png"), [
+    "questions/figures/question.html:2",
+  ]);
 
   const deps = at("questions/deps/info.json");
   assert.deepEqual(index.filesAffectedBy(at("clientFilesCourse/missing.css")), [deps]);

@@ -1,0 +1,9 @@
+{
+  // PrairieLearn reads course JSON with JSON.parse: comments are errors,
+  "uuid": "a1b2c3d4-0005-4000-8000-000000000005",
+  "title": "Broken JSON and schema",
+  "topic": "Demo",
+  "type": "v3",
+  "singleVariant": "yes",
+  "showCorectAnswer": false,
+}

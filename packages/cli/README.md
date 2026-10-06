@@ -19,6 +19,7 @@ npx -y @sybelblue/prairielearn-navigator check [options] [paths...]
 | `--config <path>` | Config file (default: `.pl-navigator.jsonc` in each course root) |
 | `--pl-version <version>` | PrairieLearn version to check against (overrides the config) |
 | `--schema-cache <dir>` | Where downloaded schemas are cached (overrides the config) |
+| `--exclude <glob>` | Skip matching files, relative to the current directory. Repeatable; adds to the config's `excludes`. |
 
 ## Rules
 
@@ -53,7 +54,9 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
   // or ~/.cache/prairielearn-navigator/schemas
   "schemaCacheDir": ".cache/pl-schemas",
   // Turn rules off or change their severity
-  "rules": { "duplicate-question-id": "error" }
+  "rules": { "duplicate-question-id": "error" },
+  // Files never checked, relative to this file
+  "excludes": ["courseInstances/Archive/**", "questions/drafts/**"]
 }
 ```
 

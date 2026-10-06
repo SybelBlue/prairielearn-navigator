@@ -18,6 +18,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   dependencies, and the source files of `pl-figure`, `pl-file-download`,
   `pl-code`, `pl-file-editor`, `pl-graph`, `pl-rich-text-editor`,
   `pl-excalidraw`, `pl-xss-safe`, and `pl-template`.
+- `excludes`: glob patterns of files never to check, in `.pl-navigator.jsonc`,
+  the `prairielearn-navigator.excludes` setting, or the CLI's `--exclude`.
 - For each of those references: jump to the file, Find All References, a
   "N uses" CodeLens on referenced files, and a Find Uses of File command.
 - CLI: checks every course JSON file, not just `infoAssessment.json`; new

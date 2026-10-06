@@ -96,7 +96,7 @@ export class ReferenceIndex {
     for (let dir = target; ; dir = path.dirname(dir)) {
       for (const file of this.filesByTarget.get(dir) ?? []) {
         for (const use of this.usesIn(file)) {
-          if (use.ref.target === dir && (dir === target || use.ref.spec.target !== "file")) {
+          if (use.ref.target === dir && covers(use, dir, target)) {
             out.push(use);
           }
         }
@@ -150,6 +150,22 @@ export class ReferenceIndex {
 function referenceFiles(courseRoot: string): string[] {
   const globs = [...new Set(refSpecs.map((s) => s.files))];
   return fs.globSync(globs, { cwd: courseRoot }).map((rel) => path.join(courseRoot, rel));
+}
+
+/**
+ * Whether a use of `dir` counts as a use of `target` inside it: a file
+ * reference only for itself, a question for its own top-level files
+ * (info.json, question.html, server.py, ...), a directory for everything.
+ */
+function covers(use: Use, dir: string, target: string): boolean {
+  switch (use.ref.spec.target) {
+    case "file":
+      return dir === target;
+    case "question":
+      return dir === target || path.dirname(target) === dir;
+    case "fileOrDir":
+      return true;
+  }
 }
 
 /** Indexes every reference-holding file in a course from disk. */

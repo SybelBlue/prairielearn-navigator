@@ -1,0 +1,11 @@
+{
+  "controller": "demo-element.py",
+  "dependencies": {
+    "elementScripts": ["demo-element.js"],
+    "elementStyles": ["demo-element.css"],
+    "clientFilesCourseStyles": ["styles.css"]
+  },
+  "dynamicDependencies": {
+    "clientFilesCourseScripts": { "plot-helpers": "plot-helpers.js" }
+  }
+}

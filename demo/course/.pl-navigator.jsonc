@@ -1,0 +1,9 @@
+{
+  // Pinned to the schema snapshot vendored for tests, so the demo works offline.
+  // Try "latest" or a date like "2025-06-01" to download real schemas.
+  "plVersion": "151aabd1167dbdc170c50f71295a74de9f31db05",
+  "schemaCacheDir": "../../src/test-cli/fixtures/schema-cache",
+  "rules": {
+    // e.g. "duplicate-question-id": "error", or "schema": "off"
+  }
+}

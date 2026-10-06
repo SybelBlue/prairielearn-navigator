@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Diagnostic } from "./diagnostic";
+import { matchesGlob } from "./courseFiles";
 import { parseJsonDoc, rangeOf } from "./json";
 import { PlVersion, validatePlVersion } from "./plVersion";
 import { isRuleId, RuleId } from "./rules/registry";
@@ -12,11 +13,28 @@ export const configFileName = ".pl-navigator.jsonc";
 type RuleSetting = "off" | "warning" | "error";
 const ruleSettings: readonly string[] = ["off", "warning", "error"];
 
+/** A glob and the directory it is relative to. */
+interface Exclude {
+  base: string;
+  glob: string;
+}
+
 export interface NavigatorConfig {
   plVersion: PlVersion;
   /** Absolute. */
   schemaCacheDir: string;
   rules: Partial<Record<RuleId, RuleSetting>>;
+  /** Files never checked. Every source adds to this rather than replacing it. */
+  excludes: Exclude[];
+}
+
+/** Whether `file` matches one of the config's `excludes`. */
+export function isExcluded(config: NavigatorConfig, file: string): boolean {
+  return config.excludes.some(({ base, glob }) => {
+    const rel = path.relative(base, file);
+    return !rel.startsWith("..") && !path.isAbsolute(rel) &&
+      matchesGlob(rel.split(path.sep).join("/"), glob);
+  });
 }
 
 /** Same keys as the config file; from CLI flags or VS Code settings. */
@@ -44,12 +62,19 @@ function defaultSchemaCacheDir(): string {
  */
 export function loadConfig(
   courseRoot: string | null,
-  options: { configPath?: string; overrides?: ConfigOverrides; defaults?: Partial<NavigatorConfig> } = {}
+  options: {
+    configPath?: string;
+    overrides?: ConfigOverrides;
+    /** What relative paths in `overrides` are relative to (default: cwd). */
+    overridesBaseDir?: string;
+    defaults?: Partial<NavigatorConfig>;
+  } = {}
 ): LoadedConfig {
   const config: NavigatorConfig = {
     plVersion: "latest",
     schemaCacheDir: defaultSchemaCacheDir(),
     rules: {},
+    excludes: [],
     ...options.defaults,
   };
   const problems: ConfigProblem[] = [];
@@ -89,7 +114,7 @@ export function loadConfig(
   }
 
   if (options.overrides) {
-    apply(config, options.overrides, process.cwd(), (message, _key, severity = "error") =>
+    apply(config, options.overrides, options.overridesBaseDir ?? process.cwd(), (message, _key, severity = "error") =>
       problems.push({ startOffset: 0, endOffset: 0, message, severity })
     );
   }
@@ -133,6 +158,16 @@ function apply(
           report("schemaCacheDir must be a non-empty string", [key]);
         } else {
           config.schemaCacheDir = path.resolve(baseDir, expandHome(value));
+        }
+        break;
+      case "excludes":
+        if (!Array.isArray(value) || value.some((g) => typeof g !== "string" || g === "")) {
+          report("excludes must be an array of glob patterns", [key]);
+        } else {
+          config.excludes = [
+            ...config.excludes,
+            ...value.map((glob: string) => ({ base: baseDir, glob: glob.replace(/^\.\//, "") })),
+          ];
         }
         break;
       case "rules":

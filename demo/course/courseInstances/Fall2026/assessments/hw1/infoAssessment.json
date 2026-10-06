@@ -1,0 +1,24 @@
+{
+  "uuid": "c1b2c3d4-0001-4000-8000-000000000001",
+  "type": "Homework",
+  "title": "Homework 1",
+  "set": "HW",
+  "number": "1",
+  "zones": [
+    {
+      "title": "Basics",
+      "questions": [
+        { "id": "addNumbers", "points": 1 },
+        { "id": "elementTour", "points": 1 },
+        { "id": "autograded", "points": 2 },
+        { "id": "noHtml", "points": 1 },
+        { "id": "doesNotExist", "points": 1 },
+        {
+          "numberChoose": 1,
+          "points": 1,
+          "alternatives": [{ "id": "variant" }, { "id": "addNumbers" }]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "uuid": "a1b2c3d4-0001-4000-8000-000000000001",
+  "title": "Add two numbers",
+  "topic": "Demo",
+  "tags": ["easy", "arithmetic"],
+  "type": "v3",
+  "dependencies": {
+    "clientFilesCourseStyles": ["styles.css"],
+    "clientFilesQuestionScripts": ["hint.js", "missing-hint.js"]
+  }
+}

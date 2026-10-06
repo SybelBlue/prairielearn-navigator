@@ -1,0 +1,7 @@
+{
+  "uuid": "a1b2c3d4-0004-4000-8000-000000000004",
+  "title": "A variant built from a template question",
+  "topic": "Demo",
+  "type": "v3",
+  "template": "addNumbers"
+}

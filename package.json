@@ -67,6 +67,15 @@
             ]
           },
           "markdownDescription": "Turn rules off or change their severity, by rule id, e.g. `{ \"schema\": \"off\" }`."
+        },
+        "prairielearn-navigator.excludes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "Glob patterns of files never to check, relative to the workspace folder, e.g. `courseInstances/Archive/**`. Added to the course's `.pl-navigator.jsonc` `excludes`."
         }
       }
     },

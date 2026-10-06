@@ -39,6 +39,13 @@ export class FileReferenceProvider
     private references: ReferenceIndexCache
   ) {
     references.onChanged(() => this.onDidChangeCodeLensesEmitter.fire());
+    // Courses or settings changing can change what a document refers to
+    const reset = () => {
+      this.cache = new WeakMap();
+      this.onDidChangeCodeLensesEmitter.fire();
+    };
+    courseCache.onUpdated(reset);
+    configs.onChanged(reset);
   }
 
   /** References in `document`, extracted once per document version. */
@@ -48,16 +55,16 @@ export class FileReferenceProvider
       return cached.refs;
     }
     const courseRoot = this.courseCache.getCourseIdFor(document.uri);
-    let refs: FileRef[] = [];
-    if (courseRoot) {
-      const { plVersion } = this.configs.configFor(courseRoot);
-      refs = findFileRefs(
-        sourceOf(document.getText()),
-        courseRelativePath(courseRoot, document.uri.fsPath),
-        versionDate(plVersion),
-        { courseRoot, fileDir: path.dirname(document.uri.fsPath) }
-      );
+    if (!courseRoot) {
+      return []; // not cached: the course may just not be discovered yet
     }
+    const { plVersion } = this.configs.configFor(courseRoot);
+    const refs = findFileRefs(
+      sourceOf(document.getText()),
+      courseRelativePath(courseRoot, document.uri.fsPath),
+      versionDate(plVersion),
+      { courseRoot, fileDir: path.dirname(document.uri.fsPath) }
+    );
     this.cache.set(document, { version: document.version, refs });
     return refs;
   }

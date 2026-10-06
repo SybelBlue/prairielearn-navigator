@@ -1,5 +1,13 @@
 {
-  "entry": [".vscode-test.mjs", "src/test/**/*.test.ts"],
-  "ignore": ["src/test-cli/fixtures/**"],
-  "ignoreDependencies": ["@vscode/test-electron"]
+  "entry": [
+    ".vscode-test.mjs",
+    "src/test/**/*.test.ts"
+  ],
+  "ignore": [
+    "src/test-cli/fixtures/**",
+    "demo/**"
+  ],
+  "ignoreDependencies": [
+    "@vscode/test-electron"
+  ]
 }

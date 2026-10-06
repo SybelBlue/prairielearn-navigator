@@ -4,6 +4,7 @@ import { styleText } from "node:util";
 import {
   ConfigOverrides,
   ConfigProblem,
+  isExcluded,
   LoadedConfig,
   loadConfig,
 } from "../core/config";
@@ -340,12 +341,17 @@ function resolveFiles(paths: string[]): string[] {
  * Pairs each file with its course root, dropping files no rule applies to.
  * Files outside any course map to null.
  */
-function courseFilesOf(files: string[]): [string, string | null][] {
+function courseFilesOf(
+  files: string[],
+  excluded: (file: string, courseRoot: string | null) => boolean
+): [string, string | null][] {
   const out: [string, string | null][] = [];
   const roots = new Map<string, string | null>();
   for (const file of files) {
     const courseRoot = findCourseRoot(file, roots);
-    if (courseRoot === null) {
+    if (excluded(file, courseRoot)) {
+      continue;
+    } else if (courseRoot === null) {
       if (COURSE_ONLY_FILES.includes(path.basename(file))) {
         out.push([file, null]);
       }
@@ -377,6 +383,9 @@ Options:
   --pl-version <version>    PrairieLearn version to check against: "latest",
                             a date (YYYY-MM-DD), or a commit sha
   --schema-cache <dir>      Where downloaded schemas are cached
+  --exclude <glob>          Skip matching files (relative to the current
+                            directory; repeatable). Adds to the config
+                            file's "excludes".
   --help                    Show this help message
 
 Dated versions are resolved with the GitHub API; set GITHUB_TOKEN to avoid
@@ -388,11 +397,14 @@ Examples:
   prairielearn-navigator check
   prairielearn-navigator check path/to/course
   prairielearn-navigator check --pl-version 2025-06-01
+  prairielearn-navigator check --exclude "questions/archive/**"
   prairielearn-navigator check "courseInstances/Fa26/**"
   prairielearn-navigator check "**/assessments/hw*/infoAssessment.json"
   prairielearn-navigator check --format github`;
 
-const VALUE_OPTIONS = ["--format", "--config", "--pl-version", "--schema-cache"];
+const VALUE_OPTIONS = ["--format", "--config", "--pl-version", "--schema-cache", "--exclude"];
+/** Options that may be given more than once. */
+const REPEATABLE_OPTIONS = ["--exclude"];
 
 /** Parses `--opt value` and `--opt=value` pairs; returns an error message on failure. */
 function parseArgs(
@@ -415,7 +427,10 @@ function parseArgs(
     if (value === undefined) {
       return `Missing value for ${name}`;
     }
-    options[name] = value;
+    options[name] =
+      REPEATABLE_OPTIONS.includes(name) && options[name] !== undefined
+        ? `${options[name]}\0${value}`
+        : value;
   }
   return { options, paths };
 }
@@ -443,6 +458,7 @@ export async function run(args: string[]): Promise<number> {
   }
 
   const overrides: ConfigOverrides = {
+    excludes: options["--exclude"]?.split("\0"),
     plVersion: options["--pl-version"],
     schemaCacheDir: options["--schema-cache"],
   };
@@ -457,7 +473,14 @@ export async function run(args: string[]): Promise<number> {
   }
   const setups = new Setups(options["--config"], overrides);
 
-  const files = courseFilesOf(resolveFiles(paths));
+  const files = courseFilesOf(resolveFiles(paths), (file, courseRoot) =>
+    isExcluded(
+      courseRoot === null
+        ? loadConfig(null, { overrides }).config
+        : setups.get(courseRoot).loaded.config,
+      file
+    )
+  );
   if (files.length === 0) {
     console.error(
       styleText("yellow", "No PrairieLearn course JSON files found in:")

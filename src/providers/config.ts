@@ -10,14 +10,16 @@ import {
 import { SchemaStore } from "../core/schemas";
 
 const section = "prairielearn-navigator";
-const keys = ["plVersion", "schemaCacheDir", "rules"] as const;
+const keys = ["plVersion", "schemaCacheDir", "rules", "excludes"] as const;
 
 /**
  * Resolves each course's NavigatorConfig from VS Code settings and the
  * course's .pl-navigator.jsonc, so the editor and the CLI agree.
  *
  * Precedence: workspace / folder settings (.vscode/settings.json), then
- * .pl-navigator.jsonc, then user settings, then built-in defaults.
+ * .pl-navigator.jsonc, then user settings, then built-in defaults; except
+ * `excludes`, which all of them add to. Relative paths in settings are
+ * relative to the workspace folder.
  */
 export class ConfigProvider {
   private configs = new Map<string, LoadedConfig>();
@@ -120,11 +122,16 @@ export class ConfigProvider {
     // User settings sit beneath the config file, so apply them as validated defaults
     const defaults = loadConfig(null, {
       overrides: userDefaults,
+      overridesBaseDir: baseDir,
       defaults: {
         schemaCacheDir: path.join(this.context.globalStorageUri.fsPath, "schemas"),
       },
     });
-    const loaded = loadConfig(courseRoot, { overrides, defaults: defaults.config });
+    const loaded = loadConfig(courseRoot, {
+      overrides,
+      overridesBaseDir: baseDir,
+      defaults: defaults.config,
+    });
     return { ...loaded, problems: [...defaults.problems, ...loaded.problems] };
   }
 

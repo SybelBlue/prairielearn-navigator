@@ -150,6 +150,19 @@ test("config problems are reported on the config file", () => {
   assert.match(stdout, /invalid\.jsonc:5:14 warning: unknown rule "nope"/);
 });
 
+test("--exclude and config excludes skip files entirely", () => {
+  const { code, stdout } = runCli(
+    "check",
+    "--exclude", "broken/questions/**",
+    "--exclude", "broken/elements/**",
+    "--exclude", "broken/courseInstances/**",
+    "broken"
+  );
+  assert.equal(code, 0);
+  assert.match(stdout, /No errors found \(1 file, 0 questions checked\)/);
+  assert.doesNotMatch(stdout, /questions\//);
+});
+
 test("invalid --pl-version exits 1", () => {
   const { code, stderr } = runCli("check", "--pl-version", "1.2.3", "clean");
   assert.equal(code, 1);

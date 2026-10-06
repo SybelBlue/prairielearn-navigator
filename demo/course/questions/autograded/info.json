@@ -1,0 +1,15 @@
+{
+  "uuid": "a1b2c3d4-0003-4000-8000-000000000003",
+  "title": "Externally graded",
+  "topic": "Demo",
+  "tags": ["autograded"],
+  "type": "v3",
+  "singleVariant": true,
+  "gradingMethod": "External",
+  "externalGradingOptions": {
+    "enabled": true,
+    "image": "prairielearn/grader-python",
+    "entrypoint": "/grade/serverFilesCourse/grader/run.py",
+    "serverFilesCourse": ["grader/", "shared-tests.py"]
+  }
+}
