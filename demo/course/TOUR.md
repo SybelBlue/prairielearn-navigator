@@ -48,10 +48,10 @@ Cmd/Ctrl-click, or F12 on:
 
 ## Same checks from the terminal
 
-From the repository root, run the CLI over the whole demo course, as CI
-would. It lists the same problems as the Problems panel:
+Open a terminal in this window (⌃\` / Ctrl+\`) and run the CLI on this course,
+as CI would. It lists the same problems as the Problems panel:
 
 ```sh
-demo/check.sh                    # code frames for every problem
-demo/check.sh --format github    # GitHub Actions annotations
+./check.sh                    # code frames for every problem
+./check.sh --format github    # GitHub Actions annotations
 ```
