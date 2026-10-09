@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-09
+
 - Added a typed, headless `createQuestionFileResolver` npm API that reports
   normalized question-local, inherited-template, and course-level file usage,
   partial-resolution diagnostics, and incrementally affected QIDs.
