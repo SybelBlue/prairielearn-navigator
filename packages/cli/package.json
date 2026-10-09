@@ -1,6 +1,6 @@
 {
   "name": "@sybelblue/prairielearn-navigator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Check PrairieLearn courses for missing, incomplete, and duplicate questions",
   "license": "MIT",
   "repository": {

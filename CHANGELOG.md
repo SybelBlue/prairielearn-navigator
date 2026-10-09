@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-09
+
 - Added editor-title buttons for quickly switching among a PrairieLearn
   question's `question.html`, `info.json`, and `server.py` source files.
 - The release pipeline now opens npm's Staged Packages page for browser-based
