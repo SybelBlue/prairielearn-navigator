@@ -14,11 +14,11 @@ help: ## Show this help
 install: ## Install dependencies (npm ci)
 	npm ci
 
-build: ## Build the extension and CLI bundles
+build: ## Build the extension, CLI, and library bundles
 	npm run compile
 
-build-cli: ## Build only the CLI bundle (packages/cli/dist/cli.js)
-	npm run build:cli
+build-cli: ## Build the npm CLI and library bundles
+	npm run build:npm
 
 watch: ## Rebuild bundles on change
 	npm run watch

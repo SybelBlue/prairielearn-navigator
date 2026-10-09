@@ -50,6 +50,11 @@ npx -y @sybelblue/prairielearn-navigator check --format github
 See [packages/cli/README.md](packages/cli/README.md) for options and a GitHub
 Actions example.
 
+The npm package also has a typed, headless
+[`createQuestionFileResolver`](packages/cli/README.md#library-api) API for
+applications that need normalized question-local, inherited-template, and
+course-level file usage without invoking the CLI.
+
 ## Development
 
 Common commands are in the [Makefile](Makefile). Run `make help` to list them:

@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "vitest";
 
-const cli = path.resolve(__dirname, "../../packages/cli/dist/cli.js");
+const cli = path.resolve(__dirname, "../../packages/cli/dist/cli.cjs");
 const fixtures = path.join(__dirname, "fixtures");
 
 function runCli(...args: string[]) {

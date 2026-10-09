@@ -41,7 +41,8 @@ jobs:
 
       - run: npm run lint
       - run: npm run test:cli
-      - run: npm run build:cli
+      - run: npm run test:package
+      - run: npm run build:npm
       - run: cp LICENSE packages/cli/
 
       # The trusted publisher only allows staged publishes: the version stays

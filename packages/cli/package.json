@@ -8,11 +8,18 @@
     "url": "git+https://github.com/SybelBlue/prairielearn-navigator.git",
     "directory": "packages/cli"
   },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/core/questionFileResolver.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
-    "prairielearn-navigator": "dist/cli.js"
+    "prairielearn-navigator": "dist/cli.cjs"
   },
   "files": [
-    "dist/cli.js"
+    "dist"
   ],
   "engines": {
     "node": ">=22"
@@ -27,7 +34,7 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "npm --prefix ../.. run build:cli && cp ../../LICENSE .",
+    "prepack": "npm --prefix ../.. run build:npm && cp ../../LICENSE .",
     "prepublishOnly": "npm --prefix ../.. run lint && npm --prefix ../.. run test:cli"
   }
 }

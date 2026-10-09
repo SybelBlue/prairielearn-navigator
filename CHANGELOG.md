@@ -6,6 +6,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Added a typed, headless `createQuestionFileResolver` npm API that reports
+  normalized question-local, inherited-template, and course-level file usage,
+  partial-resolution diagnostics, and incrementally affected QIDs.
+- The npm package now publishes an ESM library entrypoint and declarations
+  alongside the existing CLI.
+
 ## [1.0.1] - 2026-10-09
 
 - Added editor-title buttons for quickly switching among a PrairieLearn
