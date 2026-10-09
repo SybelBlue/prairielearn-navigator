@@ -35,6 +35,27 @@
       {
         "command": "prairielearn-navigator.findUses",
         "title": "PrairieLearn: Find Uses of File"
+      },
+      {
+        "command": "prairielearn-navigator.openQuestionHtml",
+        "title": "Open question.html",
+        "icon": "$(code)",
+        "enablement": "prairielearn-navigator.inQuestion && prairielearn-navigator.questionHtmlExists && prairielearn-navigator.currentQuestionFile != questionHtml"
+      },
+      {
+        "command": "prairielearn-navigator.openQuestionInfoJson",
+        "title": "Open info.json",
+        "icon": "$(json)",
+        "enablement": "prairielearn-navigator.inQuestion && prairielearn-navigator.infoJsonExists && prairielearn-navigator.currentQuestionFile != infoJson"
+      },
+      {
+        "command": "prairielearn-navigator.openQuestionServerPy",
+        "title": "Open server.py",
+        "icon": {
+          "light": "assets/python-light.svg",
+          "dark": "assets/python-dark.svg"
+        },
+        "enablement": "prairielearn-navigator.inQuestion && prairielearn-navigator.serverPyExists && prairielearn-navigator.currentQuestionFile != serverPy"
       }
     ],
     "configuration": {
@@ -86,6 +107,23 @@
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "prairielearn-navigator.openQuestionHtml",
+          "when": "prairielearn-navigator.inQuestion",
+          "group": "navigation@1"
+        },
+        {
+          "command": "prairielearn-navigator.openQuestionInfoJson",
+          "when": "prairielearn-navigator.inQuestion",
+          "group": "navigation@2"
+        },
+        {
+          "command": "prairielearn-navigator.openQuestionServerPy",
+          "when": "prairielearn-navigator.inQuestion",
+          "group": "navigation@3"
+        }
+      ],
       "explorer/context": [
         {
           "command": "prairielearn-navigator.findUses",

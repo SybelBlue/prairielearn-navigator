@@ -18,4 +18,5 @@ vitest.config.mts
 knip.json
 .github/**
 Makefile
+QUESTION_SOURCE_SWITCHER_PROMPT.md
 scripts/**

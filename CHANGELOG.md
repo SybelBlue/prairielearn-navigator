@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Added editor-title buttons for quickly switching among a PrairieLearn
+  question's `question.html`, `info.json`, and `server.py` source files.
 - The release pipeline now opens npm's Staged Packages page for browser-based
   approval and waits for an explicit publish check before releasing to the VS
   Code Marketplace.

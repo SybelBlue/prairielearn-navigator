@@ -17,6 +17,9 @@ This extension is still experimental and may change or break.
     **PrairieLearn: Find Uses of File** in the explorer's context menu (works
     for images too).
 - Completions, code lenses, and quick fixes that create missing files.
+- Editor-title buttons for switching between a question's `question.html`,
+  `info.json`, and `server.py`. The current or missing source file remains
+  visible but is disabled.
 
 ### Settings
 

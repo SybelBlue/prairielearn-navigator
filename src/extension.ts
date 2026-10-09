@@ -23,6 +23,7 @@ import {
 } from "./providers";
 import { DebugView } from "./debugView";
 import { QuestionCompletionItemProvider } from "./providers/completions";
+import { QuestionSourceSwitcher } from "./questionSourceSwitcher";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -45,6 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
   const courseCache = new CourseCache();
   const instanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionCache(courseCache);
+  const questionSourceSwitcher = new QuestionSourceSwitcher(questionCache);
   const configProvider = new ConfigProvider(context);
   const referenceIndex = new ReferenceIndexCache(courseCache, configProvider);
   const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
@@ -91,6 +93,7 @@ export function activate(context: vscode.ExtensionContext) {
     courseCache,
     instanceCache,
     questionCache,
+    questionSourceSwitcher,
     assessmentCache,
     configProvider,
     referenceIndex,
