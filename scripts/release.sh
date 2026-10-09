@@ -185,6 +185,7 @@ require_vsce_login
 step "Running lint and tests"
 npm run lint
 npm run test:cli
+npm run test:package
 npm test
 
 step "Bumping to $version"

@@ -127,3 +127,29 @@ the pull request. Run it from the repository root so annotation paths resolve:
 ```
 
 Requires Node.js 22 or newer.
+
+## Library API
+
+The package also exposes a typed, headless resolver for tools that need the
+files used by each question without starting VS Code or invoking the CLI:
+
+```ts
+import { createQuestionFileResolver } from "@sybelblue/prairielearn-navigator";
+
+const resolver = createQuestionFileResolver({
+  courseRoot: "/path/to/course",
+  questions: [
+    { qid: "vectors/addition", directory: "questions/vectors/addition" },
+  ],
+});
+
+const initial = await resolver.resolveAll();
+const changed = await resolver.update(["clientFilesCourse/plots.js"]);
+```
+
+`resolveAll()` returns a `Map` from QID to a `QuestionFileResolution` with
+course-relative file paths, `question-local`, `template-local`, or
+`course-level` provenance, and diagnostics for dependencies that cannot be
+resolved statically. `update()` maintains the dependency graph and returns
+only questions affected by the supplied course-relative paths. The resolver
+does not watch the filesystem; callers decide how and when to batch changes.

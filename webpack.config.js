@@ -58,7 +58,7 @@ const cliConfig = {
   output: {
     // Published from packages/cli as @sybelblue/prairielearn-navigator.
     path: path.resolve(__dirname, 'packages/cli/dist'),
-    filename: 'cli.js',
+    filename: 'cli.cjs',
     libraryTarget: 'commonjs2'
   },
   resolve: {
@@ -70,4 +70,22 @@ const cliConfig = {
   ],
   devtool: false,
 };
-module.exports = [ extensionConfig, cliConfig ];
+
+/** @type WebpackConfig */
+const libraryConfig = {
+  name: 'library',
+  target: 'node22',
+  mode: 'production',
+  entry: './src/library.ts',
+  output: {
+    path: path.resolve(__dirname, 'packages/cli/dist'),
+    filename: 'index.js',
+    library: { type: 'module' },
+  },
+  experiments: { outputModule: true },
+  resolve: cliConfig.resolve,
+  module: extensionConfig.module,
+  devtool: false,
+};
+
+module.exports = [ extensionConfig, cliConfig, libraryConfig ];
