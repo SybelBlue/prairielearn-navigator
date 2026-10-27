@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-27
+
 - Added action-style UUID completion for `uuid` fields in PrairieLearn info
   files, including automatic suggestions in empty values and a quick fix for a
   missing or invalid root UUID. The generator defaults to `uuidgen` and can be
