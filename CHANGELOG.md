@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Added UUID completion for `uuid` fields in PrairieLearn info files. The
+  generator defaults to `uuidgen` and can be changed with the
+  `prairielearn-navigator.uuidCommand` setting.
+
 ## [1.1.0] - 2026-10-09
 
 - Added a typed, headless `createQuestionFileResolver` npm API that reports

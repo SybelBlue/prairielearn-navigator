@@ -17,6 +17,8 @@ This extension is still experimental and may change or break.
     **PrairieLearn: Find Uses of File** in the explorer's context menu (works
     for images too).
 - Completions, code lenses, and quick fixes that create missing files.
+- UUID completions in PrairieLearn info files, generated with `uuidgen` by
+  default.
 - Editor-title buttons for switching between a question's `question.html`,
   `info.json`, and `server.py`. The current or missing source file remains
   visible but is disabled.
@@ -31,6 +33,7 @@ also reads. User-level settings rank below that file.
 | --- | --- |
 | `prairielearn-navigator.plVersion` | `latest` (default), a date (`YYYY-MM-DD`), or a commit sha |
 | `prairielearn-navigator.schemaCacheDir` | Schema cache, relative to the workspace folder. Default: the extension's storage |
+| `prairielearn-navigator.uuidCommand` | Shell command for UUID completions. It must print one UUID. Default: `uuidgen` |
 | `prairielearn-navigator.rules` | Rule id → `off` / `warning` / `error` |
 | `prairielearn-navigator.excludes` | Glob patterns of files never to check, relative to the workspace folder. Adds to the course file's `excludes` rather than replacing them. |
 

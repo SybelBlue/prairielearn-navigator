@@ -18,11 +18,12 @@ import {
   fileReferenceSelector,
   findUsesCommand,
   MissingFileQuickFixProvider,
+  QuestionCompletionItemProvider,
   QuestionHeaderCodeLensProvider,
   RuleDiagnosticCollection,
+  UuidCompletionItemProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
-import { QuestionCompletionItemProvider } from "./providers/completions";
 import { QuestionSourceSwitcher } from "./questionSourceSwitcher";
 
 // This method is called when your extension is activated
@@ -87,6 +88,12 @@ export function activate(context: vscode.ExtensionContext) {
   const infoAssessmentPatterns = [
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
+  const infoFilePatterns = [
+    { pattern: "**/info.json" },
+    { pattern: "**/infoAssessment.json" },
+    { pattern: "**/infoCourse.json" },
+    { pattern: "**/infoCourseInstance.json" },
+  ];
 
   context.subscriptions.push(
     // Shared Utilities
@@ -140,6 +147,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.languages.registerCompletionItemProvider(
       infoQuestionPatterns,
       new QuestionCompletionItemProvider(questionCache),
+      `"`,
+    ),
+    vscode.languages.registerCompletionItemProvider(
+      infoFilePatterns,
+      new UuidCompletionItemProvider(),
       `"`,
     ),
 

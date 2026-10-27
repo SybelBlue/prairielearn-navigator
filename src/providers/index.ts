@@ -1,4 +1,8 @@
-export { AssessmentCompletionItemProvider } from "./completions";
+export {
+  AssessmentCompletionItemProvider,
+  QuestionCompletionItemProvider,
+  UuidCompletionItemProvider,
+} from "./completions";
 export { ConfigProvider } from "./config";
 export {
   MissingFileQuickFixProvider,

@@ -75,6 +75,12 @@
           "scope": "resource",
           "markdownDescription": "Directory for downloaded PrairieLearn schemas, relative to the workspace folder. Empty uses the extension's global storage."
         },
+        "prairielearn-navigator.uuidCommand": {
+          "type": "string",
+          "default": "uuidgen",
+          "scope": "resource",
+          "markdownDescription": "Shell command used to generate UUID completion values. The command must print one UUID to standard output."
+        },
         "prairielearn-navigator.rules": {
           "type": "object",
           "default": {},
