@@ -1,10 +1,14 @@
 export {
   AssessmentCompletionItemProvider,
+  isEmptyUuidValue,
   QuestionCompletionItemProvider,
   UuidCompletionItemProvider,
 } from "./completions";
 export { ConfigProvider } from "./config";
 export {
+  addGeneratedUuid,
+  invalidRootUuidDiagnosticCode,
+  missingRootUuidDiagnosticCode,
   MissingFileQuickFixProvider,
   RuleDiagnosticCollection,
 } from "./diagnostics";
@@ -20,3 +24,4 @@ export {
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
+export { generateUuid } from "./uuid";

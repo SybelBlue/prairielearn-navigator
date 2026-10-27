@@ -56,6 +56,7 @@ export function schemaRule(name: SchemaName): RuleImpl {
       let jsonPath = pointerToPath(err.instancePath);
       let message = `${err.instancePath || "root"} ${err.message}`;
       let severity: Diagnostic["severity"] = "error";
+      let metadata: Diagnostic["metadata"];
       if (err.keyword === "additionalProperties") {
         // Newer PL versions may accept properties an older pinned schema lacks
         const prop = String(err.params.additionalProperty);
@@ -64,6 +65,18 @@ export function schemaRule(name: SchemaName): RuleImpl {
         severity = "warning";
       } else if (err.keyword === "enum") {
         message += `: ${(err.params.allowedValues as unknown[]).map((v) => JSON.stringify(v)).join(", ")}`;
+      } else if (err.keyword === "required") {
+        metadata = {
+          kind: "schema-required-property",
+          path: jsonPath,
+          property: String(err.params.missingProperty),
+        };
+      } else if (err.keyword === "pattern") {
+        metadata = {
+          kind: "schema-pattern",
+          path: jsonPath,
+          pattern: String(err.params.pattern),
+        };
       }
       const key = `${jsonPath.join("/")}\0${message}`;
       if (seen.has(key)) {
@@ -80,6 +93,7 @@ export function schemaRule(name: SchemaName): RuleImpl {
         ...range,
         message: `${message} (PL schema ${schema.label})`,
         severity,
+        metadata,
       });
     }
     return diagnostics;

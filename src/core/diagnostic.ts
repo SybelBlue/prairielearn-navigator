@@ -11,6 +11,20 @@ interface RelatedInfo {
   message: string;
 }
 
+export type DiagnosticMetadata =
+  | {
+      kind: "schema-required-property";
+      /** JSON path of the object that requires the property. */
+      path: (string | number)[];
+      property: string;
+    }
+  | {
+      kind: "schema-pattern";
+      /** JSON path of the value that failed the pattern. */
+      path: (string | number)[];
+      pattern: string;
+    };
+
 export interface Diagnostic {
   startOffset: number;
   endOffset: number;
@@ -18,6 +32,7 @@ export interface Diagnostic {
   severity: Severity;
   code?: string;
   related?: RelatedInfo[];
+  metadata?: DiagnosticMetadata;
 }
 
 /** 1-based line/column for a character offset. */

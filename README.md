@@ -18,7 +18,7 @@ This extension is still experimental and may change or break.
     for images too).
 - Completions, code lenses, and quick fixes that create missing files.
 - UUID completions in PrairieLearn info files, generated with `uuidgen` by
-  default.
+  default, plus quick fixes for a missing or invalid root `uuid` field.
 - Editor-title buttons for switching between a question's `question.html`,
   `info.json`, and `server.py`. The current or missing source file remains
   visible but is disabled.

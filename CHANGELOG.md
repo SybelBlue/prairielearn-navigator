@@ -6,9 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
-- Added UUID completion for `uuid` fields in PrairieLearn info files. The
-  generator defaults to `uuidgen` and can be changed with the
-  `prairielearn-navigator.uuidCommand` setting.
+- Added action-style UUID completion for `uuid` fields in PrairieLearn info
+  files, including automatic suggestions in empty values and a quick fix for a
+  missing or invalid root UUID. The generator defaults to `uuidgen` and can be
+  changed with the `prairielearn-navigator.uuidCommand` setting.
 
 ## [1.1.0] - 2026-10-09
 

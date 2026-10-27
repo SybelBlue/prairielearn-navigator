@@ -199,6 +199,39 @@ test("runRules stamps rule codes and applies severity overrides", async () => {
   assert.deepEqual(await runRules(file, text, { courseRoot: brokenCourse, config: off, schemas }), []);
 });
 
+test("schema diagnostics retain structured missing-property metadata", async () => {
+  const file = path.join(brokenCourse, "questions/good/info.json");
+  const { config } = loadConfig(brokenCourse);
+  const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
+  const diagnostics = await runRules(
+    file,
+    JSON.stringify({ type: "v3", title: "Q", topic: "T" }),
+    { courseRoot: brokenCourse, config, schemas },
+  );
+
+  assert.deepEqual(
+    diagnostics.find(
+      (diagnostic) =>
+        diagnostic.metadata?.kind === "schema-required-property" &&
+        diagnostic.metadata.property === "uuid",
+    )?.metadata,
+    { kind: "schema-required-property", path: [], property: "uuid" },
+  );
+
+  const invalid = await runRules(
+    file,
+    JSON.stringify({ uuid: "a", type: "v3", title: "Q", topic: "T" }),
+    { courseRoot: brokenCourse, config, schemas },
+  );
+  const patternMetadata = invalid.find(
+    (diagnostic) =>
+      diagnostic.metadata?.kind === "schema-pattern" &&
+      diagnostic.metadata.path[0] === "uuid",
+  )?.metadata;
+  assert.equal(patternMetadata?.kind, "schema-pattern");
+  assert.deepEqual(patternMetadata.path, ["uuid"]);
+});
+
 // ── File references ──
 
 test("findFileRefs resolves every file-valued field", () => {

@@ -8,6 +8,7 @@ import {
   ReferenceIndexCache,
 } from "./filewatchers";
 import {
+  addGeneratedUuid,
   AssessmentCompletionItemProvider,
   AssessmentQuestionIdCodeLensProvider,
   ConfigProvider,
@@ -17,6 +18,7 @@ import {
   FileReferenceProvider,
   fileReferenceSelector,
   findUsesCommand,
+  isEmptyUuidValue,
   MissingFileQuickFixProvider,
   QuestionCompletionItemProvider,
   QuestionHeaderCodeLensProvider,
@@ -88,7 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
   const infoAssessmentPatterns = [
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
-  const infoFilePatterns = [
+  const infoFilePatterns: vscode.DocumentSelector = [
     { pattern: "**/info.json" },
     { pattern: "**/infoAssessment.json" },
     { pattern: "**/infoCourse.json" },
@@ -111,6 +113,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "prairielearn-navigator.findUses",
       findUsesCommand(referenceIndex),
+    ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.addGeneratedUuid",
+      addGeneratedUuid,
     ),
 
     // Diagnostics
@@ -154,6 +160,18 @@ export function activate(context: vscode.ExtensionContext) {
       new UuidCompletionItemProvider(),
       `"`,
     ),
+    vscode.window.onDidChangeTextEditorSelection((event) => {
+      const selection = event.selections[0];
+      if (
+        event.textEditor === vscode.window.activeTextEditor &&
+        selection?.isEmpty &&
+        vscode.languages.match(infoFilePatterns, event.textEditor.document) >
+          0 &&
+        isEmptyUuidValue(event.textEditor.document, selection.active)
+      ) {
+        void vscode.commands.executeCommand("editor.action.triggerSuggest");
+      }
+    }),
 
     // CodeLens Providers
     vscode.languages.registerCodeLensProvider(

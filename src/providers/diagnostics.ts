@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { findNodeAtLocation, modify, type Node, parseTree } from "jsonc-parser";
 import { isExcluded } from "../core/config";
 import { courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
@@ -10,9 +11,14 @@ import { ruleDiagnosticCode } from "../core/rules/registry";
 import { checkableGlobs, isCheckable, runRules } from "../core/rules/run";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
+import { generateUuid, reportUuidGenerationError } from "./uuid";
 
 const debounceMs = 300;
 const batchSize = 32;
+export const missingRootUuidDiagnosticCode =
+  `${ruleDiagnosticCode("schema")}/missing-required-property/uuid`;
+export const invalidRootUuidDiagnosticCode =
+  `${ruleDiagnosticCode("schema")}/pattern/uuid`;
 
 /**
  * Runs the core rule registry on every checkable file of every course in
@@ -180,7 +186,19 @@ function toVscodeDiagnostics(
         : vscode.DiagnosticSeverity.Warning
     );
     diagnostic.source = "prairielearn-navigator";
-    if (d.code !== undefined) {
+    if (
+      d.metadata?.kind === "schema-required-property" &&
+      d.metadata.path.length === 0 &&
+      d.metadata.property === "uuid"
+    ) {
+      diagnostic.code = missingRootUuidDiagnosticCode;
+    } else if (
+      d.metadata?.kind === "schema-pattern" &&
+      d.metadata.path.length === 1 &&
+      d.metadata.path[0] === "uuid"
+    ) {
+      diagnostic.code = invalidRootUuidDiagnosticCode;
+    } else if (d.code !== undefined) {
       diagnostic.code = d.code;
     }
     if (d.related !== undefined) {
@@ -206,6 +224,63 @@ const missingFileCodes = new Set<unknown>(
     .map((spec) => ruleDiagnosticCode(spec.rule))
 );
 
+function rootUuidNode(document: vscode.TextDocument): Node | undefined {
+  const tree = parseTree(document.getText());
+  return tree === undefined ? undefined : findNodeAtLocation(tree, ["uuid"]);
+}
+
+function hasRootUuid(document: vscode.TextDocument): boolean {
+  return rootUuidNode(document) !== undefined;
+}
+
+function addUuidEdit(
+  document: vscode.TextDocument,
+  uuid: string,
+): vscode.WorkspaceEdit {
+  const workspaceEdit = new vscode.WorkspaceEdit();
+  const indentation = document.getText().match(/^[ \t]+(?=")/m)?.[0] ?? "  ";
+  const edits = modify(document.getText(), ["uuid"], uuid, {
+    formattingOptions: {
+      insertSpaces: !indentation.includes("\t"),
+      tabSize: indentation.includes("\t") ? 1 : indentation.length,
+      eol: document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n",
+    },
+    getInsertionIndex: () => 0,
+  });
+  for (const edit of edits) {
+    workspaceEdit.replace(
+      document.uri,
+      new vscode.Range(
+        document.positionAt(edit.offset),
+        document.positionAt(edit.offset + edit.length),
+      ),
+      edit.content,
+    );
+  }
+  return workspaceEdit;
+}
+
+/** Command behind the missing and invalid root-UUID quick fixes. */
+export async function addGeneratedUuid(
+  uri: vscode.Uri,
+  expectedValue?: string,
+) {
+  const document = await vscode.workspace.openTextDocument(uri);
+  const current = rootUuidNode(document);
+  if (
+    (expectedValue === undefined && current !== undefined) ||
+    (expectedValue !== undefined && current?.value !== expectedValue)
+  ) {
+    return;
+  }
+  try {
+    const uuid = await generateUuid(document);
+    await vscode.workspace.applyEdit(addUuidEdit(document, uuid));
+  } catch (error) {
+    reportUuidGenerationError(error);
+  }
+}
+
 export class MissingFileQuickFixProvider
   implements vscode.CodeActionProvider
 {
@@ -218,6 +293,45 @@ export class MissingFileQuickFixProvider
     const quickFixes: vscode.CodeAction[] = [];
 
     for (const diagnostic of context.diagnostics) {
+      if (
+        diagnostic.code === missingRootUuidDiagnosticCode &&
+        !hasRootUuid(document)
+      ) {
+        const fix = new vscode.CodeAction(
+          "Add generated UUID",
+          vscode.CodeActionKind.QuickFix,
+        );
+        fix.diagnostics = [diagnostic];
+        fix.isPreferred = true;
+        fix.command = {
+          command: "prairielearn-navigator.addGeneratedUuid",
+          title: fix.title,
+          arguments: [document.uri],
+        };
+        quickFixes.push(fix);
+        continue;
+      }
+
+      if (diagnostic.code === invalidRootUuidDiagnosticCode) {
+        const currentValue = rootUuidNode(document)?.value;
+        if (typeof currentValue !== "string") {
+          continue;
+        }
+        const fix = new vscode.CodeAction(
+          "Replace with generated UUID",
+          vscode.CodeActionKind.QuickFix,
+        );
+        fix.diagnostics = [diagnostic];
+        fix.isPreferred = true;
+        fix.command = {
+          command: "prairielearn-navigator.addGeneratedUuid",
+          title: fix.title,
+          arguments: [document.uri, currentValue],
+        };
+        quickFixes.push(fix);
+        continue;
+      }
+
       if (!missingFileCodes.has(diagnostic.code)) {
         continue;
       }
