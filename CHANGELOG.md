@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-29
+
 - Optimize build sizes by using webpack.
 
 ## [1.1.3] - 2026-10-29
