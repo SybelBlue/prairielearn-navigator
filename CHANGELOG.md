@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.1.2] - 10/29/2026
+
 - New `unused-question` rule: a question that no assessment uses gets a
   diagnostic on its `info.json` title. Its severity is set by
   `unusedQuestions` (`ignored`, `info`, `warning`, or `error`; default
