@@ -2,7 +2,7 @@
   "name": "prairielearn-navigator",
   "displayName": "prairielearn-navigator",
   "description": "provides definitions and inlay hints for prairielearn assessments and questions",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "publisher": "sybelblue",
   "repository": {
     "type": "git",
@@ -98,7 +98,13 @@
         },
         "prairielearn-navigator.diagnostics.json-syntax": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -112,7 +118,13 @@
         },
         "prairielearn-navigator.diagnostics.schema": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -126,7 +138,13 @@
         },
         "prairielearn-navigator.diagnostics.duplicate-question-id": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -140,7 +158,13 @@
         },
         "prairielearn-navigator.diagnostics.unused-question": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -154,7 +178,13 @@
         },
         "prairielearn-navigator.diagnostics.unused-tag": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -168,7 +198,13 @@
         },
         "prairielearn-navigator.diagnostics.unused-assessment-set": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -182,7 +218,13 @@
         },
         "prairielearn-navigator.diagnostics.question-info-missing": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -196,7 +238,13 @@
         },
         "prairielearn-navigator.diagnostics.client-files-course-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -210,7 +258,13 @@
         },
         "prairielearn-navigator.diagnostics.client-files-question-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -224,7 +278,13 @@
         },
         "prairielearn-navigator.diagnostics.server-files-course-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -238,7 +298,13 @@
         },
         "prairielearn-navigator.diagnostics.question-exists": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -252,7 +318,13 @@
         },
         "prairielearn-navigator.diagnostics.element-files-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -266,7 +338,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-figure-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -280,7 +358,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-file-download-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -294,7 +378,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-code-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -308,7 +398,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-file-editor-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -322,7 +418,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-graph-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -336,7 +438,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-rich-text-editor-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -350,7 +458,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-excalidraw-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -364,7 +478,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-xss-safe-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
@@ -378,7 +498,13 @@
         },
         "prairielearn-navigator.diagnostics.pl-template-file-exist": {
           "type": "string",
-          "enum": ["default", "off", "info", "warning", "error"],
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "enumDescriptions": [
             "Use the severity configured elsewhere, or the rule's built-in severity.",
             "Do not report this diagnostic.",
