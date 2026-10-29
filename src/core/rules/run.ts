@@ -117,8 +117,9 @@ export function withoutIgnoredDiagnostics(
     return !ignores.some(
       (ignore) =>
         ignore.rule === id &&
-        ignore.message === diagnostic.message &&
-        ignore.occurrence === occurrence
+        (ignore.identifier !== undefined
+          ? ignore.identifier === diagnostic.identifier
+          : ignore.message === diagnostic.message && ignore.occurrence === occurrence)
     );
   });
 }

@@ -12,7 +12,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   settings added in 1.1.2 remain supported as deprecated aliases.
 - Every rule diagnostic now offers quick fixes to ignore that exact occurrence
   in its file through `.pl-navigator.jsonc`, or open the rule's VS Code severity
-  setting. The CLI honors the same `ignoredDiagnostics` suppressions.
+  setting. Unused diagnostics use stable question ids, tag names, or
+  assessment-set names instead of positional fingerprints; other rules fall
+  back to exact message/occurrence matching. The CLI honors the same
+  `ignoredDiagnostics` suppressions.
 - Unused-question, tag, and assessment-set diagnostics now offer removal quick
   fixes. Tags and sets use undoable JSON edits; question directories require
   confirmation and are moved to Trash.

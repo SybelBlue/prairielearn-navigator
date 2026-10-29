@@ -15,12 +15,21 @@ export const ruleSetting = z.enum(["off", "info", "warning", "error"]);
 type RuleSetting = z.infer<typeof ruleSetting>;
 export const severitySetting = z.enum(["ignored", "info", "warning", "error"]);
 
-const ignoredDiagnosticSetting = z.object({
+const ignoredDiagnosticBase = {
   file: z.string().min(1),
   rule: z.string().refine(isRuleId, "unknown rule"),
-  message: z.string().min(1),
-  occurrence: z.number().int().positive(),
-}).strict();
+};
+const ignoredDiagnosticSetting = z.union([
+  z.object({
+    ...ignoredDiagnosticBase,
+    identifier: z.string().min(1),
+  }).strict(),
+  z.object({
+    ...ignoredDiagnosticBase,
+    message: z.string().min(1),
+    occurrence: z.number().int().positive(),
+  }).strict(),
+]);
 
 /** Config keys that are shorthand for one rule's setting, with "ignored" for "off". */
 const severityKeys = {
@@ -41,9 +50,12 @@ export interface IgnoredDiagnostic {
   /** Absolute path of the file containing the diagnostic. */
   file: string;
   rule: RuleId;
-  message: string;
+  /** Stable semantic identity, e.g. a question id, tag name, or set name. */
+  identifier?: string;
+  /** Exact message fallback for rules without a semantic identity. */
+  message?: string;
   /** 1-based occurrence among diagnostics with this rule and message. */
-  occurrence: number;
+  occurrence?: number;
 }
 
 export interface NavigatorConfig {

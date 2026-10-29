@@ -55,16 +55,36 @@
       }
     },
     "ignoredDiagnostics": {
-      "description": "Exact diagnostic occurrences to suppress. Use the VS Code quick fix to add entries.",
+      "description": "Diagnostic violations to suppress. Uses a semantic identifier when the rule provides one, otherwise an exact message and occurrence. Use the VS Code quick fix to add entries.",
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "file",
-          "rule",
-          "message",
-          "occurrence"
+          "rule"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "identifier"
+            ],
+            "not": {
+              "anyOf": [
+                { "required": ["message"] },
+                { "required": ["occurrence"] }
+              ]
+            }
+          },
+          {
+            "required": [
+              "message",
+              "occurrence"
+            ],
+            "not": {
+              "required": ["identifier"]
+            }
+          }
         ],
         "properties": {
           "file": {
@@ -98,8 +118,13 @@
               "pl-template-file-exist"
             ]
           },
+          "identifier": {
+            "description": "Stable semantic identity of the violation, such as a question id, tag name, or assessment-set name.",
+            "type": "string",
+            "minLength": 1
+          },
           "message": {
-            "description": "Exact diagnostic message to suppress.",
+            "description": "Exact diagnostic message to suppress when the rule has no semantic identifier.",
             "type": "string",
             "minLength": 1
           },

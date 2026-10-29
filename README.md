@@ -47,10 +47,12 @@ The older `unusedQuestions`, `unusedTags`, `unusedAssessmentSets`, and
 same scope.
 
 Every PrairieLearn Navigator diagnostic offers **Ignore this violation in this
-file**, which adds an exact file/rule/message/occurrence suppression to
-`.pl-navigator.jsonc`, and **Configure severity for …**, which opens that
-rule's dropdown in VS Code Settings. Unused tags and assessment sets can be
-removed directly; an unused question can be moved to Trash after confirmation.
+file**, which adds a suppression to `.pl-navigator.jsonc`, and **Configure
+severity for …**, which opens that rule's dropdown in VS Code Settings.
+Suppressions use semantic identifiers when available—question ids, tag names,
+and assessment-set names—and fall back to exact message/occurrence matching.
+Unused tags and assessment sets can be removed directly; an unused question
+can be moved to Trash after confirmation.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
 back online.

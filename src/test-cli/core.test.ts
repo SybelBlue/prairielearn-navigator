@@ -123,6 +123,10 @@ test("ignored diagnostics resolve files relative to their config source", () => 
         rule: "client-files-course-exist",
         message: "file not found",
         occurrence: 1,
+      }, {
+        file: "questions/draft/info.json",
+        rule: "unused-question",
+        identifier: "draft",
       }],
     },
   });
@@ -132,6 +136,10 @@ test("ignored diagnostics resolve files relative to their config source", () => 
     rule: "client-files-course-exist",
     message: "file not found",
     occurrence: 1,
+  }, {
+    file: path.join(brokenCourse, "questions/draft/info.json"),
+    rule: "unused-question",
+    identifier: "draft",
   }]);
 });
 
@@ -324,6 +332,25 @@ test("unused tags and assessment sets are flagged on their infoCourse.json name"
     ]
   );
   assert.deepEqual(await runRules(file, text, { courseRoot: course, config, schemas }), []);
+
+  const suppressed = {
+    ...config,
+    ignoredDiagnostics: [{
+      file,
+      rule: "unused-tag" as const,
+      identifier: "unused",
+    }],
+  };
+  const remaining = await runRules(file, text, {
+    courseRoot: course,
+    config: suppressed,
+    schemas,
+    references,
+  });
+  assert.deepEqual(
+    remaining.map((diagnostic) => diagnostic.code),
+    ["prairielearn-navigator/unused-assessment-set"]
+  );
 });
 
 test("severity keys are shorthand for their rule's setting", () => {

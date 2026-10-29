@@ -206,6 +206,7 @@ export const unusedQuestion: RuleImpl = ({ references, filePath, courseRoot, doc
     ...rangeOf(doc, ["title"]),
     message: `question "${localId}" is not used by any assessment`,
     severity: "info",
+    identifier: localId,
   }];
 };
 
@@ -222,7 +223,12 @@ function unusedCourseNames(kind: keyof UsedNames, describe: (name: string) => st
     const used = references.namesUsed(kind);
     return defined.flatMap((entry: { name?: unknown } | null, i): Diagnostic[] =>
       typeof entry?.name === "string" && !used.has(entry.name)
-        ? [{ ...rangeOf(doc, [kind, i, "name"]), message: describe(entry.name), severity: "warning" }]
+        ? [{
+            ...rangeOf(doc, [kind, i, "name"]),
+            message: describe(entry.name),
+            severity: "warning",
+            identifier: entry.name,
+          }]
         : []
     );
   };

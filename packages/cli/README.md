@@ -67,8 +67,7 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
   "ignoredDiagnostics": [{
     "file": "questions/draft/info.json",
     "rule": "unused-question",
-    "message": "question \"draft\" is not used by any assessment",
-    "occurrence": 1
+    "identifier": "draft"
   }],
   // Questions no assessment uses: "ignored", "info" (default), "warning", or "error"
   "unusedQuestions": "warning",
@@ -82,10 +81,11 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
 }
 ```
 
-An ignored diagnostic is matched by its course-relative file, rule, exact
-message, and 1-based occurrence among diagnostics in that file with the same
-rule and message. This keeps otherwise identical occurrences independently
-selectable.
+An ignored diagnostic is matched by its course-relative file and rule. When a
+rule has stable semantic context, the quick fix adds an `identifier`, such as a
+question id, tag name, or assessment-set name. Other rules fall back to an
+exact `message` and 1-based `occurrence` among matching diagnostics in that
+file. Existing message/occurrence suppressions remain supported.
 
 PrairieLearn has no numbered releases; it deploys continuously from its
 `master` branch. So a version is one of:

@@ -16,13 +16,16 @@ import { vscodeRuleSettings } from "./ruleSettings";
 
 const diagnosticPrefix = "prairielearn-navigator/";
 
-export interface IgnoreDiagnosticArgs {
+interface IgnoreDiagnosticBase {
   courseRoot: string;
   file: string;
   rule: RuleId;
-  message: string;
-  occurrence: number;
 }
+
+export type IgnoreDiagnosticArgs = IgnoreDiagnosticBase & (
+  | { identifier: string }
+  | { message: string; occurrence: number }
+);
 
 export interface RemoveUnusedQuestionArgs {
   courseRoot: string;
@@ -58,7 +61,11 @@ function formattingOptions(text: string, eol: "\n" | "\r\n") {
 /** Adds one exact suppression to the course config. */
 export async function ignoreDiagnostic(args: IgnoreDiagnosticArgs): Promise<boolean> {
   const configUri = vscode.Uri.file(path.join(args.courseRoot, configFileName));
-  const entry = {
+  const entry = "identifier" in args ? {
+    file: relativeFile(args.courseRoot, args.file),
+    rule: args.rule,
+    identifier: args.identifier,
+  } : {
     file: relativeFile(args.courseRoot, args.file),
     rule: args.rule,
     message: args.message,
@@ -202,6 +209,42 @@ function diagnosticOccurrence(
   return index < 0 ? 1 : index + 1;
 }
 
+function semanticIdentifier(
+  document: vscode.TextDocument,
+  diagnostic: vscode.Diagnostic,
+  rule: RuleId,
+  courseRoot: string
+): string | undefined {
+  if (rule === "unused-question" && courseRoot) {
+    const questionDir = path.dirname(document.uri.fsPath);
+    const questionsRoot = path.join(courseRoot, "questions") + path.sep;
+    return questionDir.startsWith(questionsRoot)
+      ? path.relative(path.join(courseRoot, "questions"), questionDir).split(path.sep).join("/")
+      : undefined;
+  }
+  const collection =
+    rule === "unused-tag" ? "tags"
+    : rule === "unused-assessment-set" ? "assessmentSets"
+    : undefined;
+  if (!collection) {
+    return undefined;
+  }
+  const jsonPath = getLocation(
+    document.getText(),
+    document.offsetAt(diagnostic.range.start)
+  ).path;
+  if (
+    jsonPath[0] !== collection ||
+    typeof jsonPath[1] !== "number" ||
+    jsonPath[2] !== "name"
+  ) {
+    return undefined;
+  }
+  const tree = parseTree(document.getText());
+  const node = tree && findNodeAtLocation(tree, [collection, jsonPath[1], "name"]);
+  return typeof node?.value === "string" ? node.value : undefined;
+}
+
 function unusedItemRemoval(
   document: vscode.TextDocument,
   diagnostic: vscode.Diagnostic,
@@ -295,6 +338,7 @@ export class DiagnosticQuickFixProvider implements vscode.CodeActionProvider {
       }
 
       if (courseRoot) {
+        const identifier = semanticIdentifier(document, diagnostic, rule, courseRoot);
         const ignore = new vscode.CodeAction(
           "Ignore this violation in this file",
           vscode.CodeActionKind.QuickFix
@@ -303,13 +347,17 @@ export class DiagnosticQuickFixProvider implements vscode.CodeActionProvider {
         ignore.command = {
           command: "prairielearn-navigator.ignoreDiagnostic",
           title: ignore.title,
-          arguments: [{
-            courseRoot,
-            file: document.uri.fsPath,
-            rule,
-            message: diagnostic.message,
-            occurrence: diagnosticOccurrence(document, diagnostic, rule),
-          } satisfies IgnoreDiagnosticArgs],
+          arguments: [(
+            identifier !== undefined
+              ? { courseRoot, file: document.uri.fsPath, rule, identifier }
+              : {
+                  courseRoot,
+                  file: document.uri.fsPath,
+                  rule,
+                  message: diagnostic.message,
+                  occurrence: diagnosticOccurrence(document, diagnostic, rule),
+                }
+          ) satisfies IgnoreDiagnosticArgs],
         };
         actions.push(ignore);
       }

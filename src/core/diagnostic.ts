@@ -31,6 +31,8 @@ export interface Diagnostic {
   message: string;
   severity: Severity;
   code?: string;
+  /** Stable rule-specific identity used for semantic suppressions when available. */
+  identifier?: string;
   related?: RelatedInfo[];
   metadata?: DiagnosticMetadata;
 }

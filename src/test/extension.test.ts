@@ -96,14 +96,18 @@ suite("PrairieLearn Navigator", () => {
       candidate.message.includes("clientFilesCourse/missing.css")
     );
     assert.ok(diagnostic);
-    const actions = await vscode.commands.executeCommand<(vscode.CodeAction | vscode.Command)[]>(
-      "vscode.executeCodeActionProvider",
-      depsInfo,
-      diagnostic.range,
-      vscode.CodeActionKind.QuickFix.value
-    );
-    const codeActions = actions as vscode.CodeAction[];
-    const ignore = codeActions.find((action) => action.title === "Ignore this violation in this file");
+    const document = await vscode.workspace.openTextDocument(depsInfo);
+    const actions = new DiagnosticQuickFixProvider({ getCourseIdFor: () => course })
+      .provideCodeActions(
+        document,
+        diagnostic.range,
+        {
+          diagnostics: [diagnostic],
+          only: vscode.CodeActionKind.QuickFix,
+          triggerKind: vscode.CodeActionTriggerKind.Invoke,
+        }
+      );
+    const ignore = actions.find((action) => action.title === "Ignore this violation in this file");
     assert.ok(ignore?.command);
     assert.deepStrictEqual(ignore.command.arguments?.[0], {
       courseRoot: course,
@@ -112,7 +116,7 @@ suite("PrairieLearn Navigator", () => {
       message: diagnostic.message,
       occurrence: 1,
     });
-    const configure = codeActions.find((action) =>
+    const configure = actions.find((action) =>
       action.title === "Configure severity for client-files-course-exist…"
     );
     assert.deepStrictEqual(configure?.command, {
@@ -141,7 +145,7 @@ suite("PrairieLearn Navigator", () => {
           '{\n  "assessmentSets": [{ "name": "Homework" }, { "name": "unused" }]\n}',
       },
     ] as const;
-    const provider = new DiagnosticQuickFixProvider({ getCourseIdFor: () => "" });
+    const provider = new DiagnosticQuickFixProvider({ getCourseIdFor: () => "/course" });
     for (const testCase of cases) {
       const document = await vscode.workspace.openTextDocument({
         content: testCase.content,
@@ -166,6 +170,13 @@ suite("PrairieLearn Navigator", () => {
       );
       const remove = actions.find((action) => action.title === testCase.title);
       assert.ok(remove?.edit);
+      const ignore = actions.find((action) => action.title === "Ignore this violation in this file");
+      assert.deepStrictEqual(ignore?.command?.arguments?.[0], {
+        courseRoot: "/course",
+        file: document.uri.fsPath,
+        rule: testCase.rule,
+        identifier: "unused",
+      });
       assert.equal(await vscode.workspace.applyEdit(remove.edit), true);
       const value = JSON.parse(document.getText()) as Record<string, unknown[]>;
       assert.deepStrictEqual(value[testCase.key], [{ name: testCase.key === "tags" ? "used" : "Homework" }]);
@@ -192,6 +203,13 @@ suite("PrairieLearn Navigator", () => {
       title: "Move unused question directory to Trash…",
       arguments: [{ courseRoot: course, file: depsInfo.fsPath }],
     });
+    const ignore = actions.find((action) => action.title === "Ignore this violation in this file");
+    assert.deepStrictEqual(ignore?.command?.arguments?.[0], {
+      courseRoot: course,
+      file: depsInfo.fsPath,
+      rule: "unused-question",
+      identifier: "deps",
+    });
   });
 
   test("ignoring a diagnostic creates and extends the course config", async () => {
@@ -209,6 +227,12 @@ suite("PrairieLearn Navigator", () => {
       assert.equal(await ignoreDiagnostic({ ...base, occurrence: 1 }), true);
       assert.equal(await ignoreDiagnostic({ ...base, occurrence: 1 }), true);
       assert.equal(await ignoreDiagnostic({ ...base, occurrence: 2 }), true);
+      assert.equal(await ignoreDiagnostic({
+        courseRoot: root,
+        file,
+        rule: "unused-question",
+        identifier: "q",
+      }), true);
       const saved = JSON.parse(
         fs.readFileSync(path.join(root, ".pl-navigator.jsonc"), "utf-8")
       );
@@ -224,6 +248,11 @@ suite("PrairieLearn Navigator", () => {
           rule: "schema",
           message: "missing a property",
           occurrence: 2,
+        },
+        {
+          file: "questions/q/info.json",
+          rule: "unused-question",
+          identifier: "q",
         },
       ]);
     } finally {
