@@ -18,6 +18,7 @@ import { findFileRefs, sourceOf } from "../core/references/extract";
 import { indexedRules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules } from "../core/rules/run";
 import { SchemaStore } from "../core/schemas";
+import { CliRuntime, processRuntime } from "./runtime";
 
 // ── Types ──
 
@@ -61,7 +62,8 @@ class Setups {
 
   constructor(
     private configPath: string | undefined,
-    private overrides: ConfigOverrides
+    private overrides: ConfigOverrides,
+    private cwd: string
   ) {}
 
   get(courseRoot: string): CourseSetup {
@@ -69,7 +71,9 @@ class Setups {
     if (!setup) {
       const loaded = loadConfig(courseRoot, {
         configPath: this.configPath,
+        configPathBaseDir: this.cwd,
         overrides: this.overrides,
+        overridesBaseDir: this.cwd,
       });
       const { schemaCacheDir } = loaded.config;
       let schemas = this.stores.get(schemaCacheDir);
@@ -330,9 +334,8 @@ function expandGlob(pattern: string, cwd: string): string[] {
     .map((m) => path.resolve(cwd, m));
 }
 
-function resolveFiles(paths: string[]): string[] {
+function resolveFiles(paths: string[], cwd: string): string[] {
   const files = new Set<string>();
-  const cwd = process.cwd();
   for (const p of paths) {
     if (isGlob(p)) {
       for (const f of expandGlob(p, cwd)) {
@@ -358,8 +361,7 @@ function resolveFiles(paths: string[]): string[] {
 }
 
 /** Whether `file` is, or is under, one of the paths or globs given to check. */
-function inScope(file: string, paths: string[]): boolean {
-  const cwd = process.cwd();
+function inScope(file: string, paths: string[], cwd: string): boolean {
   const rel = path.relative(cwd, file).split(path.sep).join("/");
   return paths.some((p) => {
     if (isGlob(p)) {
@@ -372,8 +374,7 @@ function inScope(file: string, paths: string[]): boolean {
 }
 
 /** The course of each path, or of each match of a glob. */
-function courseRootsOf(paths: string[]): Set<string> {
-  const cwd = process.cwd();
+function courseRootsOf(paths: string[], cwd: string): Set<string> {
   const cache = new Map<string, string | null>();
   const roots = new Set<string>();
   for (const p of paths) {
@@ -514,27 +515,31 @@ function parseArgs(
   return { options, paths };
 }
 
-export async function run(args: string[]): Promise<number> {
+export async function run(
+  args: string[],
+  runtime: CliRuntime = processRuntime()
+): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(USAGE);
+    runtime.stdout(USAGE);
     return 0;
   }
 
   const parsed = parseArgs(args);
   if (typeof parsed === "string") {
-    console.error(styleText("red", parsed));
-    console.error(USAGE);
+    runtime.stderr(styleText("red", parsed));
+    runtime.stderr(USAGE);
     return 1;
   }
   const { options, paths } = parsed;
   const format = (options["--format"] ?? "pretty") as Format;
   if (format !== "pretty" && format !== "github") {
-    console.error(styleText("red", `Invalid --format: ${format}`));
+    runtime.stderr(styleText("red", `Invalid --format: ${format}`));
     return 1;
   }
   if (paths.length === 0) {
     paths.push(".");
   }
+  const cwd = runtime.cwd;
 
   const overrides: ConfigOverrides = {
     excludes: options["--exclude"]?.split("\0"),
@@ -548,18 +553,20 @@ export async function run(args: string[]): Promise<number> {
   // Surface bad flags (and a missing --config) before doing any work
   const flagProblems = loadConfig(null, {
     configPath: options["--config"],
+    configPathBaseDir: cwd,
     overrides,
+    overridesBaseDir: cwd,
   }).problems.filter((p) => !p.file);
   if (flagProblems.length > 0) {
-    flagProblems.forEach((p) => console.error(styleText("red", p.message)));
+    flagProblems.forEach((p) => runtime.stderr(styleText("red", p.message)));
     return 1;
   }
-  const setups = new Setups(options["--config"], overrides);
+  const setups = new Setups(options["--config"], overrides, cwd);
 
-  const files = courseFilesOf(resolveFiles(paths), (file, courseRoot) =>
+  const files = courseFilesOf(resolveFiles(paths, cwd), (file, courseRoot) =>
     isExcluded(
       courseRoot === null
-        ? loadConfig(null, { overrides }).config
+        ? loadConfig(null, { overrides, overridesBaseDir: cwd }).config
         : setups.get(courseRoot).loaded.config,
       file
     )
@@ -569,22 +576,22 @@ export async function run(args: string[]): Promise<number> {
   // after the rest if not
   const courseDiagnostics = new Map<string, Diagnostic[]>();
   const courseRoots = new Set([
-    ...courseRootsOf(paths),
+    ...courseRootsOf(paths, cwd),
     ...files.flatMap(([, root]) => (root === null ? [] : [root])),
   ]);
   for (const courseRoot of courseRoots) {
     for (const [file, diagnostics] of runCourseRules(courseRoot, setups.get(courseRoot).loaded.config)) {
-      if (inScope(file, paths)) {
+      if (inScope(file, paths, cwd)) {
         courseDiagnostics.set(file, diagnostics);
       }
     }
   }
   if (files.length === 0 && courseDiagnostics.size === 0) {
-    console.error(
+    runtime.stderr(
       styleText("yellow", "No PrairieLearn course JSON files found in:")
     );
     for (const p of paths) {
-      console.error(styleText("yellow", `  ${p}`));
+      runtime.stderr(styleText("yellow", `  ${p}`));
     }
     return 1;
   }
@@ -596,7 +603,6 @@ export async function run(args: string[]): Promise<number> {
   const checkedQuestions = new Set<string>();
   const listing: string[] = [];
   const output: string[] = [];
-  const cwd = process.cwd();
   const displayPathOf = (file: string) => path.relative(cwd, file) || file;
 
   const report = (errors: CheckError[], source: () => string) => {
@@ -675,23 +681,23 @@ export async function run(args: string[]): Promise<number> {
 
   // Every file verified, each assessment followed by its questions' info.json
   if (format === "github") {
-    console.log("::group::Checked files");
-    listing.forEach((line) => console.log(line));
-    console.log("::endgroup::");
+    runtime.stdout("::group::Checked files");
+    listing.forEach((line) => runtime.stdout(line));
+    runtime.stdout("::endgroup::");
   } else {
-    listing.forEach((line) => console.log(line));
+    listing.forEach((line) => runtime.stdout(line));
   }
 
   if (output.length > 0) {
     if (format === "pretty") {
-      console.log();
+      runtime.stdout();
     }
     for (const line of output) {
-      console.log(line);
+      runtime.stdout(line);
     }
   }
 
-  console.log(
+  runtime.stdout(
     formatSummary(
       totalErrors,
       filesWithErrors,

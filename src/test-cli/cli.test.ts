@@ -1,23 +1,25 @@
 import * as assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test } from "vitest";
+import { run } from "../cli/runner";
 
-const cli = path.resolve(__dirname, "../../packages/cli/dist/cli.js");
 const fixtures = path.join(__dirname, "fixtures");
 
-function runCli(...args: string[]) {
-  const result = spawnSync(process.execPath, [cli, ...args], {
+async function runCli(...args: string[]) {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const code = await run(args, {
     cwd: fixtures,
-    encoding: "utf-8",
-    env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+    stdout: (message = "") => stdout.push(message),
+    stderr: (message = "") => stderr.push(message),
   });
-  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
+  const output = (lines: string[]) => lines.length > 0 ? lines.join("\n") + "\n" : "";
+  return { code, stdout: output(stdout), stderr: output(stderr) };
 }
 
-test("broken course exits 1 with code frames", () => {
-  const { code, stdout } = runCli("check", "broken");
+test("broken course exits 1 with code frames", async () => {
+  const { code, stdout } = await runCli("check", "broken");
   assert.equal(code, 1);
   const assessment = path.join(
     "broken",
@@ -34,8 +36,8 @@ test("broken course exits 1 with code frames", () => {
   assert.match(stdout, /25 errors, 4 warnings, 6 infos in 10 files \(22 files, 6 questions checked\)/);
 });
 
-test("lists every checked file, with each assessment's questions under it", () => {
-  const { stdout } = runCli("check", "broken");
+test("lists every checked file, with each assessment's questions under it", async () => {
+  const { stdout } = await runCli("check", "broken");
   const listing = stdout.split("\n\n")[0].split("\n");
   assert.deepEqual(listing, [
     "broken/courseInstances/Fa26/assessments/hw1/infoAssessment.json",
@@ -75,8 +77,8 @@ test("lists every checked file, with each assessment's questions under it", () =
   ]);
 });
 
-test("missing clientFilesCourse dependencies are errors", () => {
-  const { stdout } = runCli("check", "broken/questions/deps");
+test("missing clientFilesCourse dependencies are errors", async () => {
+  const { stdout } = await runCli("check", "broken/questions/deps");
   assert.match(
     stdout,
     /broken\/questions\/deps\/info\.json:7:48 error: file not found: clientFilesCourse\/missing\.css \[client-files-course-exist\]/
@@ -85,8 +87,8 @@ test("missing clientFilesCourse dependencies are errors", () => {
   assert.doesNotMatch(stdout, /not found: clientFilesCourse\/exists\.css/);
 });
 
-test("missing pl-figure files are errors", () => {
-  const { stdout } = runCli("check", "broken/questions/figures");
+test("missing pl-figure files are errors", async () => {
+  const { stdout } = await runCli("check", "broken/questions/figures");
   assert.match(
     stdout,
     /question\.html:3:23 error: file not found: questions\/figures\/clientFilesQuestion\/missing\.png \[pl-figure-file-exist\]/
@@ -96,8 +98,8 @@ test("missing pl-figure files are errors", () => {
   assert.match(stdout, /4 errors, 1 info in 1 file \(2 files, 0 questions checked\)/);
 });
 
-test("every element and JSON field that names a file is checked", () => {
-  const { stdout } = runCli("check", "broken/questions/allElements", "broken/questions/jsonRefs", "broken/elements");
+test("every element and JSON field that names a file is checked", async () => {
+  const { stdout } = await runCli("check", "broken/questions/allElements", "broken/questions/jsonRefs", "broken/elements");
   for (const rule of [
     "pl-file-download", "pl-code", "pl-file-editor", "pl-graph", "pl-excalidraw", "pl-template",
   ]) {
@@ -110,15 +112,15 @@ test("every element and JSON field that names a file is checked", () => {
   assert.match(stdout, /11 errors, 1 warning, 2 infos in 3 files/);
 });
 
-test("comments and trailing commas in course JSON are errors, as in PrairieLearn", () => {
-  const { stdout } = runCli("check", "broken/questions/commented");
+test("comments and trailing commas in course JSON are errors, as in PrairieLearn", async () => {
+  const { stdout } = await runCli("check", "broken/questions/commented");
   assert.match(stdout, /info\.json:2:3 error: comments are not allowed/);
   assert.match(stdout, /info\.json:6:15 error: trailing commas are not allowed/);
   assert.match(stdout, /2 errors, 1 info in 1 file/);
 });
 
-test("validates against the pinned PrairieLearn schema", () => {
-  const { stdout } = runCli("check", "broken/questions/badSchema");
+test("validates against the pinned PrairieLearn schema", async () => {
+  const { stdout } = await runCli("check", "broken/questions/badSchema");
   assert.match(
     stdout,
     /6:20 error: \/singleVariant must be boolean \(PL schema 151aabd\) \[schema\]/
@@ -126,8 +128,8 @@ test("validates against the pinned PrairieLearn schema", () => {
   assert.match(stdout, /7:19 warning: unknown property "notAProperty"/);
 });
 
-test("--config can turn rules off or change their severity", () => {
-  const { code, stdout } = runCli(
+test("--config can turn rules off or change their severity", async () => {
+  const { code, stdout } = await runCli(
     "check",
     "--config",
     "configs/relaxed.jsonc",
@@ -140,35 +142,35 @@ test("--config can turn rules off or change their severity", () => {
   assert.match(stdout, /warning: file not found: clientFilesCourse\/missing\.css/);
 });
 
-test("unused questions are infos by default", () => {
-  const { code, stdout } = runCli("check", "broken/questions/commented");
+test("unused questions are infos by default", async () => {
+  const { code, stdout } = await runCli("check", "broken/questions/commented");
   assert.equal(code, 1); // from its syntax errors
   assert.match(
     stdout,
     /info\.json:4:12 info: question "commented" is not used by any assessment \[unused-question\]/
   );
-  assert.doesNotMatch(runCli("check", "clean").stdout, /unused-question/);
+  assert.doesNotMatch((await runCli("check", "clean")).stdout, /unused-question/);
 });
 
-test("--unused-questions sets their severity", () => {
-  const ignored = runCli("check", "--unused-questions", "ignored", "broken/questions/commented");
+test("--unused-questions sets their severity", async () => {
+  const ignored = await runCli("check", "--unused-questions", "ignored", "broken/questions/commented");
   assert.doesNotMatch(ignored.stdout, /unused-question/);
   assert.match(ignored.stdout, /2 errors in 1 file/);
 
-  const errors = runCli("check", "--unused-questions", "error", "broken/questions/commented");
+  const errors = await runCli("check", "--unused-questions", "error", "broken/questions/commented");
   assert.match(errors.stdout, /4:12 error: question "commented" is not used/);
   assert.match(errors.stdout, /3 errors in 1 file/);
 
-  const github = runCli("check", "--format", "github", "broken/questions/commented");
+  const github = await runCli("check", "--format", "github", "broken/questions/commented");
   assert.match(github.stdout, /^::notice file=.*commented\/info\.json,line=4,.*\[unused-question\]$/m);
 
-  const bogus = runCli("check", "--unused-questions", "bogus", "clean");
+  const bogus = await runCli("check", "--unused-questions", "bogus", "clean");
   assert.equal(bogus.code, 1);
   assert.match(bogus.stderr, /unusedQuestions must be "ignored", "info", "warning", or "error"/);
 });
 
-test("unusedQuestions in the config file sets their severity", () => {
-  const { stdout } = runCli(
+test("unusedQuestions in the config file sets their severity", async () => {
+  const { stdout } = await runCli(
     "check",
     "--config",
     "configs/unused.jsonc",
@@ -180,8 +182,8 @@ test("unusedQuestions in the config file sets their severity", () => {
   assert.match(stdout, /12:36 error: assessment set "Quiz" is not used/);
 });
 
-test("unused tags and assessment sets are warnings by default", () => {
-  const { code, stdout } = runCli("check", "names");
+test("unused tags and assessment sets are warnings by default", async () => {
+  const { code, stdout } = await runCli("check", "names");
   assert.equal(code, 0);
   assert.match(stdout, /infoCourse\.json:8:15 warning: tag "unused" is not used by any question \[unused-tag\]/);
   assert.match(
@@ -192,21 +194,21 @@ test("unused tags and assessment sets are warnings by default", () => {
   assert.match(stdout, /2 warnings in 1 file/);
 });
 
-test("--unused-tags and --unused-assessment-sets set their severity", () => {
-  const { code, stdout } = runCli(
+test("--unused-tags and --unused-assessment-sets set their severity", async () => {
+  const { code, stdout } = await runCli(
     "check", "--unused-tags", "error", "--unused-assessment-sets", "ignored", "names"
   );
   assert.equal(code, 1);
   assert.match(stdout, /8:15 error: tag "unused" is not used/);
   assert.doesNotMatch(stdout, /unused-assessment-set/);
 
-  const bogus = runCli("check", "--unused-assessment-sets", "off", "names");
+  const bogus = await runCli("check", "--unused-assessment-sets", "off", "names");
   assert.equal(bogus.code, 1);
   assert.match(bogus.stderr, /unusedAssessmentSets must be "ignored", "info", "warning", or "error"/);
 });
 
-test("question directories without info.json are errors that PrairieLearn fails to load", () => {
-  const { code, stdout } = runCli("check", "broken/questions");
+test("question directories without info.json are errors that PrairieLearn fails to load", async () => {
+  const { code, stdout } = await runCli("check", "broken/questions");
   assert.equal(code, 1);
   // On question.html, with its code frame
   assert.match(
@@ -222,34 +224,34 @@ test("question directories without info.json are errors that PrairieLearn fails 
   assert.doesNotMatch(stdout, /directory "(topic|\.hidden)"/);
 });
 
-test("question directories without info.json are reported only within the paths checked", () => {
-  const { stdout } = runCli("check", "broken/questions/commented");
+test("question directories without info.json are reported only within the paths checked", async () => {
+  const { stdout } = await runCli("check", "broken/questions/commented");
   assert.doesNotMatch(stdout, /question-info-missing/);
-  const globbed = runCli("check", "broken/questions/only*");
+  const globbed = await runCli("check", "broken/questions/only*");
   assert.match(globbed.stdout, /onlyServer\/server\.py:1:1 error/);
   assert.doesNotMatch(globbed.stdout, /noInfo/);
   // From above the course, too
-  assert.match(runCli("check", ".").stdout, /onlyServer\/server\.py:1:1 error/);
+  assert.match((await runCli("check", ".")).stdout, /onlyServer\/server\.py:1:1 error/);
 });
 
-test("--missing-question-info sets their severity", () => {
-  const warning = runCli("check", "--missing-question-info", "warning", "broken/questions/onlyServer");
+test("--missing-question-info sets their severity", async () => {
+  const warning = await runCli("check", "--missing-question-info", "warning", "broken/questions/onlyServer");
   assert.equal(warning.code, 0);
   assert.match(warning.stdout, /server\.py:1:1 warning: directory "onlyServer"/);
   assert.match(warning.stdout, /1 warning in 1 file/);
 
-  const ignored = runCli("check", "--missing-question-info", "ignored", "broken/questions");
+  const ignored = await runCli("check", "--missing-question-info", "ignored", "broken/questions");
   assert.doesNotMatch(ignored.stdout, /question-info-missing/);
 
-  const bogus = runCli("check", "--missing-question-info", "off", "broken");
+  const bogus = await runCli("check", "--missing-question-info", "off", "broken");
   assert.equal(bogus.code, 1);
   assert.match(bogus.stderr, /missingQuestionInfo must be "ignored", "info", "warning", or "error"/);
 });
 
-test("config problems are reported on the config file", () => {
+test("config problems are reported on the config file", async () => {
   // The file's invalid plVersion would fall back to "latest" and download
   // schemas; pin the version so the test stays offline
-  const { code, stdout } = runCli(
+  const { code, stdout } = await runCli(
     "check",
     "--config",
     "configs/invalid.jsonc",
@@ -268,8 +270,8 @@ test("config problems are reported on the config file", () => {
   assert.match(stdout, /invalid\.jsonc:5:14 warning: unknown rule "nope"/);
 });
 
-test("--exclude and config excludes skip files entirely", () => {
-  const { code, stdout } = runCli(
+test("--exclude and config excludes skip files entirely", async () => {
+  const { code, stdout } = await runCli(
     "check",
     "--exclude", "broken/questions/**",
     "--exclude", "broken/elements/**",
@@ -281,22 +283,22 @@ test("--exclude and config excludes skip files entirely", () => {
   assert.doesNotMatch(stdout, /questions\//);
 });
 
-test("invalid --pl-version exits 1", () => {
-  const { code, stderr } = runCli("check", "--pl-version", "1.2.3", "clean");
+test("invalid --pl-version exits 1", async () => {
+  const { code, stderr } = await runCli("check", "--pl-version", "1.2.3", "clean");
   assert.equal(code, 1);
   assert.match(stderr, /invalid plVersion "1\.2\.3"/);
 });
 
-test("--format github groups the checked files", () => {
-  const { stdout } = runCli("check", "--format", "github", "clean");
+test("--format github groups the checked files", async () => {
+  const { stdout } = await runCli("check", "--format", "github", "clean");
   assert.match(
     stdout,
     /^::group::Checked files\nclean\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json\n {2}clean\/questions\/good\/info\.json\nclean\/infoCourse\.json\nclean\/questions\/good\/info\.json\nclean\/questions\/good\/question\.html\n::endgroup::$/m
   );
 });
 
-test("--format github emits workflow annotations", () => {
-  const { code, stdout } = runCli("check", "--format", "github", "broken");
+test("--format github emits workflow annotations", async () => {
+  const { code, stdout } = await runCli("check", "--format", "github", "broken");
   assert.equal(code, 1);
   const lines = stdout.split("\n").filter((l) => /^::(error|warning) /.test(l));
   assert.equal(lines.length, 29);
@@ -314,44 +316,54 @@ test("--format github emits workflow annotations", () => {
   );
 });
 
-test("clean course exits 0", () => {
-  const { code, stdout } = runCli("check", "clean");
+test("clean course exits 0", async () => {
+  const { code, stdout } = await runCli("check", "clean");
   assert.equal(code, 0);
   assert.match(stdout, /No errors found \(4 files, 1 question checked\)/);
 });
 
-test("assessment outside a course warns but does not fail", () => {
-  const { code, stdout } = runCli("check", "noCourse");
+test("assessment outside a course warns but does not fail", async () => {
+  const { code, stdout } = await runCli("check", "noCourse");
   assert.equal(code, 0);
   assert.match(stdout, /warning: not inside a course/);
 });
 
-test("no matching files exits 1", () => {
-  const { code, stderr } = runCli("check", "broken/clientFilesCourse");
+test("no matching files exits 1", async () => {
+  const { code, stderr } = await runCli("check", "broken/clientFilesCourse");
   assert.equal(code, 1);
   assert.match(stderr, /No PrairieLearn course JSON files found/);
 });
 
-test("glob matching directories searches inside them", () => {
-  const { code, stdout } = runCli("check", "{broken,clean}/courseInstances/*");
+test("glob matching directories searches inside them", async () => {
+  const { code, stdout } = await runCli("check", "{broken,clean}/courseInstances/*");
   assert.equal(code, 1);
   assert.match(stdout, /3 errors, 2 warnings in 1 file \(2 files, 7 questions checked\)/);
 });
 
-test("glob matching files keeps only course JSON files", () => {
-  const { code, stdout } = runCli("check", "clean/**");
+test("glob matching files keeps only course JSON files", async () => {
+  const { code, stdout } = await runCli("check", "clean/**");
   assert.equal(code, 0);
   assert.match(stdout, /No errors found \(4 files, 1 question checked\)/);
 });
 
-test("glob with no matches exits 1", () => {
-  const { code, stderr } = runCli("check", "nope/**/*.json");
+test("glob with no matches exits 1", async () => {
+  const { code, stderr } = await runCli("check", "nope/**/*.json");
   assert.equal(code, 1);
   assert.match(stderr, /No PrairieLearn course JSON files found/);
 });
 
-test("invalid usage exits 1", () => {
-  assert.equal(runCli("bogus").code, 1);
-  assert.equal(runCli("check", "--format", "xml").code, 1);
-  assert.equal(runCli("check", "--help").code, 0);
+test("top-level usage and invalid commands return the expected status", async () => {
+  const help = await runCli("--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /^Usage: prairielearn-navigator <command>/);
+
+  const missing = await runCli();
+  assert.equal(missing.code, 1);
+  assert.equal(missing.stdout, help.stdout);
+
+  const unknown = await runCli("bogus");
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.stderr, /^Unknown command: bogus/);
+  assert.equal((await runCli("check", "--format", "xml")).code, 1);
+  assert.equal((await runCli("check", "--help")).code, 0);
 });

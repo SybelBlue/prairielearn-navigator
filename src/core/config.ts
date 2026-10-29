@@ -104,6 +104,8 @@ export function loadConfig(
   courseRoot: string | null,
   options: {
     configPath?: string;
+    /** What a relative configPath is relative to (default: cwd). */
+    configPathBaseDir?: string;
     overrides?: ConfigOverrides;
     /** What relative paths in `overrides` are relative to (default: cwd). */
     overridesBaseDir?: string;
@@ -120,9 +122,13 @@ export function loadConfig(
   };
   const problems: ConfigProblem[] = [];
 
-  const file =
-    options.configPath ??
-    (courseRoot ? path.join(courseRoot, configFileName) : undefined);
+  const file = options.configPath === undefined
+    ? courseRoot
+      ? path.join(courseRoot, configFileName)
+      : undefined
+    : options.configPath === ""
+      ? ""
+      : path.resolve(options.configPathBaseDir ?? process.cwd(), options.configPath);
   let found: string | undefined;
   if (file && fs.existsSync(file)) {
     found = path.resolve(file);
