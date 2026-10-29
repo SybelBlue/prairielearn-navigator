@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-29
+
 ## [1.1.2] - 10/29/2026
 
 - New `unused-question` rule: a question that no assessment uses gets a
