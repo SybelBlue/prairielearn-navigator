@@ -15,6 +15,7 @@ import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
+import { vscodeRuleSettings } from "../providers/ruleSettings";
 
 const fixtures = path.join(__dirname, "fixtures");
 const brokenCourse = path.join(fixtures, "broken");
@@ -167,6 +168,20 @@ test("the config file's JSON schema matches the config keys, rule ids, and setti
   assert.ok(shorthands.length > 0);
   for (const p of shorthands) {
     assert.deepEqual((p as { enum: unknown }).enum, severitySetting.options);
+  }
+});
+
+test("every rule has a dedicated VS Code severity dropdown", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "../../package.json"), "utf-8")
+  );
+  const properties = manifest.contributes.configuration.properties;
+  assert.deepEqual(Object.keys(vscodeRuleSettings).sort(), Object.keys(rules).sort());
+  for (const [id, key] of Object.entries(vscodeRuleSettings)) {
+    const setting = properties[`prairielearn-navigator.${key}`];
+    assert.ok(setting, `${id} is missing its VS Code setting`);
+    assert.deepEqual(setting.enum, ["default", "off", "info", "warning", "error"]);
+    assert.equal(setting.default, "default");
   }
 });
 

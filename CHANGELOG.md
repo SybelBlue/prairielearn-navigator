@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Every built-in rule now has a dedicated
+  `prairielearn-navigator.diagnostics.<rule-id>` VS Code severity dropdown with
+  `default`, `off`, `info`, `warning`, and `error` choices. The four severity
+  settings added in 1.1.2 remain supported as deprecated aliases.
+
 ## [1.1.2] - 2026-10-29
 
 - New `unused-question` rule: a question that no assessment uses gets a

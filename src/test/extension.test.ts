@@ -503,6 +503,42 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("a dedicated rule setting sets the diagnostic severity", async () => {
+    const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
+    const missing = () =>
+      ourDiagnostics(depsInfo).filter(
+        (d) => d.code === "prairielearn-navigator/client-files-course-exist"
+      );
+    try {
+      await settings.update(
+        "diagnostics.client-files-course-exist",
+        "info",
+        vscode.ConfigurationTarget.Workspace
+      );
+      const infos = await until(missing, (ds) =>
+        ds.length === 2 && ds.every((d) => d.severity === vscode.DiagnosticSeverity.Information)
+      );
+      assert.deepStrictEqual(
+        infos.map((d) => d.severity),
+        [vscode.DiagnosticSeverity.Information, vscode.DiagnosticSeverity.Information]
+      );
+
+      await settings.update(
+        "diagnostics.client-files-course-exist",
+        "off",
+        vscode.ConfigurationTarget.Workspace
+      );
+      assert.deepStrictEqual(await until(missing, (ds) => ds.length === 0), []);
+    } finally {
+      await settings.update(
+        "diagnostics.client-files-course-exist",
+        undefined,
+        vscode.ConfigurationTarget.Workspace
+      );
+      fs.rmSync(path.join(course, ".vscode"), { recursive: true, force: true });
+    }
+  });
+
   test("a question directory without info.json is an error on its first file, live as info.json comes and goes", async () => {
     const dir = path.join(course, "questions/onlyServer");
     const serverPy = vscode.Uri.file(path.join(dir, "server.py"));

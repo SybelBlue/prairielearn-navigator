@@ -7,19 +7,48 @@ import {
   loadConfig,
   NavigatorConfig,
 } from "../core/config";
+import { RuleId } from "../core/rules/registry";
 import { SchemaStore } from "../core/schemas";
+import { legacyVscodeRuleSettings, vscodeRuleSettings } from "./ruleSettings";
 
 const section = "prairielearn-navigator";
 const keys = [
   "plVersion",
   "schemaCacheDir",
   "rules",
-  "unusedQuestions",
-  "unusedTags",
-  "unusedAssessmentSets",
-  "missingQuestionInfo",
   "excludes",
 ] as const;
+
+function setRuleOverride(values: ConfigOverrides, id: RuleId, value: unknown) {
+  if (value === "default") {
+    return;
+  }
+  const existing = values.rules;
+  values.rules = {
+    ...(typeof existing === "object" && existing !== null && !Array.isArray(existing)
+      ? existing
+      : {}),
+    [id]: value === "ignored" ? "off" : value,
+  };
+}
+
+/** Adds explicitly configured rule settings at their correct precedence level. */
+function readRuleSettings(
+  settings: vscode.WorkspaceConfiguration,
+  overrides: ConfigOverrides,
+  userDefaults: ConfigOverrides,
+  settingNames: Partial<Record<RuleId, string>>
+) {
+  for (const [id, key] of Object.entries(settingNames) as [RuleId, string][]) {
+    const inspected = settings.inspect(key);
+    const workspaceValue = inspected?.workspaceFolderValue ?? inspected?.workspaceValue;
+    if (workspaceValue !== undefined) {
+      setRuleOverride(overrides, id, workspaceValue);
+    } else if (inspected?.globalValue !== undefined) {
+      setRuleOverride(userDefaults, id, inspected.globalValue);
+    }
+  }
+}
 
 /**
  * Resolves each course's NavigatorConfig from VS Code settings and the
@@ -120,6 +149,11 @@ export class ConfigProvider {
         userDefaults[key] = inspected.globalValue;
       }
     }
+    // Within one VS Code scope, a named setting is more specific than the
+    // legacy rules object, and the uniform diagnostics.* setting wins over
+    // its pre-1.2 one-off alias.
+    readRuleSettings(settings, overrides, userDefaults, legacyVscodeRuleSettings);
+    readRuleSettings(settings, overrides, userDefaults, vscodeRuleSettings);
     for (const values of [overrides, userDefaults]) {
       if (typeof values.schemaCacheDir === "string" && values.schemaCacheDir !== "") {
         values.schemaCacheDir = path.resolve(baseDir, values.schemaCacheDir);

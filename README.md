@@ -37,11 +37,13 @@ also reads. User-level settings rank below that file.
 | `prairielearn-navigator.schemaCacheDir` | Schema cache, relative to the workspace folder. Default: the extension's storage |
 | `prairielearn-navigator.uuidCommand` | Shell command for UUID completions. It must print one UUID. Default: `uuidgen` |
 | `prairielearn-navigator.rules` | Rule id → `off` / `info` / `warning` / `error` |
-| `prairielearn-navigator.unusedQuestions` | Severity for a question no assessment uses, shown on its `info.json` title: `ignored` / `info` (default) / `warning` / `error` |
-| `prairielearn-navigator.unusedTags` | Severity for an `infoCourse.json` tag no question uses, shown on its `name`: `ignored` / `info` / `warning` (default) / `error` |
-| `prairielearn-navigator.unusedAssessmentSets` | Severity for an `infoCourse.json` assessment set no assessment uses, shown on its `name`: `ignored` / `info` / `warning` (default) / `error` |
-| `prairielearn-navigator.missingQuestionInfo` | Severity for a directory in `questions/` with files but no `info.json`, which PrairieLearn fails to load: `ignored` / `info` / `warning` / `error` (default) |
+| `prairielearn-navigator.diagnostics.<rule-id>` | Dedicated severity dropdown for every [built-in rule](packages/cli/README.md#rules): `default` / `off` / `info` / `warning` / `error`. A non-default named setting overrides the `rules` object. |
 | `prairielearn-navigator.excludes` | Glob patterns of files never to check, relative to the workspace folder. Adds to the course file's `excludes` rather than replacing them. |
+
+The older `unusedQuestions`, `unusedTags`, `unusedAssessmentSets`, and
+`missingQuestionInfo` setting names remain supported as aliases. The uniform
+`diagnostics.*` setting takes precedence when both specify a severity in the
+same scope.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
 back online.

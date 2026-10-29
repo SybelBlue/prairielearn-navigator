@@ -96,6 +96,300 @@
           },
           "markdownDescription": "Turn rules off or change their severity, by rule id, e.g. `{ \"schema\": \"off\" }`."
         },
+        "prairielearn-navigator.diagnostics.json-syntax": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity of invalid JSON diagnostics, including comments and trailing commas rejected by PrairieLearn."
+        },
+        "prairielearn-navigator.diagnostics.schema": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity of PrairieLearn JSON schema diagnostics. By default, unknown properties are warnings and other violations are errors."
+        },
+        "prairielearn-navigator.diagnostics.duplicate-question-id": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when an assessment uses the same question ID more than once."
+        },
+        "prairielearn-navigator.diagnostics.unused-question": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity on a question's `info.json` title when no assessment uses the question."
+        },
+        "prairielearn-navigator.diagnostics.unused-tag": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity on a tag's `name` in `infoCourse.json` when no question uses the tag."
+        },
+        "prairielearn-navigator.diagnostics.unused-assessment-set": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity on an assessment set's `name` in `infoCourse.json` when no assessment uses the set."
+        },
+        "prairielearn-navigator.diagnostics.question-info-missing": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity for a directory in `questions/` that contains files but has no `info.json` and no question below it."
+        },
+        "prairielearn-navigator.diagnostics.client-files-course-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a referenced `clientFilesCourse` file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.client-files-question-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a referenced `clientFilesQuestion` file does not exist. Deprecated `clientFiles` references are warnings by default."
+        },
+        "prairielearn-navigator.diagnostics.server-files-course-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when an external grading `serverFilesCourse` entry does not exist."
+        },
+        "prairielearn-navigator.diagnostics.question-exists": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a referenced question directory, `info.json`, or required `question.html` does not exist."
+        },
+        "prairielearn-navigator.diagnostics.element-files-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when an element or element extension controller or dependency does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-figure-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a static `pl-figure` file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-file-download-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a static `pl-file-download` file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-code-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-code` source file or directory does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-file-editor-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-file-editor` source file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-graph-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-graph` source file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-rich-text-editor-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-rich-text-editor` source file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-excalidraw-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-excalidraw` source file does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-xss-safe-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-xss-safe` source file or directory does not exist."
+        },
+        "prairielearn-navigator.diagnostics.pl-template-file-exist": {
+          "type": "string",
+          "enum": ["default", "off", "info", "warning", "error"],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity when a `pl-template` source file does not exist."
+        },
         "prairielearn-navigator.unusedQuestions": {
           "type": "string",
           "enum": [
@@ -112,7 +406,8 @@
           ],
           "default": "info",
           "scope": "resource",
-          "markdownDescription": "Severity of the diagnostic on a question's `info.json` title when no assessment uses the question. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+          "markdownDescription": "Severity of the diagnostic on a question's `info.json` title when no assessment uses the question. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`.",
+          "markdownDeprecationMessage": "Use `prairielearn-navigator.diagnostics.unused-question` instead."
         },
         "prairielearn-navigator.unusedTags": {
           "type": "string",
@@ -130,7 +425,8 @@
           ],
           "default": "warning",
           "scope": "resource",
-          "markdownDescription": "Severity of the diagnostic on a tag's `name` in `infoCourse.json` when no question uses the tag. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+          "markdownDescription": "Severity of the diagnostic on a tag's `name` in `infoCourse.json` when no question uses the tag. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`.",
+          "markdownDeprecationMessage": "Use `prairielearn-navigator.diagnostics.unused-tag` instead."
         },
         "prairielearn-navigator.unusedAssessmentSets": {
           "type": "string",
@@ -148,7 +444,8 @@
           ],
           "default": "warning",
           "scope": "resource",
-          "markdownDescription": "Severity of the diagnostic on an assessment set's `name` in `infoCourse.json` when no assessment uses the set. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+          "markdownDescription": "Severity of the diagnostic on an assessment set's `name` in `infoCourse.json` when no assessment uses the set. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`.",
+          "markdownDeprecationMessage": "Use `prairielearn-navigator.diagnostics.unused-assessment-set` instead."
         },
         "prairielearn-navigator.missingQuestionInfo": {
           "type": "string",
@@ -166,7 +463,8 @@
           ],
           "default": "error",
           "scope": "resource",
-          "markdownDescription": "Severity of the diagnostic for a directory in `questions/` with files but no `info.json` (and no question below it), which PrairieLearn fails to load from disk. Shown on the directory's `question.html`, or else its first file. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+          "markdownDescription": "Severity of the diagnostic for a directory in `questions/` with files but no `info.json` (and no question below it), which PrairieLearn fails to load from disk. Shown on the directory's `question.html`, or else its first file. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`.",
+          "markdownDeprecationMessage": "Use `prairielearn-navigator.diagnostics.question-info-missing` instead."
         },
         "prairielearn-navigator.excludes": {
           "type": "array",
