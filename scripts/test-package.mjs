@@ -46,6 +46,46 @@ try {
     { stdio: "inherit" },
   );
 
+  const distFiles = fs
+    .readdirSync(path.join(installed, "dist"), { recursive: true })
+    .filter((entry) =>
+      fs.statSync(path.join(installed, "dist", entry)).isFile(),
+    )
+    .map((entry) => String(entry).split(path.sep).join("/"))
+    .sort();
+  const expectedDistFiles = [
+    "cli.js",
+    "core/questionFileResolver.d.ts",
+    "index.js",
+    "shared.js",
+  ];
+  if (JSON.stringify(distFiles) !== JSON.stringify(expectedDistFiles)) {
+    throw new Error(
+      `unexpected packed dist files: ${JSON.stringify(distFiles)}`,
+    );
+  }
+
+  const cli = path.join(installed, "dist", "cli.js");
+  if (!fs.readFileSync(cli, "utf8").startsWith("#!/usr/bin/env node\n")) {
+    throw new Error("packed CLI is missing its executable shebang");
+  }
+  // npm creates an executable bin link on install. The tar entry itself is
+  // not executable, so set that bit here to exercise the shebang as well as
+  // checking the package's bin mapping below.
+  fs.chmodSync(cli, 0o755);
+  const cliHelp = execFileSync(cli, ["--help"], {
+    encoding: "utf8",
+  });
+  if (!cliHelp.startsWith("Usage: prairielearn-navigator")) {
+    throw new Error(`unexpected CLI help output: ${cliHelp}`);
+  }
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(installed, "package.json"), "utf8"),
+  );
+  if (manifest.bin?.["prairielearn-navigator"] !== "dist/cli.js") {
+    throw new Error("packed CLI bin mapping is incorrect");
+  }
+
   const source = [
     'import { createQuestionFileResolver } from "@sybelblue/prairielearn-navigator";',
     'if (typeof createQuestionFileResolver !== "function") throw new Error("missing export");',
@@ -67,7 +107,9 @@ try {
     }),
   );
 
-  const library = fs.readFileSync(path.join(installed, "dist", "index.js"), "utf8");
+  const library = ["index.js", "shared.js"]
+    .map((file) => fs.readFileSync(path.join(installed, "dist", file), "utf8"))
+    .join("\n");
   if (/from\s+["']vscode["']|require\(["']vscode["']\)/.test(library)) {
     throw new Error("packed library imports vscode");
   }

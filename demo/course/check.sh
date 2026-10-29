@@ -9,6 +9,6 @@
 set -euo pipefail
 course="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$course/../.." && pwd)"
-(cd "$repo" && npm run --silent build:cli >/dev/null)
+(cd "$repo" && npm run --silent build:npm >/dev/null)
 cd "$course"
 node "$repo/packages/cli/dist/cli.js" check "$@" .

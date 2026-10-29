@@ -16,10 +16,13 @@
     }
   },
   "bin": {
-    "prairielearn-navigator": "dist/cli.cjs"
+    "prairielearn-navigator": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist/cli.js",
+    "dist/index.js",
+    "dist/shared.js",
+    "dist/core/questionFileResolver.d.ts"
   ],
   "engines": {
     "node": ">=22"

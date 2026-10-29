@@ -31,9 +31,11 @@ jobs:
       - name: Test the packed npm library
         run: npm run test:package
       - name: Smoke-test CLI on a clean course
-        run: node packages/cli/dist/cli.cjs check --format github src/test-cli/fixtures/clean
+        run: node packages/cli/dist/cli.js check --format github src/test-cli/fixtures/clean
       - name: Smoke-test library import
         run: node -e "import('./packages/cli/dist/index.js').then(m => { if (typeof m.createQuestionFileResolver !== 'function') process.exit(1) })"
       - name: Check npm package contents
         run: npm pack --dry-run
         working-directory: packages/cli
+      - name: Check distribution sizes
+        run: npm run test:size

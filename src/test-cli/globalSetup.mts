@@ -1,9 +1,9 @@
 import { execSync } from "node:child_process";
 import type { TestProject } from "vitest/node";
 
-/** Rebuilds dist/cli.cjs so CLI tests never run against a stale bundle. */
+/** Rebuilds the npm entries so CLI tests never run against a stale bundle. */
 export default function setup(project: TestProject) {
-  execSync("npx webpack --config-name cli", {
+  execSync("npm run build:npm", {
     cwd: project.config.root,
     stdio: "ignore",
   });
