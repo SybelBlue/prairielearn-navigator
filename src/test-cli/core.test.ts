@@ -225,13 +225,38 @@ test("unused questions are noted on their title, given the reference index", asy
   assert.deepEqual(await check("deps", false), []);
 });
 
-test("unusedQuestions is shorthand for the unused-question rule", () => {
-  const ruleFor = (unusedQuestions: string) =>
-    loadConfig(null, { overrides: { unusedQuestions } }).config.rules["unused-question"];
-  assert.equal(ruleFor("ignored"), "off");
-  assert.equal(ruleFor("info"), "info");
-  assert.equal(ruleFor("warning"), "warning");
-  assert.equal(ruleFor("error"), "error");
+test("unused tags and assessment sets are flagged on their infoCourse.json name", async () => {
+  const course = path.join(fixtures, "names");
+  const file = path.join(course, "infoCourse.json");
+  const text = fs.readFileSync(file, "utf-8");
+  const { config } = loadConfig(course);
+  const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
+  const references = indexCourse(course, "2026-01-01");
+  const ds = await runRules(file, text, { courseRoot: course, config, schemas, references });
+  assert.deepEqual(
+    ds.map((d) => [text.slice(d.startOffset, d.endOffset), d.severity, d.code, d.message]),
+    [
+      ['"unused"', "warning", "prairielearn-navigator/unused-tag", 'tag "unused" is not used by any question'],
+      ['"Quiz"', "warning", "prairielearn-navigator/unused-assessment-set", 'assessment set "Quiz" is not used by any assessment'],
+    ]
+  );
+  assert.deepEqual(await runRules(file, text, { courseRoot: course, config, schemas }), []);
+});
+
+test("unused* keys are shorthand for their rule's setting", () => {
+  const shorthands = [
+    ["unusedQuestions", "unused-question"],
+    ["unusedTags", "unused-tag"],
+    ["unusedAssessmentSets", "unused-assessment-set"],
+  ] as const;
+  for (const [key, rule] of shorthands) {
+    const ruleFor = (value: string) =>
+      loadConfig(null, { overrides: { [key]: value } }).config.rules[rule];
+    assert.equal(ruleFor("ignored"), "off");
+    assert.equal(ruleFor("info"), "info");
+    assert.equal(ruleFor("warning"), "warning");
+    assert.equal(ruleFor("error"), "error");
+  }
 
   const { config, problems } = loadConfig(null, { overrides: { unusedQuestions: "off" } });
   assert.equal(config.rules["unused-question"], undefined);

@@ -8,7 +8,8 @@ This extension is still experimental and may change or break.
 
 - Diagnostics for course files: PrairieLearn schema validation for a chosen
   PrairieLearn version; missing, incomplete, duplicate, and unused questions;
-  and every file a course names that doesn't exist (see the
+  unused tags and assessment sets; and every file a course names that doesn't
+  exist (see the
   [rules](packages/cli/README.md#rules)).
 - For every one of those file references:
   - **jump to the file**: go-to-definition and Ctrl/Cmd-click;
@@ -36,6 +37,8 @@ also reads. User-level settings rank below that file.
 | `prairielearn-navigator.uuidCommand` | Shell command for UUID completions. It must print one UUID. Default: `uuidgen` |
 | `prairielearn-navigator.rules` | Rule id → `off` / `info` / `warning` / `error` |
 | `prairielearn-navigator.unusedQuestions` | Severity for a question no assessment uses, shown on its `info.json` title: `ignored` / `info` (default) / `warning` / `error` |
+| `prairielearn-navigator.unusedTags` | Severity for an `infoCourse.json` tag no question uses, shown on its `name`: `ignored` / `info` / `warning` (default) / `error` |
+| `prairielearn-navigator.unusedAssessmentSets` | Severity for an `infoCourse.json` assessment set no assessment uses, shown on its `name`: `ignored` / `info` / `warning` (default) / `error` |
 | `prairielearn-navigator.excludes` | Glob patterns of files never to check, relative to the workspace folder. Adds to the course file's `excludes` rather than replacing them. |
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going

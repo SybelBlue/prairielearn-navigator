@@ -14,8 +14,8 @@ export interface ReferencesChanged {
   changed: string;
   /**
    * Files whose diagnostics may change: those whose references point at or
-   * into `changed`, and the info.json of questions `changed` started or
-   * stopped using.
+   * into `changed`, the info.json of questions `changed` started or stopped
+   * using, and infoCourse.json when the tags or sets `changed` uses change.
    */
   affected: string[];
 }
@@ -151,8 +151,10 @@ export class ReferenceIndexCache {
     }
     const file = uri.fsPath;
     const usedQuestions = new Set<string>();
+    let namesChanged = false;
     if (index.holdsReferences(file)) {
       const before = questionsUsedIn(index, file);
+      const namesBefore = JSON.stringify(index.namesIn(file));
       if (text !== undefined) {
         index.update(file, text);
       } else if (fs.existsSync(file)) {
@@ -163,11 +165,13 @@ export class ReferenceIndexCache {
       const after = questionsUsedIn(index, file);
       before.forEach((q) => after.has(q) || usedQuestions.add(q));
       after.forEach((q) => before.has(q) || usedQuestions.add(q));
+      namesChanged = JSON.stringify(index.namesIn(file)) !== namesBefore;
     }
     const affected = [
       ...new Set([
         ...index.filesAffectedBy(file),
         ...[...usedQuestions].map((q) => path.join(q, "info.json")),
+        ...(namesChanged ? [path.join(courseRoot, "infoCourse.json")] : []),
       ]),
     ];
     if (affected.length > 0) {

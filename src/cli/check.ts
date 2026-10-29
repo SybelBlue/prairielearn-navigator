@@ -15,6 +15,7 @@ import { versionDate } from "../core/plVersion";
 import { questionFilePathsFromId } from "../core/questionPaths";
 import { indexCourse, ReferenceIndex } from "../core/referenceIndex";
 import { findFileRefs, sourceOf } from "../core/references/extract";
+import { indexedRules } from "../core/rules/registry";
 import { isCheckable, runRules } from "../core/rules/run";
 import { SchemaStore } from "../core/schemas";
 
@@ -79,10 +80,9 @@ class Setups {
         });
         this.stores.set(schemaCacheDir, schemas);
       }
-      const references =
-        loaded.config.rules["unused-question"] === "off"
-          ? undefined
-          : indexCourse(courseRoot, versionDate(loaded.config.plVersion));
+      const references = indexedRules.every((id) => loaded.config.rules[id] === "off")
+        ? undefined
+        : indexCourse(courseRoot, versionDate(loaded.config.plVersion));
       setup = { loaded, schemas, references };
       this.byCourse.set(courseRoot, setup);
     }
@@ -406,6 +406,12 @@ Options:
   --unused-questions <ignored|info|warning|error>
                             Severity for questions no assessment uses
                             (default: info)
+  --unused-tags <ignored|info|warning|error>
+                            Severity for infoCourse.json tags no question
+                            uses (default: warning)
+  --unused-assessment-sets <ignored|info|warning|error>
+                            Severity for infoCourse.json assessment sets no
+                            assessment uses (default: warning)
   --help                    Show this help message
 
 Dated versions are resolved with the GitHub API; set GITHUB_TOKEN to avoid
@@ -430,6 +436,8 @@ const VALUE_OPTIONS = [
   "--schema-cache",
   "--exclude",
   "--unused-questions",
+  "--unused-tags",
+  "--unused-assessment-sets",
 ];
 /** Options that may be given more than once. */
 const REPEATABLE_OPTIONS = ["--exclude"];
@@ -490,6 +498,8 @@ export async function run(args: string[]): Promise<number> {
     plVersion: options["--pl-version"],
     schemaCacheDir: options["--schema-cache"],
     unusedQuestions: options["--unused-questions"],
+    unusedTags: options["--unused-tags"],
+    unusedAssessmentSets: options["--unused-assessment-sets"],
   };
   // Surface bad flags (and a missing --config) before doing any work
   const flagProblems = loadConfig(null, {

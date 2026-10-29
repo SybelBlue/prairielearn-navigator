@@ -5,7 +5,9 @@ import {
   jsonSyntax,
   referencesExist,
   schemaRule,
+  unusedAssessmentSets,
   unusedQuestion,
+  unusedTags,
 } from "./impls";
 import { RuleEntry, RuleTable } from "./types";
 
@@ -38,6 +40,14 @@ const otherRules = {
   "unused-question": [
     ["*", courseFiles.question, unusedQuestion],
   ],
+
+  "unused-tag": [
+    ["*", courseFiles.course, unusedTags],
+  ],
+
+  "unused-assessment-set": [
+    ["*", courseFiles.course, unusedAssessmentSets],
+  ],
 } as const satisfies RuleTable;
 
 /**
@@ -65,6 +75,9 @@ export const rules: Record<RuleId, readonly RuleEntry[]> = {
 };
 
 export type RuleId = keyof typeof otherRules | RefRuleId;
+
+/** Rules that read the reference index; without one they report nothing. */
+export const indexedRules: readonly RuleId[] = ["unused-question", "unused-tag", "unused-assessment-set"];
 
 export function isRuleId(id: string): id is RuleId {
   return Object.hasOwn(rules, id);

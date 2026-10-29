@@ -114,6 +114,42 @@
           "scope": "resource",
           "markdownDescription": "Severity of the diagnostic on a question's `info.json` title when no assessment uses the question. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
         },
+        "prairielearn-navigator.unusedTags": {
+          "type": "string",
+          "enum": [
+            "ignored",
+            "info",
+            "warning",
+            "error"
+          ],
+          "enumDescriptions": [
+            "Do not report unused tags.",
+            "Report unused tags as information.",
+            "Report unused tags as warnings.",
+            "Report unused tags as errors."
+          ],
+          "default": "warning",
+          "scope": "resource",
+          "markdownDescription": "Severity of the diagnostic on a tag's `name` in `infoCourse.json` when no question uses the tag. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+        },
+        "prairielearn-navigator.unusedAssessmentSets": {
+          "type": "string",
+          "enum": [
+            "ignored",
+            "info",
+            "warning",
+            "error"
+          ],
+          "enumDescriptions": [
+            "Do not report unused assessment sets.",
+            "Report unused assessment sets as information.",
+            "Report unused assessment sets as warnings.",
+            "Report unused assessment sets as errors."
+          ],
+          "default": "warning",
+          "scope": "resource",
+          "markdownDescription": "Severity of the diagnostic on an assessment set's `name` in `infoCourse.json` when no assessment uses the set. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+        },
         "prairielearn-navigator.excludes": {
           "type": "array",
           "items": {

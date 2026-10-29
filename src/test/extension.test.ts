@@ -446,6 +446,44 @@ suite("PrairieLearn Navigator", () => {
     assert.strictEqual((await until(unused, (ds) => ds.length === 1)).length, 1);
   });
 
+  test("unused tags and assessment sets are flagged live as questions and assessments change", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const unusedNames = () =>
+      ourDiagnostics(infoCourse)
+        .filter((d) => /unused-(tag|assessment-set)$/.test(String(d.code)))
+        .map((d) => [d.severity, d.message]);
+    const courseEditor = await vscode.window.showTextDocument(infoCourse);
+    try {
+      const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+      await courseEditor.edit((e) =>
+        e.insert(
+          end,
+          ', "tags": [{ "name": "t1", "color": "red1" }], "assessmentSets": [' +
+            '{ "abbreviation": "HW", "name": "Homework", "heading": "Homework", "color": "green1" }, ' +
+            '{ "abbreviation": "Q", "name": "Quiz", "heading": "Quizzes", "color": "red1" }] '
+        )
+      );
+      assert.deepStrictEqual(await until(unusedNames, (ds) => ds.length === 2), [
+        [vscode.DiagnosticSeverity.Warning, 'tag "t1" is not used by any question'],
+        [vscode.DiagnosticSeverity.Warning, 'assessment set "Quiz" is not used by any assessment'],
+      ]);
+
+      const questionEditor = await vscode.window.showTextDocument(depsInfo);
+      try {
+        await questionEditor.edit((e) => e.insert(new vscode.Position(0, 1), '\n  "tags": ["t1"],'));
+        assert.deepStrictEqual(await until(unusedNames, (ds) => ds.length === 1), [
+          [vscode.DiagnosticSeverity.Warning, 'assessment set "Quiz" is not used by any assessment'],
+        ]);
+      } finally {
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+      }
+      assert.strictEqual((await until(unusedNames, (ds) => ds.length === 2)).length, 2);
+    } finally {
+      await vscode.window.showTextDocument(infoCourse);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("the unusedQuestions setting sets the note's severity", async () => {
     const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
     const unused = () =>

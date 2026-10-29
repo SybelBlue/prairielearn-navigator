@@ -170,9 +170,37 @@ test("unusedQuestions in the config file sets their severity", () => {
     "check",
     "--config",
     "configs/unused.jsonc",
-    "broken/questions/commented"
+    "broken/questions/commented",
+    "names"
   );
   assert.match(stdout, /4:12 warning: question "commented" is not used/);
+  assert.match(stdout, /8:15 info: tag "unused" is not used/);
+  assert.match(stdout, /12:36 error: assessment set "Quiz" is not used/);
+});
+
+test("unused tags and assessment sets are warnings by default", () => {
+  const { code, stdout } = runCli("check", "names");
+  assert.equal(code, 0);
+  assert.match(stdout, /infoCourse\.json:8:15 warning: tag "unused" is not used by any question \[unused-tag\]/);
+  assert.match(
+    stdout,
+    /infoCourse\.json:12:36 warning: assessment set "Quiz" is not used by any assessment \[unused-assessment-set\]/
+  );
+  assert.doesNotMatch(stdout, /tag "used" is not|set "Homework" is not/);
+  assert.match(stdout, /2 warnings in 1 file/);
+});
+
+test("--unused-tags and --unused-assessment-sets set their severity", () => {
+  const { code, stdout } = runCli(
+    "check", "--unused-tags", "error", "--unused-assessment-sets", "ignored", "names"
+  );
+  assert.equal(code, 1);
+  assert.match(stdout, /8:15 error: tag "unused" is not used/);
+  assert.doesNotMatch(stdout, /unused-assessment-set/);
+
+  const bogus = runCli("check", "--unused-assessment-sets", "off", "names");
+  assert.equal(bogus.code, 1);
+  assert.match(bogus.stderr, /unusedAssessmentSets must be "ignored", "info", "warning", or "error"/);
 });
 
 test("config problems are reported on the config file", () => {

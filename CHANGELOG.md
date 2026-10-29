@@ -11,6 +11,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `unusedQuestions` (`ignored`, `info`, `warning`, or `error`; default
   `info`) in `.pl-navigator.jsonc`, the `prairielearn-navigator.unusedQuestions`
   setting, or the CLI's `--unused-questions`.
+- New `unused-tag` and `unused-assessment-set` rules: a tag that no question
+  uses, or an assessment set that no assessment uses, gets a diagnostic on its
+  `name` in `infoCourse.json`. Their severities are set by `unusedTags` and
+  `unusedAssessmentSets` (same levels; default `warning`), the matching
+  `prairielearn-navigator.*` settings, or the CLI's `--unused-tags` and
+  `--unused-assessment-sets`.
 - Rules can now be set to `info`. The CLI prints infos and counts them in its
   summary, and `--format github` emits them as notices. They don't affect the
   exit code.

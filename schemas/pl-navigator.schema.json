@@ -26,6 +26,8 @@
           "schema",
           "duplicate-question-id",
           "unused-question",
+          "unused-tag",
+          "unused-assessment-set",
           "client-files-course-exist",
           "client-files-question-exist",
           "server-files-course-exist",
@@ -60,6 +62,26 @@
         "error"
       ],
       "default": "info"
+    },
+    "unusedTags": {
+      "description": "Severity of the diagnostic on a tag's name in infoCourse.json when no question uses the tag. Shorthand for rules[\"unused-tag\"], with \"ignored\" for \"off\".",
+      "enum": [
+        "ignored",
+        "info",
+        "warning",
+        "error"
+      ],
+      "default": "warning"
+    },
+    "unusedAssessmentSets": {
+      "description": "Severity of the diagnostic on an assessment set's name in infoCourse.json when no assessment uses the set. Shorthand for rules[\"unused-assessment-set\"], with \"ignored\" for \"off\".",
+      "enum": [
+        "ignored",
+        "info",
+        "warning",
+        "error"
+      ],
+      "default": "warning"
     },
     "excludes": {
       "description": "Glob patterns of files never to check, relative to this file, e.g. \"courseInstances/Archive/**\".",

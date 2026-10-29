@@ -1,0 +1,14 @@
+{
+  "uuid": "00000000-0000-0000-0000-000000000021",
+  "name": "TEST 102",
+  "title": "Tags and sets",
+  "topics": [{ "name": "T", "color": "red1" }],
+  "tags": [
+    { "name": "used", "color": "blue1" },
+    { "name": "unused", "color": "blue1" }
+  ],
+  "assessmentSets": [
+    { "abbreviation": "HW", "name": "Homework", "heading": "Homework", "color": "green1" },
+    { "abbreviation": "Q", "name": "Quiz", "heading": "Quizzes", "color": "red1" }
+  ]
+}

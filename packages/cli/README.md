@@ -21,6 +21,8 @@ npx -y @sybelblue/prairielearn-navigator check [options] [paths...]
 | `--schema-cache <dir>` | Where downloaded schemas are cached (overrides the config) |
 | `--exclude <glob>` | Skip matching files, relative to the current directory. Repeatable; adds to the config's `excludes`. |
 | `--unused-questions <level>` | Severity for questions no assessment uses: `ignored`, `info` (default), `warning`, or `error` (overrides the config) |
+| `--unused-tags <level>` | Severity for `infoCourse.json` tags no question uses: `ignored`, `info`, `warning` (default), or `error` (overrides the config) |
+| `--unused-assessment-sets <level>` | Severity for `infoCourse.json` assessment sets no assessment uses: `ignored`, `info`, `warning` (default), or `error` (overrides the config) |
 
 ## Rules
 
@@ -32,6 +34,8 @@ Each diagnostic ends with its rule id, e.g. `[schema]`.
 | `schema` | all | Violations of PrairieLearn's own JSON schema for the selected version. Unknown properties are warnings. |
 | `duplicate-question-id` | `infoAssessment.json` | Question ids used more than once (warning) |
 | `unused-question` | question `info.json` | Questions no assessment uses, on their `title` (info). Set with `unusedQuestions`. |
+| `unused-tag` | `infoCourse.json` | Tags no question lists in its `tags`, on their `name` (warning). Set with `unusedTags`. |
+| `unused-assessment-set` | `infoCourse.json` | Assessment sets no assessment names as its `set`, on their `name` (warning). Set with `unusedAssessmentSets`. |
 | `question-exists` | `infoAssessment.json`, question `info.json` (`template`) | Question ids with no directory, `info.json`, or `question.html` |
 | `client-files-course-exist` | question, element, and element extension `info.json` | `clientFilesCourseStyles`/`Scripts` missing from `clientFilesCourse/` |
 | `client-files-question-exist` | question `info.json` | `clientFilesQuestionStyles`/`Scripts` missing from `clientFilesQuestion/`; deprecated `clientFiles` (warning) |
@@ -59,6 +63,9 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
   "rules": { "duplicate-question-id": "error" },
   // Questions no assessment uses: "ignored", "info" (default), "warning", or "error"
   "unusedQuestions": "warning",
+  // Tags and assessment sets no question or assessment uses (default "warning")
+  "unusedTags": "info",
+  "unusedAssessmentSets": "error",
   // Files never checked, relative to this file
   "excludes": ["courseInstances/Archive/**", "questions/drafts/**"]
 }

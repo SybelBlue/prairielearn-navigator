@@ -12,7 +12,14 @@ export const configFileName = ".pl-navigator.jsonc";
 
 type RuleSetting = "off" | "info" | "warning" | "error";
 const ruleSettings: readonly string[] = ["off", "info", "warning", "error"];
-const unusedQuestionSettings: readonly string[] = ["ignored", "info", "warning", "error"];
+const severitySettings: readonly string[] = ["ignored", "info", "warning", "error"];
+
+/** Config keys that are shorthand for one rule's setting, with "ignored" for "off". */
+const severityKeys = {
+  unusedQuestions: "unused-question",
+  unusedTags: "unused-tag",
+  unusedAssessmentSets: "unused-assessment-set",
+} as const satisfies Record<string, RuleId>;
 
 /** A glob and the directory it is relative to. */
 interface Exclude {
@@ -39,7 +46,9 @@ export function isExcluded(config: NavigatorConfig, file: string): boolean {
 }
 
 /** Same keys as the config file; from CLI flags or VS Code settings. */
-export type ConfigOverrides = Partial<Record<keyof NavigatorConfig | "unusedQuestions", unknown>>;
+export type ConfigOverrides = Partial<
+  Record<keyof NavigatorConfig | keyof typeof severityKeys, unknown>
+>;
 
 /** A config problem, located in `file` when it came from one. */
 export type ConfigProblem = Diagnostic & { file?: string };
@@ -187,13 +196,14 @@ function apply(
         }
         break;
       case "unusedQuestions":
-        // Shorthand for the unused-question rule's setting
-        if (typeof value !== "string" || !unusedQuestionSettings.includes(value)) {
-          report("unusedQuestions must be \"ignored\", \"info\", \"warning\", or \"error\"", [key]);
+      case "unusedTags":
+      case "unusedAssessmentSets":
+        if (typeof value !== "string" || !severitySettings.includes(value)) {
+          report(`${key} must be "ignored", "info", "warning", or "error"`, [key]);
         } else {
           config.rules = {
             ...config.rules,
-            "unused-question": value === "ignored" ? "off" : (value as RuleSetting),
+            [severityKeys[key]]: value === "ignored" ? "off" : (value as RuleSetting),
           };
         }
         break;

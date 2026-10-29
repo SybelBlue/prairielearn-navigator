@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { courseRelativePath } from "./courseFiles";
+import { courseFiles, courseRelativePath, matchesGlob } from "./courseFiles";
 import { offsetToPosition } from "./diagnostic";
 import { IsoDate } from "./plVersion";
 import { FileRef, findFileRefs, holdsReferences, sourceOf } from "./references/extract";
@@ -16,12 +16,22 @@ export interface Use {
   end: { line: number; column: number };
 }
 
+/** Names defined course-wide in infoCourse.json that a file uses. */
+export interface UsedNames {
+  /** A question's `tags`. */
+  tags: string[];
+  /** An assessment's `set`. */
+  assessmentSets: string[];
+}
+
 /**
  * Reverse index of every file reference in one course: which files
- * reference a given target. Updated one file at a time.
+ * reference a given target. Also records the tags and assessment sets each
+ * file uses. Updated one file at a time.
  */
 export class ReferenceIndex {
   private usesByFile = new Map<string, Use[]>();
+  private namesByFile = new Map<string, UsedNames>();
   private filesByTarget = new Map<string, Set<string>>();
   /** How many targets lie under each directory, to answer directory events quickly. */
   private targetsUnder = new Map<string, number>();
@@ -39,12 +49,18 @@ export class ReferenceIndex {
   /** Re-reads the references in `file` from `text`. */
   update(file: string, text: string) {
     this.remove(file);
+    const source = sourceOf(text);
+    const relPath = courseRelativePath(this.courseRoot, file);
     const refs = findFileRefs(
-      sourceOf(text),
-      courseRelativePath(this.courseRoot, file),
+      source,
+      relPath,
       this.plDate,
       { courseRoot: this.courseRoot, fileDir: path.dirname(file) }
     );
+    const names = usedNames(relPath, () => source.doc.value);
+    if (names) {
+      this.namesByFile.set(file, names);
+    }
     const uses = refs
       .filter((ref) => ref.target !== null)
       .map((ref) => ({
@@ -75,11 +91,26 @@ export class ReferenceIndex {
       }
     }
     this.usesByFile.delete(file);
+    this.namesByFile.delete(file);
   }
 
   /** Every file holding references. */
   files(): string[] {
     return [...this.usesByFile.keys()];
+  }
+
+  /** Tags and assessment sets `file` uses, if it is a question or assessment. */
+  namesIn(file: string): UsedNames | undefined {
+    return this.namesByFile.get(file);
+  }
+
+  /** Every name of this kind used anywhere in the course. */
+  namesUsed(kind: keyof UsedNames): Set<string> {
+    const out = new Set<string>();
+    for (const names of this.namesByFile.values()) {
+      names[kind].forEach((n) => out.add(n));
+    }
+    return out;
   }
 
   /** References made by `file`. */
@@ -145,6 +176,24 @@ export class ReferenceIndex {
     }
     return [...out];
   }
+}
+
+/**
+ * The names a question or assessment uses; undefined for other files.
+ * Question and assessment files both hold references, so they are indexed.
+ */
+function usedNames(relPath: string, value: () => unknown): UsedNames | undefined {
+  const isQuestion = matchesGlob(relPath, courseFiles.question);
+  if (!isQuestion && !matchesGlob(relPath, courseFiles.assessment)) {
+    return undefined;
+  }
+  const json = value() as { tags?: unknown; set?: unknown } | undefined;
+  const tags = isQuestion && Array.isArray(json?.tags) ? json.tags : [];
+  const set = !isQuestion && typeof json?.set === "string" ? [json.set] : [];
+  return {
+    tags: tags.filter((t): t is string => typeof t === "string"),
+    assessmentSets: set,
+  };
 }
 
 function referenceFiles(courseRoot: string): string[] {

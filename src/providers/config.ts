@@ -10,7 +10,15 @@ import {
 import { SchemaStore } from "../core/schemas";
 
 const section = "prairielearn-navigator";
-const keys = ["plVersion", "schemaCacheDir", "rules", "unusedQuestions", "excludes"] as const;
+const keys = [
+  "plVersion",
+  "schemaCacheDir",
+  "rules",
+  "unusedQuestions",
+  "unusedTags",
+  "unusedAssessmentSets",
+  "excludes",
+] as const;
 
 /**
  * Resolves each course's NavigatorConfig from VS Code settings and the

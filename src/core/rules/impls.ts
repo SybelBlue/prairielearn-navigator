@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { Diagnostic } from "../diagnostic";
 import { parseJsonc, pointerToPath, rangeOf, strictJsonErrors } from "../json";
 import { questionFilePathsFromId } from "../questionPaths";
+import { UsedNames } from "../referenceIndex";
 import { FileRef, findFileRefs } from "../references/extract";
 import { RefSpec, TargetKind } from "../references/specs";
 import { SchemaName } from "../schemas";
@@ -207,3 +208,32 @@ export const unusedQuestion: RuleImpl = ({ references, filePath, courseRoot, doc
     severity: "info",
   }];
 };
+
+/**
+ * Flags each entry of infoCourse.json's `kind` array (tags or assessment
+ * sets) whose name no file in the course uses, on that name.
+ */
+function unusedCourseNames(kind: keyof UsedNames, describe: (name: string) => string): RuleImpl {
+  return ({ references, doc }) => {
+    const defined = (doc.value as Record<string, unknown> | undefined)?.[kind];
+    if (!references || doc.errors.length > 0 || !Array.isArray(defined)) {
+      return [];
+    }
+    const used = references.namesUsed(kind);
+    return defined.flatMap((entry: { name?: unknown } | null, i): Diagnostic[] =>
+      typeof entry?.name === "string" && !used.has(entry.name)
+        ? [{ ...rangeOf(doc, [kind, i, "name"]), message: describe(entry.name), severity: "warning" }]
+        : []
+    );
+  };
+}
+
+export const unusedTags = unusedCourseNames(
+  "tags",
+  (name) => `tag "${name}" is not used by any question`
+);
+
+export const unusedAssessmentSets = unusedCourseNames(
+  "assessmentSets",
+  (name) => `assessment set "${name}" is not used by any assessment`
+);
