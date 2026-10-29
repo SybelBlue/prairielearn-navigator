@@ -503,6 +503,50 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("a question directory without info.json is an error on its first file, live as info.json comes and goes", async () => {
+    const dir = path.join(course, "questions/onlyServer");
+    const serverPy = vscode.Uri.file(path.join(dir, "server.py"));
+    const missing = () =>
+      ourDiagnostics(serverPy)
+        .filter((d) => d.code === "prairielearn-navigator/question-info-missing")
+        .map((d) => [d.severity, d.range.start.line, d.message]);
+    assert.deepStrictEqual(await until(missing, (ds) => ds.length === 1), [[
+      vscode.DiagnosticSeverity.Error,
+      0,
+      'directory "onlyServer" in questions/ has files but no info.json: PrairieLearn will fail to load it ' +
+        "from disk (Missing JSON file: questions/onlyServer/info.json)",
+    ]]);
+
+    const infoJson = path.join(dir, "info.json");
+    try {
+      fs.writeFileSync(infoJson, '{ "uuid": "c7c9d1d6-3d3e-4f0e-9c55-1f0a6b4f1e11", "title": "t", "topic": "t", "type": "v3" }');
+      assert.deepStrictEqual(await until(missing, (ds) => ds.length === 0), []);
+    } finally {
+      fs.rmSync(infoJson, { force: true });
+    }
+    assert.strictEqual((await until(missing, (ds) => ds.length === 1)).length, 1);
+  });
+
+  test("the missingQuestionInfo setting sets that error's severity", async () => {
+    const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
+    const serverPy = vscode.Uri.file(path.join(course, "questions/onlyServer/server.py"));
+    const missing = () =>
+      ourDiagnostics(serverPy).filter((d) => d.code === "prairielearn-navigator/question-info-missing");
+    try {
+      await settings.update("missingQuestionInfo", "warning", vscode.ConfigurationTarget.Workspace);
+      const warnings = await until(missing, (ds) =>
+        ds.length === 1 && ds[0].severity === vscode.DiagnosticSeverity.Warning
+      );
+      assert.deepStrictEqual(warnings.map((d) => d.severity), [vscode.DiagnosticSeverity.Warning]);
+
+      await settings.update("missingQuestionInfo", "ignored", vscode.ConfigurationTarget.Workspace);
+      assert.deepStrictEqual(await until(missing, (ds) => ds.length === 0), []);
+    } finally {
+      await settings.update("missingQuestionInfo", undefined, vscode.ConfigurationTarget.Workspace);
+      fs.rmSync(path.join(course, ".vscode"), { recursive: true, force: true });
+    }
+  });
+
   test(".vscode/settings.json overrides the course config", async () => {
     const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
     try {

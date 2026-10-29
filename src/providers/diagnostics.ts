@@ -8,7 +8,7 @@ import { courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
 import { refSpecs } from "../core/references/specs";
 import { ruleDiagnosticCode } from "../core/rules/registry";
-import { checkableGlobs, isCheckable, runRules } from "../core/rules/run";
+import { checkableGlobs, isCheckable, runCourseRules, runRules } from "../core/rules/run";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
 import { generateUuid, reportUuidGenerationError } from "./uuid";
@@ -27,7 +27,13 @@ export const invalidRootUuidDiagnosticCode =
  */
 export class RuleDiagnosticCollection {
   private collection: vscode.DiagnosticCollection;
+  /**
+   * From rules over a whole course, kept apart so a file's own check never
+   * replaces them.
+   */
+  private courseCollection: vscode.DiagnosticCollection;
   private timers = new Map<string, NodeJS.Timeout>();
+  private courseTimers = new Map<string, NodeJS.Timeout>();
   /** Bumped per check of a file, so a slower, older check never wins. */
   private generation = new Map<string, number>();
   private checkAllTimer: NodeJS.Timeout | undefined;
@@ -39,6 +45,9 @@ export class RuleDiagnosticCollection {
   ) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"
+    );
+    this.courseCollection = vscode.languages.createDiagnosticCollection(
+      "prairielearn-navigator-course"
     );
 
     // A referenced file appearing, changing, or disappearing only affects
@@ -57,12 +66,26 @@ export class RuleDiagnosticCollection {
         this.checkFile(uri.fsPath);
       }
     };
+    // Any file or directory appearing or disappearing in questions/
+    const questionsWatcher = vscode.workspace.createFileSystemWatcher(
+      "**/questions/**", false, true, false
+    );
+    const onQuestions = (uri: vscode.Uri) => {
+      const courseRoot = this.courseCache.getCourseIdFor(uri);
+      if (courseRoot) {
+        this.scheduleCourseRules(courseRoot);
+      }
+    };
     return [
       this.collection,
+      this.courseCollection,
       watcher,
       watcher.onDidCreate(onDisk),
       watcher.onDidChange(onDisk),
       watcher.onDidDelete((uri) => this.checkFile(uri.fsPath)),
+      questionsWatcher,
+      questionsWatcher.onDidCreate(onQuestions),
+      questionsWatcher.onDidDelete(onQuestions),
       vscode.workspace.onDidOpenTextDocument((doc) => this.checkFile(doc.uri.fsPath)),
       vscode.workspace.onDidChangeTextDocument((e) => this.scheduleCheck(e.document)),
       // Unsaved changes are discarded on close: go back to the disk
@@ -70,6 +93,7 @@ export class RuleDiagnosticCollection {
       {
         dispose: () => {
           this.timers.forEach((t) => clearTimeout(t));
+          this.courseTimers.forEach((t) => clearTimeout(t));
           clearTimeout(this.checkAllTimer);
         },
       },
@@ -84,6 +108,17 @@ export class RuleDiagnosticCollection {
       setTimeout(() => {
         this.timers.delete(key);
         this.checkFile(key);
+      }, debounceMs)
+    );
+  }
+
+  private scheduleCourseRules(courseRoot: string) {
+    clearTimeout(this.courseTimers.get(courseRoot));
+    this.courseTimers.set(
+      courseRoot,
+      setTimeout(() => {
+        this.courseTimers.delete(courseRoot);
+        this.checkCourseRules(courseRoot);
       }, debounceMs)
     );
   }
@@ -111,7 +146,25 @@ export class RuleDiagnosticCollection {
     for (let i = 0; i < files.length; i += batchSize) {
       await Promise.all(files.slice(i, i + batchSize).map((f) => this.checkFile(f)));
     }
+    this.checkCourseRules(courseRoot);
     console.info(`prairielearn -- checked ${files.length} files in ${courseRoot} in ${Date.now() - started}ms`);
+  }
+
+  private checkCourseRules(courseRoot: string) {
+    try {
+      const byFile = runCourseRules(courseRoot, this.configs.configFor(courseRoot));
+      this.courseCollection.forEach((uri) => {
+        if (uri.fsPath.startsWith(courseRoot + path.sep) && !byFile.has(uri.fsPath)) {
+          this.courseCollection.delete(uri);
+        }
+      });
+      // Each is at the start of a file that may not be text, so no text is needed
+      byFile.forEach((diagnostics, file) =>
+        this.courseCollection.set(vscode.Uri.file(file), toVscodeDiagnostics("", diagnostics))
+      );
+    } catch (e) {
+      console.error("prairielearn -- error running course rules: " + e);
+    }
   }
 
   private openDocument(file: string): vscode.TextDocument | undefined {

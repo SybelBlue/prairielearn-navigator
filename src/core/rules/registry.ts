@@ -48,6 +48,9 @@ const otherRules = {
   "unused-assessment-set": [
     ["*", courseFiles.course, unusedAssessmentSets],
   ],
+
+  // Course-wide rather than per file: see runCourseRules
+  "question-info-missing": [],
 } as const satisfies RuleTable;
 
 /**

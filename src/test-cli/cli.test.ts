@@ -31,7 +31,7 @@ test("broken course exits 1 with code frames", () => {
   );
   assert.match(stdout, /13 \|\s+\{ "id": "noHtml", "points": 1 \},/);
   assert.match(stdout, /\s+\^{6} incomplete question/);
-  assert.match(stdout, /23 errors, 4 warnings, 6 infos in 8 files \(22 files, 6 questions checked\)/);
+  assert.match(stdout, /25 errors, 4 warnings, 6 infos in 10 files \(22 files, 6 questions checked\)/);
 });
 
 test("lists every checked file, with each assessment's questions under it", () => {
@@ -70,6 +70,8 @@ test("lists every checked file, with each assessment's questions under it", () =
       "topic/nested/info.json",
       "topic/nested/question.html",
     ].map((f) => `broken/questions/${f}`),
+    // Not a file the CLI checks, but where a course-wide rule reports
+    "broken/questions/onlyServer/server.py",
   ]);
 });
 
@@ -203,6 +205,47 @@ test("--unused-tags and --unused-assessment-sets set their severity", () => {
   assert.match(bogus.stderr, /unusedAssessmentSets must be "ignored", "info", "warning", or "error"/);
 });
 
+test("question directories without info.json are errors that PrairieLearn fails to load", () => {
+  const { code, stdout } = runCli("check", "broken/questions");
+  assert.equal(code, 1);
+  // On question.html, with its code frame
+  assert.match(
+    stdout,
+    /broken\/questions\/noInfo\/question\.html:1:1 error: directory "noInfo" in questions\/ has files but no info\.json: PrairieLearn will fail to load it from disk \(Missing JSON file: questions\/noInfo\/info\.json\) \[question-info-missing\]\n +\|\n1 \|/
+  );
+  // Else on the first file, without showing it
+  assert.match(
+    stdout,
+    /broken\/questions\/onlyServer\/server\.py:1:1 error: directory "onlyServer" .*\[question-info-missing\]\n\n/
+  );
+  // topic/ holds a question below it, and hidden directories are skipped
+  assert.doesNotMatch(stdout, /directory "(topic|\.hidden)"/);
+});
+
+test("question directories without info.json are reported only within the paths checked", () => {
+  const { stdout } = runCli("check", "broken/questions/commented");
+  assert.doesNotMatch(stdout, /question-info-missing/);
+  const globbed = runCli("check", "broken/questions/only*");
+  assert.match(globbed.stdout, /onlyServer\/server\.py:1:1 error/);
+  assert.doesNotMatch(globbed.stdout, /noInfo/);
+  // From above the course, too
+  assert.match(runCli("check", ".").stdout, /onlyServer\/server\.py:1:1 error/);
+});
+
+test("--missing-question-info sets their severity", () => {
+  const warning = runCli("check", "--missing-question-info", "warning", "broken/questions/onlyServer");
+  assert.equal(warning.code, 0);
+  assert.match(warning.stdout, /server\.py:1:1 warning: directory "onlyServer"/);
+  assert.match(warning.stdout, /1 warning in 1 file/);
+
+  const ignored = runCli("check", "--missing-question-info", "ignored", "broken/questions");
+  assert.doesNotMatch(ignored.stdout, /question-info-missing/);
+
+  const bogus = runCli("check", "--missing-question-info", "off", "broken");
+  assert.equal(bogus.code, 1);
+  assert.match(bogus.stderr, /missingQuestionInfo must be "ignored", "info", "warning", or "error"/);
+});
+
 test("config problems are reported on the config file", () => {
   // The file's invalid plVersion would fall back to "latest" and download
   // schemas; pin the version so the test stays offline
@@ -256,12 +299,19 @@ test("--format github emits workflow annotations", () => {
   const { code, stdout } = runCli("check", "--format", "github", "broken");
   assert.equal(code, 1);
   const lines = stdout.split("\n").filter((l) => /^::(error|warning) /.test(l));
-  assert.equal(lines.length, 27);
+  assert.equal(lines.length, 29);
   assert.match(
     lines[0],
     /^::warning file=broken\/courseInstances\/Fa26\/assessments\/hw1\/infoAssessment\.json,line=10,col=18,endLine=10,endColumn=22,title=prairielearn-navigator::Duplicate question ID.* \[duplicate-question-id\]$/
   );
-  assert.equal(lines.filter((l) => l.startsWith("::error ")).length, 23);
+  assert.equal(lines.filter((l) => l.startsWith("::error ")).length, 25);
+  assert.ok(
+    lines.includes(
+      "::error file=broken/questions/onlyServer/server.py,line=1,col=1,endLine=1,endColumn=1,title=prairielearn-navigator::" +
+        'directory "onlyServer" in questions/ has files but no info.json: PrairieLearn will fail to load it from disk ' +
+        "(Missing JSON file: questions/onlyServer/info.json) [question-info-missing]"
+    )
+  );
 });
 
 test("clean course exits 0", () => {

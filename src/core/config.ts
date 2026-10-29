@@ -20,6 +20,7 @@ const severityKeys = {
   unusedQuestions: "unused-question",
   unusedTags: "unused-tag",
   unusedAssessmentSets: "unused-assessment-set",
+  missingQuestionInfo: "question-info-missing",
 } as const satisfies Record<string, RuleId>;
 
 /** A glob and the directory it is relative to. */

@@ -150,6 +150,24 @@
           "scope": "resource",
           "markdownDescription": "Severity of the diagnostic on an assessment set's `name` in `infoCourse.json` when no assessment uses the set. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
         },
+        "prairielearn-navigator.missingQuestionInfo": {
+          "type": "string",
+          "enum": [
+            "ignored",
+            "info",
+            "warning",
+            "error"
+          ],
+          "enumDescriptions": [
+            "Do not report question directories without info.json.",
+            "Report question directories without info.json as information.",
+            "Report question directories without info.json as warnings.",
+            "Report question directories without info.json as errors."
+          ],
+          "default": "error",
+          "scope": "resource",
+          "markdownDescription": "Severity of the diagnostic for a directory in `questions/` with files but no `info.json` (and no question below it), which PrairieLearn fails to load from disk. Shown on the directory's `question.html`, or else its first file. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
+        },
         "prairielearn-navigator.excludes": {
           "type": "array",
           "items": {

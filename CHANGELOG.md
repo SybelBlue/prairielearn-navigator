@@ -17,6 +17,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `unusedAssessmentSets` (same levels; default `warning`), the matching
   `prairielearn-navigator.*` settings, or the CLI's `--unused-tags` and
   `--unused-assessment-sets`.
+- New `question-info-missing` rule: a directory in `questions/` that has
+  files but no `info.json`, and no question below it, is an error, since
+  PrairieLearn fails to load it from disk. It is shown on the directory's
+  `question.html`, or else its first file. Its severity is set by
+  `missingQuestionInfo` (same levels; default `error`), the matching
+  `prairielearn-navigator.missingQuestionInfo` setting, or the CLI's
+  `--missing-question-info`.
 - Rules can now be set to `info`. The CLI prints infos and counts them in its
   summary, and `--format github` emits them as notices. They don't affect the
   exit code.

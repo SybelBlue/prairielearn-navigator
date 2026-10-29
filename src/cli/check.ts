@@ -9,14 +9,14 @@ import {
   loadConfig,
 } from "../core/config";
 import { findCourseRoot } from "../core/course";
-import { courseRelativePath } from "../core/courseFiles";
+import { courseRelativePath, matchesGlob } from "../core/courseFiles";
 import { Diagnostic, offsetToPosition } from "../core/diagnostic";
 import { versionDate } from "../core/plVersion";
 import { questionFilePathsFromId } from "../core/questionPaths";
 import { indexCourse, ReferenceIndex } from "../core/referenceIndex";
 import { findFileRefs, sourceOf } from "../core/references/extract";
 import { indexedRules } from "../core/rules/registry";
-import { isCheckable, runRules } from "../core/rules/run";
+import { isCheckable, runCourseRules, runRules } from "../core/rules/run";
 import { SchemaStore } from "../core/schemas";
 
 // ── Types ──
@@ -195,6 +195,9 @@ function formatError(error: CheckError, source: string): string {
     styleText(color, error.severity) +
     ": " +
     error.message;
+  if (source === "") {
+    return header; // e.g. a file that may not be text
+  }
 
   // Context lines: up to 2 before + the error line(s)
   const contextStart = Math.max(0, errorLine - 2);
@@ -354,6 +357,39 @@ function resolveFiles(paths: string[]): string[] {
     .sort();
 }
 
+/** Whether `file` is, or is under, one of the paths or globs given to check. */
+function inScope(file: string, paths: string[]): boolean {
+  const cwd = process.cwd();
+  const rel = path.relative(cwd, file).split(path.sep).join("/");
+  return paths.some((p) => {
+    if (isGlob(p)) {
+      const glob = p.replace(/^\.\//, "").replace(/\/+$/, "");
+      return matchesGlob(rel, glob) || matchesGlob(rel, `${glob}/**`);
+    }
+    const within = path.relative(path.resolve(cwd, p), file);
+    return within === "" || (!within.startsWith("..") && !path.isAbsolute(within));
+  });
+}
+
+/** The course of each path, or of each match of a glob. */
+function courseRootsOf(paths: string[]): Set<string> {
+  const cwd = process.cwd();
+  const cache = new Map<string, string | null>();
+  const roots = new Set<string>();
+  for (const p of paths) {
+    for (const match of isGlob(p) ? fs.globSync(p, { cwd }) : [p]) {
+      const resolved = path.resolve(cwd, match);
+      const stat = fs.statSync(resolved, { throwIfNoEntry: false });
+      // findCourseRoot starts from a file's directory
+      const root = stat && findCourseRoot(stat.isDirectory() ? path.join(resolved, "_") : resolved, cache);
+      if (root) {
+        roots.add(root);
+      }
+    }
+  }
+  return roots;
+}
+
 /**
  * Pairs each file with its course root, dropping files no rule applies to.
  * Files outside any course map to null.
@@ -384,8 +420,9 @@ function courseFilesOf(
 const USAGE = `Usage: prairielearn-navigator check [options] [paths...]
 
 Check a PrairieLearn course's JSON files against PrairieLearn's schemas and
-the navigator's rules: missing, incomplete, and duplicate questions, and
-clientFilesCourse dependencies that do not exist.
+the navigator's rules: missing, incomplete, and duplicate questions,
+question directories without info.json, and clientFilesCourse dependencies
+that do not exist.
 
 Arguments:
   paths     Course directories to search, course JSON files, or glob
@@ -412,6 +449,10 @@ Options:
   --unused-assessment-sets <ignored|info|warning|error>
                             Severity for infoCourse.json assessment sets no
                             assessment uses (default: warning)
+  --missing-question-info <ignored|info|warning|error>
+                            Severity for directories in questions/ with files
+                            but no info.json, which PrairieLearn fails to
+                            load (default: error)
   --help                    Show this help message
 
 Dated versions are resolved with the GitHub API; set GITHUB_TOKEN to avoid
@@ -425,6 +466,7 @@ Examples:
   prairielearn-navigator check --pl-version 2025-06-01
   prairielearn-navigator check --exclude "questions/archive/**"
   prairielearn-navigator check --unused-questions error
+  prairielearn-navigator check --missing-question-info warning
   prairielearn-navigator check "courseInstances/Fa26/**"
   prairielearn-navigator check "**/assessments/hw*/infoAssessment.json"
   prairielearn-navigator check --format github`;
@@ -438,6 +480,7 @@ const VALUE_OPTIONS = [
   "--unused-questions",
   "--unused-tags",
   "--unused-assessment-sets",
+  "--missing-question-info",
 ];
 /** Options that may be given more than once. */
 const REPEATABLE_OPTIONS = ["--exclude"];
@@ -500,6 +543,7 @@ export async function run(args: string[]): Promise<number> {
     unusedQuestions: options["--unused-questions"],
     unusedTags: options["--unused-tags"],
     unusedAssessmentSets: options["--unused-assessment-sets"],
+    missingQuestionInfo: options["--missing-question-info"],
   };
   // Surface bad flags (and a missing --config) before doing any work
   const flagProblems = loadConfig(null, {
@@ -520,7 +564,22 @@ export async function run(args: string[]): Promise<number> {
       file
     )
   );
-  if (files.length === 0) {
+  // Rules over a whole course, for each course a path is in or a file is
+  // checked from; reported with the file they are on if it is checked, and
+  // after the rest if not
+  const courseDiagnostics = new Map<string, Diagnostic[]>();
+  const courseRoots = new Set([
+    ...courseRootsOf(paths),
+    ...files.flatMap(([, root]) => (root === null ? [] : [root])),
+  ]);
+  for (const courseRoot of courseRoots) {
+    for (const [file, diagnostics] of runCourseRules(courseRoot, setups.get(courseRoot).loaded.config)) {
+      if (inScope(file, paths)) {
+        courseDiagnostics.set(file, diagnostics);
+      }
+    }
+  }
+  if (files.length === 0 && courseDiagnostics.size === 0) {
     console.error(
       styleText("yellow", "No PrairieLearn course JSON files found in:")
     );
@@ -560,26 +619,40 @@ export async function run(args: string[]): Promise<number> {
     return { fileErrors, fileWarnings };
   };
 
+  const listColor = (fileErrors: number, fileWarnings: number) =>
+    fileErrors > 0 ? "red" : fileWarnings > 0 ? "yellow" : "dim";
+
+
   for (const [file, courseRoot] of files) {
     const displayPath = displayPathOf(file);
-    const { errors, questions } =
+    const result =
       courseRoot === null
         ? notInCourse(displayPath)
         : await checkFile(file, courseRoot, displayPath, setups.get(courseRoot));
+    const { questions } = result;
+    const errors = [
+      ...(courseDiagnostics.get(file) ?? []).map((d) => toCheckError(d, "", displayPath)),
+      ...result.errors,
+    ];
+    courseDiagnostics.delete(file);
     const { fileErrors, fileWarnings } = report(errors, () => fs.readFileSync(file, "utf-8"));
 
-    listing.push(
-      fileErrors > 0
-        ? styleText("red", displayPath)
-        : fileWarnings > 0
-          ? styleText("yellow", displayPath)
-          : styleText("dim", displayPath)
-    );
+    listing.push(styleText(listColor(fileErrors, fileWarnings), displayPath));
     for (const q of questions) {
       checkedQuestions.add(q.infoJson);
       const questionPath = "  " + (path.relative(cwd, q.infoJson) || q.infoJson);
       listing.push(styleText(q.hasError ? "red" : "dim", questionPath));
     }
+  }
+
+  // Files shown without context: they may not be text
+  for (const [file, diagnostics] of courseDiagnostics) {
+    const displayPath = displayPathOf(file);
+    const { fileErrors, fileWarnings } = report(
+      diagnostics.map((d) => toCheckError(d, "", displayPath)),
+      () => ""
+    );
+    listing.push(styleText(listColor(fileErrors, fileWarnings), displayPath));
   }
 
   for (const [configFile, problems] of setups.configProblems()) {

@@ -1,8 +1,10 @@
-import { NavigatorConfig } from "../config";
+import * as path from "node:path";
+import { isExcluded, NavigatorConfig } from "../config";
 import { courseRelativePath, matchesGlob } from "../courseFiles";
 import { Diagnostic } from "../diagnostic";
 import { JsonDoc, parseJsonDoc } from "../json";
 import { IsoDate, matchesRange, versionDate } from "../plVersion";
+import { questionDirsWithoutInfo } from "../questionDirs";
 import { ReferenceIndex } from "../referenceIndex";
 import { SchemaStore } from "../schemas";
 import { ruleDiagnosticCode, RuleId, rules } from "./registry";
@@ -80,14 +82,51 @@ export async function runRules(
           // One broken rule must not stop the others
           diagnostics = [{ startOffset: 0, endOffset: 0, message: `internal error in rule: ${e}`, severity: "warning" }];
         }
-        return diagnostics.map(
-          (d): Diagnostic => ({
-            ...d,
-            code: ruleDiagnosticCode(id),
-            severity: setting !== undefined && setting !== "off" ? setting : d.severity,
-          })
-        );
+        return diagnostics.map((d) => withRuleSetting(d, id, config));
       })
   );
   return results.flat().sort((a, b) => a.startOffset - b.startOffset);
+}
+
+/** Tags a rule's diagnostic with its code and the configured severity. */
+function withRuleSetting(d: Diagnostic, id: RuleId, config: NavigatorConfig): Diagnostic {
+  const setting = config.rules[id];
+  return {
+    ...d,
+    code: ruleDiagnosticCode(id),
+    severity: setting !== undefined && setting !== "off" ? setting : d.severity,
+  };
+}
+
+/**
+ * Runs the rules that look at a course as a whole rather than one file.
+ * Returns diagnostics by the absolute path of the file each is shown on.
+ */
+export function runCourseRules(
+  courseRoot: string,
+  config: NavigatorConfig
+): Map<string, Diagnostic[]> {
+  const out = new Map<string, Diagnostic[]>();
+  if (config.rules["question-info-missing"] === "off") {
+    return out;
+  }
+  for (const { dir, anchor } of questionDirsWithoutInfo(courseRoot)) {
+    if (isExcluded(config, anchor)) {
+      continue;
+    }
+    const infoJson = path.join(dir, "info.json");
+    const localId = courseRelativePath(path.join(courseRoot, "questions"), dir);
+    const diagnostic: Diagnostic = {
+      startOffset: 0,
+      endOffset: 0,
+      message:
+        `directory "${localId}" in questions/ has files but no info.json: ` +
+        `PrairieLearn will fail to load it from disk ` +
+        `(Missing JSON file: ${courseRelativePath(courseRoot, infoJson)})`,
+      severity: "error",
+      related: [{ path: infoJson, message: "Expected location of info.json" }],
+    };
+    out.set(anchor, [withRuleSetting(diagnostic, "question-info-missing", config)]);
+  }
+  return out;
 }

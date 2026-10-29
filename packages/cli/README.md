@@ -23,6 +23,7 @@ npx -y @sybelblue/prairielearn-navigator check [options] [paths...]
 | `--unused-questions <level>` | Severity for questions no assessment uses: `ignored`, `info` (default), `warning`, or `error` (overrides the config) |
 | `--unused-tags <level>` | Severity for `infoCourse.json` tags no question uses: `ignored`, `info`, `warning` (default), or `error` (overrides the config) |
 | `--unused-assessment-sets <level>` | Severity for `infoCourse.json` assessment sets no assessment uses: `ignored`, `info`, `warning` (default), or `error` (overrides the config) |
+| `--missing-question-info <level>` | Severity for directories in `questions/` with files but no `info.json`: `ignored`, `info`, `warning`, or `error` (default) (overrides the config) |
 
 ## Rules
 
@@ -36,6 +37,7 @@ Each diagnostic ends with its rule id, e.g. `[schema]`.
 | `unused-question` | question `info.json` | Questions no assessment uses, on their `title` (info). Set with `unusedQuestions`. |
 | `unused-tag` | `infoCourse.json` | Tags no question lists in its `tags`, on their `name` (warning). Set with `unusedTags`. |
 | `unused-assessment-set` | `infoCourse.json` | Assessment sets no assessment names as its `set`, on their `name` (warning). Set with `unusedAssessmentSets`. |
+| `question-info-missing` | directories in `questions/` | Directories with files but no `info.json` and no question below them, which PrairieLearn fails to load from disk. Shown at the start of the directory's `question.html`, or else its first file. Set with `missingQuestionInfo`. |
 | `question-exists` | `infoAssessment.json`, question `info.json` (`template`) | Question ids with no directory, `info.json`, or `question.html` |
 | `client-files-course-exist` | question, element, and element extension `info.json` | `clientFilesCourseStyles`/`Scripts` missing from `clientFilesCourse/` |
 | `client-files-question-exist` | question `info.json` | `clientFilesQuestionStyles`/`Scripts` missing from `clientFilesQuestion/`; deprecated `clientFiles` (warning) |
@@ -66,6 +68,8 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
   // Tags and assessment sets no question or assessment uses (default "warning")
   "unusedTags": "info",
   "unusedAssessmentSets": "error",
+  // Directories in questions/ with files but no info.json (default "error")
+  "missingQuestionInfo": "warning",
   // Files never checked, relative to this file
   "excludes": ["courseInstances/Archive/**", "questions/drafts/**"]
 }

@@ -7,11 +7,12 @@ import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from
 import { findElements } from "../core/html";
 import { parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
+import { questionDirsWithoutInfo } from "../core/questionDirs";
 import { indexCourse } from "../core/referenceIndex";
 import { fileRefAt, findFileRefs, openTarget, sourceOf } from "../core/references/extract";
 import { RefSpec, refSpecs } from "../core/references/specs";
 import { isRuleId, rules } from "../core/rules/registry";
-import { isCheckable, runRules, selectRules } from "../core/rules/run";
+import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
 
@@ -251,11 +252,12 @@ test("unused tags and assessment sets are flagged on their infoCourse.json name"
   assert.deepEqual(await runRules(file, text, { courseRoot: course, config, schemas }), []);
 });
 
-test("unused* keys are shorthand for their rule's setting", () => {
+test("severity keys are shorthand for their rule's setting", () => {
   const shorthands = [
     ["unusedQuestions", "unused-question"],
     ["unusedTags", "unused-tag"],
     ["unusedAssessmentSets", "unused-assessment-set"],
+    ["missingQuestionInfo", "question-info-missing"],
   ] as const;
   for (const [key, rule] of shorthands) {
     const ruleFor = (value: string) =>
@@ -271,6 +273,55 @@ test("unused* keys are shorthand for their rule's setting", () => {
   assert.deepEqual(problems.map((p) => p.message), [
     'unusedQuestions must be "ignored", "info", "warning", or "error"',
   ]);
+});
+
+test("question directories without info.json or any question below them are found, as PrairieLearn walks them", () => {
+  const course = tmpDir();
+  const write = (rel: string) => {
+    fs.mkdirSync(path.dirname(path.join(course, rel)), { recursive: true });
+    fs.writeFileSync(path.join(course, rel), "");
+  };
+  write("infoCourse.json");
+  write("questions/q/info.json");
+  write("questions/q/clientFilesQuestion/fig.png"); // inside a question: never walked
+  write("questions/withHtml/server.py");
+  write("questions/withHtml/question.html");
+  write("questions/onlyFiles/b.py");
+  write("questions/onlyFiles/a.txt");
+  write("questions/topic/README.md"); // has a question below it
+  write("questions/topic/nested/info.json");
+  write("questions/empty/deeper/x.py");
+  write("questions/.hidden/x.txt");
+  write("questions/dotfiles/.DS_Store");
+
+  const q = (rel: string) => path.join(course, "questions", rel);
+  assert.deepEqual(questionDirsWithoutInfo(course), [
+    { dir: q("empty/deeper"), anchor: q("empty/deeper/x.py") },
+    { dir: q("onlyFiles"), anchor: q("onlyFiles/a.txt") },
+    { dir: q("withHtml"), anchor: q("withHtml/question.html") },
+  ]);
+  assert.deepEqual(questionDirsWithoutInfo(tmpDir()), []);
+});
+
+test("runCourseRules reports question directories without info.json on their anchor", () => {
+  const anchor = path.join(brokenCourse, "questions/onlyServer/server.py");
+  const run = (overrides = {}) =>
+    runCourseRules(brokenCourse, loadConfig(null, { overrides, overridesBaseDir: brokenCourse }).config);
+
+  const [d] = run().get(anchor) ?? [];
+  assert.equal(d.severity, "error");
+  assert.equal(d.code, "prairielearn-navigator/question-info-missing");
+  assert.equal(d.startOffset, 0);
+  assert.match(d.message, /PrairieLearn will fail to load it from disk \(Missing JSON file: questions\/onlyServer\/info\.json\)/);
+  assert.deepEqual(d.related?.map((r) => r.path), [path.join(brokenCourse, "questions/onlyServer/info.json")]);
+  assert.deepEqual([...run().keys()].map((f) => path.relative(brokenCourse, f)), [
+    "questions/noInfo/question.html",
+    "questions/onlyServer/server.py",
+  ]);
+
+  assert.equal(run({ missingQuestionInfo: "warning" }).get(anchor)?.[0].severity, "warning");
+  assert.equal(run({ missingQuestionInfo: "ignored" }).size, 0);
+  assert.equal(run({ excludes: ["questions/onlyServer/**"] }).has(anchor), false);
 });
 
 test("schema diagnostics retain structured missing-property metadata", async () => {

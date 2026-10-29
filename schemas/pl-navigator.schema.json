@@ -28,6 +28,7 @@
           "unused-question",
           "unused-tag",
           "unused-assessment-set",
+          "question-info-missing",
           "client-files-course-exist",
           "client-files-question-exist",
           "server-files-course-exist",
@@ -82,6 +83,16 @@
         "error"
       ],
       "default": "warning"
+    },
+    "missingQuestionInfo": {
+      "description": "Severity of the diagnostic for a directory in questions/ with files but no info.json (and no question below it), which PrairieLearn fails to load from disk. Shorthand for rules[\"question-info-missing\"], with \"ignored\" for \"off\".",
+      "enum": [
+        "ignored",
+        "info",
+        "warning",
+        "error"
+      ],
+      "default": "error"
     },
     "excludes": {
       "description": "Glob patterns of files never to check, relative to this file, e.g. \"courseInstances/Archive/**\".",

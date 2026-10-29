@@ -17,6 +17,7 @@ const keys = [
   "unusedQuestions",
   "unusedTags",
   "unusedAssessmentSets",
+  "missingQuestionInfo",
   "excludes",
 ] as const;
 
