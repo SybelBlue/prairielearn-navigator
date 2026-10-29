@@ -49,7 +49,8 @@ same scope.
 Every PrairieLearn Navigator diagnostic offers **Ignore this violation in this
 file**, which adds an exact file/rule/message/occurrence suppression to
 `.pl-navigator.jsonc`, and **Configure severity for …**, which opens that
-rule's dropdown in VS Code Settings.
+rule's dropdown in VS Code Settings. Unused tags and assessment sets can be
+removed directly; an unused question can be moved to Trash after confirmation.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
 back online.

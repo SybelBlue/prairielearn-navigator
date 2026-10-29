@@ -9,6 +9,7 @@ export {
   DiagnosticQuickFixProvider,
   diagnosticRuleId,
   ignoreDiagnostic,
+  removeUnusedQuestion,
 } from "./diagnosticActions";
 export {
   addGeneratedUuid,

@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import {
+  DiagnosticQuickFixProvider,
   diagnosticRuleId,
   ignoreDiagnostic,
   invalidRootUuidDiagnosticCode,
@@ -122,6 +123,75 @@ suite("PrairieLearn Navigator", () => {
       ],
     });
     assert.equal(diagnosticRuleId(missingRootUuidDiagnosticCode), "schema");
+  });
+
+  test("unused tags and assessment sets offer removal edits", async () => {
+    const cases = [
+      {
+        rule: "unused-tag",
+        title: "Remove unused tag",
+        key: "tags",
+        content: '{\n  "tags": [{ "name": "used" }, { "name": "unused" }]\n}',
+      },
+      {
+        rule: "unused-assessment-set",
+        title: "Remove unused assessment set",
+        key: "assessmentSets",
+        content:
+          '{\n  "assessmentSets": [{ "name": "Homework" }, { "name": "unused" }]\n}',
+      },
+    ] as const;
+    const provider = new DiagnosticQuickFixProvider({ getCourseIdFor: () => "" });
+    for (const testCase of cases) {
+      const document = await vscode.workspace.openTextDocument({
+        content: testCase.content,
+        language: "json",
+      });
+      const start = document.positionAt(document.getText().indexOf('"unused"'));
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(start, start.translate(0, '"unused"'.length)),
+        "unused",
+        vscode.DiagnosticSeverity.Warning
+      );
+      diagnostic.source = "prairielearn-navigator";
+      diagnostic.code = `prairielearn-navigator/${testCase.rule}`;
+      const actions = provider.provideCodeActions(
+        document,
+        diagnostic.range,
+        {
+          diagnostics: [diagnostic],
+          only: vscode.CodeActionKind.QuickFix,
+          triggerKind: vscode.CodeActionTriggerKind.Invoke,
+        }
+      );
+      const remove = actions.find((action) => action.title === testCase.title);
+      assert.ok(remove?.edit);
+      assert.equal(await vscode.workspace.applyEdit(remove.edit), true);
+      const value = JSON.parse(document.getText()) as Record<string, unknown[]>;
+      assert.deepStrictEqual(value[testCase.key], [{ name: testCase.key === "tags" ? "used" : "Homework" }]);
+    }
+  });
+
+  test("an unused question offers to move its directory to Trash", async () => {
+    const unused = await until(
+      () => ourDiagnostics(depsInfo, { unused: true }).find((d) => d.code === unusedQuestionCode),
+      (diagnostic) => diagnostic !== undefined
+    );
+    assert.ok(unused);
+    const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
+      "vscode.executeCodeActionProvider",
+      depsInfo,
+      unused.range,
+      vscode.CodeActionKind.QuickFix.value
+    );
+    const remove = actions.find(
+      (action) => action.title === "Move unused question directory to Trash…"
+    );
+    assert.deepStrictEqual(remove?.command, {
+      command: "prairielearn-navigator.removeUnusedQuestion",
+      title: "Move unused question directory to Trash…",
+      arguments: [{ courseRoot: course, file: depsInfo.fsPath }],
+    });
   });
 
   test("ignoring a diagnostic creates and extends the course config", async () => {

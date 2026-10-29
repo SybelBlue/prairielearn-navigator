@@ -25,6 +25,7 @@ import {
   QuestionCompletionItemProvider,
   QuestionHeaderCodeLensProvider,
   RuleDiagnosticCollection,
+  removeUnusedQuestion,
   UuidCompletionItemProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
@@ -123,6 +124,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "prairielearn-navigator.ignoreDiagnostic",
       ignoreDiagnostic,
+    ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.removeUnusedQuestion",
+      removeUnusedQuestion,
     ),
 
     // Diagnostics

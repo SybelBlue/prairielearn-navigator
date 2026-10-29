@@ -1,7 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { applyEdits, modify } from "jsonc-parser";
+import {
+  applyEdits,
+  findNodeAtLocation,
+  getLocation,
+  modify,
+  parseTree,
+} from "jsonc-parser";
 import { configFileName } from "../core/config";
 import { parseJsonc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
@@ -16,6 +22,11 @@ export interface IgnoreDiagnosticArgs {
   rule: RuleId;
   message: string;
   occurrence: number;
+}
+
+export interface RemoveUnusedQuestionArgs {
+  courseRoot: string;
+  file: string;
 }
 
 /** The base rule id from a diagnostic code, including specialized schema codes. */
@@ -133,6 +144,46 @@ export async function ignoreDiagnostic(args: IgnoreDiagnosticArgs): Promise<bool
   return applied;
 }
 
+/** Moves an unused question directory to Trash after rechecking and confirming. */
+export async function removeUnusedQuestion(
+  args: RemoveUnusedQuestionArgs
+): Promise<boolean> {
+  const questionsRoot = path.join(args.courseRoot, "questions") + path.sep;
+  const questionDir = path.dirname(args.file);
+  if (
+    path.basename(args.file) !== "info.json" ||
+    !questionDir.startsWith(questionsRoot)
+  ) {
+    return false;
+  }
+  const uri = vscode.Uri.file(args.file);
+  const stillUnused = vscode.languages.getDiagnostics(uri).some(
+    (diagnostic) =>
+      diagnostic.source === "prairielearn-navigator" &&
+      diagnosticRuleId(diagnostic.code) === "unused-question"
+  );
+  if (!stillUnused) {
+    void vscode.window.showInformationMessage(
+      "PrairieLearn Navigator: the question is no longer unused."
+    );
+    return false;
+  }
+  const localId = path.relative(path.join(args.courseRoot, "questions"), questionDir);
+  const confirmed = await vscode.window.showWarningMessage(
+    `Move unused question "${localId}" and all files in its directory to Trash?`,
+    { modal: true },
+    "Move to Trash"
+  );
+  if (confirmed !== "Move to Trash") {
+    return false;
+  }
+  await vscode.workspace.fs.delete(vscode.Uri.file(questionDir), {
+    recursive: true,
+    useTrash: true,
+  });
+  return true;
+}
+
 function diagnosticOccurrence(
   document: vscode.TextDocument,
   target: vscode.Diagnostic,
@@ -149,6 +200,73 @@ function diagnosticOccurrence(
     .sort((a, b) => a.range.start.compareTo(b.range.start));
   const index = matching.findIndex((diagnostic) => diagnostic.range.isEqual(target.range));
   return index < 0 ? 1 : index + 1;
+}
+
+function unusedItemRemoval(
+  document: vscode.TextDocument,
+  diagnostic: vscode.Diagnostic,
+  rule: RuleId,
+  courseRoot: string
+): vscode.CodeAction | undefined {
+  if (rule === "unused-question" && courseRoot) {
+    const action = new vscode.CodeAction(
+      "Move unused question directory to Trash…",
+      vscode.CodeActionKind.QuickFix
+    );
+    action.diagnostics = [diagnostic];
+    action.command = {
+      command: "prairielearn-navigator.removeUnusedQuestion",
+      title: action.title,
+      arguments: [{
+        courseRoot,
+        file: document.uri.fsPath,
+      } satisfies RemoveUnusedQuestionArgs],
+    };
+    return action;
+  }
+
+  const collection =
+    rule === "unused-tag" ? "tags"
+    : rule === "unused-assessment-set" ? "assessmentSets"
+    : undefined;
+  if (!collection) {
+    return undefined;
+  }
+  const jsonPath = getLocation(
+    document.getText(),
+    document.offsetAt(diagnostic.range.start)
+  ).path;
+  if (
+    jsonPath[0] !== collection ||
+    typeof jsonPath[1] !== "number" ||
+    jsonPath[2] !== "name"
+  ) {
+    return undefined;
+  }
+  const title = rule === "unused-tag" ? "Remove unused tag" : "Remove unused assessment set";
+  const tree = parseTree(document.getText());
+  const array = tree && findNodeAtLocation(tree, [collection]);
+  const items = array?.type === "array" ? array.children ?? [] : [];
+  const index = jsonPath[1];
+  const item = items[index];
+  if (!item) {
+    return undefined;
+  }
+  let startOffset = item.offset;
+  let endOffset = item.offset + item.length;
+  if (items.length > 1 && index === 0) {
+    endOffset = items[1].offset;
+  } else if (index > 0) {
+    startOffset = items[index - 1].offset + items[index - 1].length;
+  }
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.delete(
+    document.uri,
+    new vscode.Range(document.positionAt(startOffset), document.positionAt(endOffset))
+  );
+  return action;
 }
 
 /** Linter-style suppression and severity actions for every rule diagnostic. */
@@ -169,6 +287,11 @@ export class DiagnosticQuickFixProvider implements vscode.CodeActionProvider {
       const rule = diagnosticRuleId(diagnostic.code);
       if (!rule) {
         continue;
+      }
+
+      const removal = unusedItemRemoval(document, diagnostic, rule, courseRoot);
+      if (removal) {
+        actions.push(removal);
       }
 
       if (courseRoot) {
