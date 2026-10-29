@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "vitest";
-import { isExcluded, loadConfig } from "../core/config";
+import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from "../core/config";
 import { findElements } from "../core/html";
 import { parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
@@ -151,14 +151,22 @@ test("the first entry matching both version and glob wins", () => {
   assert.deepEqual(names("elsewhere.json", "2026-01-01"), []);
 });
 
-test("the config file's JSON schema lists every rule id", () => {
+test("the config file's JSON schema matches the config keys, rule ids, and settings", () => {
   const schema = JSON.parse(
     fs.readFileSync(path.join(__dirname, "../../schemas/pl-navigator.schema.json"), "utf-8")
   );
+  assert.deepEqual(Object.keys(schema.properties).sort(), ["$schema", ...configKeys].sort());
   assert.deepEqual(
     [...schema.properties.rules.propertyNames.enum].sort(),
     Object.keys(rules).sort()
   );
+  assert.deepEqual(schema.properties.rules.additionalProperties.enum, ruleSetting.options);
+  // The unused* shorthands are the only top-level enums
+  const shorthands = Object.values(schema.properties).filter((p) => (p as { enum?: unknown }).enum);
+  assert.ok(shorthands.length > 0);
+  for (const p of shorthands) {
+    assert.deepEqual((p as { enum: unknown }).enum, severitySetting.options);
+  }
 });
 
 test("isCheckable covers every PL course JSON file", () => {

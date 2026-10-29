@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as z from "zod";
 import { Diagnostic } from "./diagnostic";
 import { matchesGlob } from "./courseFiles";
 import { parseJsonDoc, rangeOf } from "./json";
@@ -10,9 +11,9 @@ import { isRuleId, RuleId } from "./rules/registry";
 /** Looked up in the course root, next to infoCourse.json. */
 export const configFileName = ".pl-navigator.jsonc";
 
-type RuleSetting = "off" | "info" | "warning" | "error";
-const ruleSettings: readonly string[] = ["off", "info", "warning", "error"];
-const severitySettings: readonly string[] = ["ignored", "info", "warning", "error"];
+export const ruleSetting = z.enum(["off", "info", "warning", "error"]);
+type RuleSetting = z.infer<typeof ruleSetting>;
+export const severitySetting = z.enum(["ignored", "info", "warning", "error"]);
 
 /** Config keys that are shorthand for one rule's setting, with "ignored" for "off". */
 const severityKeys = {
@@ -46,9 +47,7 @@ export function isExcluded(config: NavigatorConfig, file: string): boolean {
 }
 
 /** Same keys as the config file; from CLI flags or VS Code settings. */
-export type ConfigOverrides = Partial<
-  Record<keyof NavigatorConfig | keyof typeof severityKeys, unknown>
->;
+export type ConfigOverrides = Partial<Record<keyof typeof fields, unknown>>;
 
 /** A config problem, located in `file` when it came from one. */
 export type ConfigProblem = Diagnostic & { file?: string };
@@ -132,14 +131,106 @@ export function loadConfig(
   return { config, file: found, problems };
 }
 
-function apply(
-  config: NavigatorConfig,
-  raw: unknown,
-  baseDir: string,
-  report: (message: string, path: (string | number)[], severity?: Diagnostic["severity"]) => void
-) {
-  const unknown = (message: string, path: (string | number)[]) =>
-    report(message, path, "warning");
+type Report = (message: string, path: (string | number)[], severity?: Diagnostic["severity"]) => void;
+
+/** One config source being applied. */
+interface FieldContext {
+  config: NavigatorConfig;
+  /** What relative paths in this source are relative to. */
+  baseDir: string;
+  report: Report;
+}
+
+type Field = (key: string, value: unknown, ctx: FieldContext) => void;
+
+/**
+ * A config key: `schema` checks its value, `message` is reported on the key
+ * when it fails (a custom issue's own message wins), and `set` applies it.
+ */
+function field<S extends z.ZodType>(
+  schema: S,
+  message: string | undefined,
+  set: (value: z.output<S>, ctx: FieldContext) => void
+): Field {
+  return (key, value, ctx) => {
+    const result = schema.safeParse(value, message ? { error: () => message } : undefined);
+    if (result.success) {
+      set(result.data, ctx);
+    } else {
+      ctx.report(result.error.issues[0].message, [key]);
+    }
+  };
+}
+
+const severityFields = Object.fromEntries(
+  Object.entries(severityKeys).map(([key, rule]) => [
+    key,
+    field(
+      severitySetting,
+      `${key} must be "ignored", "info", "warning", or "error"`,
+      (setting, { config }) => {
+        config.rules = { ...config.rules, [rule]: setting === "ignored" ? "off" : setting };
+      }
+    ),
+  ])
+) as Record<keyof typeof severityKeys, Field>;
+
+const fields = {
+  plVersion: field(
+    z.unknown().transform((value, ctx) => {
+      const error = validatePlVersion(value);
+      if (error) {
+        ctx.addIssue({ code: "custom", message: error });
+        return z.NEVER;
+      }
+      return value as PlVersion;
+    }),
+    undefined,
+    (plVersion, { config }) => {
+      config.plVersion = plVersion;
+    }
+  ),
+  schemaCacheDir: field(
+    z.string().min(1),
+    "schemaCacheDir must be a non-empty string",
+    (dir, { config, baseDir }) => {
+      config.schemaCacheDir = path.resolve(baseDir, expandHome(dir));
+    }
+  ),
+  excludes: field(
+    z.array(z.string().min(1)),
+    "excludes must be an array of glob patterns",
+    (globs, { config, baseDir }) => {
+      config.excludes = [
+        ...config.excludes,
+        ...globs.map((glob) => ({ base: baseDir, glob: glob.replace(/^\.\//, "") })),
+      ];
+    }
+  ),
+  rules: field(
+    z.record(z.string(), z.unknown()),
+    "rules must be an object of rule id to \"off\" | \"info\" | \"warning\" | \"error\"",
+    (rules, { config, report }) => {
+      // Each rule applies or is reported on its own
+      for (const [id, setting] of Object.entries(rules)) {
+        const parsed = ruleSetting.safeParse(setting);
+        if (!isRuleId(id)) {
+          report(`unknown rule "${id}"`, ["rules", id], "warning");
+        } else if (!parsed.success) {
+          report(`rule "${id}" must be "off", "info", "warning", or "error"`, ["rules", id]);
+        } else {
+          config.rules = { ...config.rules, [id]: parsed.data };
+        }
+      }
+    }
+  ),
+  ...severityFields,
+} satisfies Record<string, Field>;
+
+/** Every key a config source may set, besides `$schema`. */
+export const configKeys: readonly string[] = Object.keys(fields);
+
+function apply(config: NavigatorConfig, raw: unknown, baseDir: string, report: Report) {
   if (raw === undefined) {
     return;
   }
@@ -148,67 +239,13 @@ function apply(
     return;
   }
   for (const [key, value] of Object.entries(raw)) {
-    if (value === undefined) {
+    if (value === undefined || key === "$schema") {
       continue;
     }
-    switch (key) {
-      case "$schema":
-        break;
-      case "plVersion": {
-        const error = validatePlVersion(value);
-        if (error) {
-          report(error, [key]);
-        } else {
-          config.plVersion = value as PlVersion;
-        }
-        break;
-      }
-      case "schemaCacheDir":
-        if (typeof value !== "string" || value === "") {
-          report("schemaCacheDir must be a non-empty string", [key]);
-        } else {
-          config.schemaCacheDir = path.resolve(baseDir, expandHome(value));
-        }
-        break;
-      case "excludes":
-        if (!Array.isArray(value) || value.some((g) => typeof g !== "string" || g === "")) {
-          report("excludes must be an array of glob patterns", [key]);
-        } else {
-          config.excludes = [
-            ...config.excludes,
-            ...value.map((glob: string) => ({ base: baseDir, glob: glob.replace(/^\.\//, "") })),
-          ];
-        }
-        break;
-      case "rules":
-        if (typeof value !== "object" || value === null || Array.isArray(value)) {
-          report("rules must be an object of rule id to \"off\" | \"info\" | \"warning\" | \"error\"", [key]);
-          break;
-        }
-        for (const [id, setting] of Object.entries(value)) {
-          if (!isRuleId(id)) {
-            unknown(`unknown rule "${id}"`, [key, id]);
-          } else if (typeof setting !== "string" || !ruleSettings.includes(setting)) {
-            report(`rule "${id}" must be "off", "info", "warning", or "error"`, [key, id]);
-          } else {
-            config.rules = { ...config.rules, [id]: setting as RuleSetting };
-          }
-        }
-        break;
-      case "unusedQuestions":
-      case "unusedTags":
-      case "unusedAssessmentSets":
-        if (typeof value !== "string" || !severitySettings.includes(value)) {
-          report(`${key} must be "ignored", "info", "warning", or "error"`, [key]);
-        } else {
-          config.rules = {
-            ...config.rules,
-            [severityKeys[key]]: value === "ignored" ? "off" : (value as RuleSetting),
-          };
-        }
-        break;
-      default:
-        unknown(`unknown config key "${key}"`, [key]);
+    if (Object.hasOwn(fields, key)) {
+      fields[key as keyof typeof fields](key, value, { config, baseDir, report });
+    } else {
+      report(`unknown config key "${key}"`, [key], "warning");
     }
   }
 }

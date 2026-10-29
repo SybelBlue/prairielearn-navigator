@@ -233,6 +233,7 @@
     "ajv": "^8.20.0",
     "json-to-pretty-yaml": "^1.2.2",
     "jsonc-parser": "^3.3.1",
-    "picomatch": "^4.0.7"
+    "picomatch": "^4.0.7",
+    "zod": "^4.6.7"
   }
 }
