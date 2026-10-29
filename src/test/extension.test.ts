@@ -1,8 +1,11 @@
 import * as assert from "assert";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import {
+  diagnosticRuleId,
+  ignoreDiagnostic,
   invalidRootUuidDiagnosticCode,
   isEmptyUuidValue,
   missingRootUuidDiagnosticCode,
@@ -84,6 +87,78 @@ suite("PrairieLearn Navigator", () => {
         ["prairielearn-navigator/client-files-course-exist", "file not found: clientFilesCourse/missing.css"],
       ]
     );
+  });
+
+  test("rule diagnostics offer ignore and configure-severity actions", async () => {
+    const diagnostics = await diagnosticsFor(depsInfo);
+    const diagnostic = diagnostics.find((candidate) =>
+      candidate.message.includes("clientFilesCourse/missing.css")
+    );
+    assert.ok(diagnostic);
+    const actions = await vscode.commands.executeCommand<(vscode.CodeAction | vscode.Command)[]>(
+      "vscode.executeCodeActionProvider",
+      depsInfo,
+      diagnostic.range,
+      vscode.CodeActionKind.QuickFix.value
+    );
+    const codeActions = actions as vscode.CodeAction[];
+    const ignore = codeActions.find((action) => action.title === "Ignore this violation in this file");
+    assert.ok(ignore?.command);
+    assert.deepStrictEqual(ignore.command.arguments?.[0], {
+      courseRoot: course,
+      file: depsInfo.fsPath,
+      rule: "client-files-course-exist",
+      message: diagnostic.message,
+      occurrence: 1,
+    });
+    const configure = codeActions.find((action) =>
+      action.title === "Configure severity for client-files-course-exist…"
+    );
+    assert.deepStrictEqual(configure?.command, {
+      command: "workbench.action.openSettings",
+      title: "Configure severity for client-files-course-exist…",
+      arguments: [
+        "@id:prairielearn-navigator.diagnostics.client-files-course-exist",
+      ],
+    });
+    assert.equal(diagnosticRuleId(missingRootUuidDiagnosticCode), "schema");
+  });
+
+  test("ignoring a diagnostic creates and extends the course config", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-ignore-"));
+    const file = path.join(root, "questions/q/info.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "{}\n");
+    try {
+      const base = {
+        courseRoot: root,
+        file,
+        rule: "schema" as const,
+        message: "missing a property",
+      };
+      assert.equal(await ignoreDiagnostic({ ...base, occurrence: 1 }), true);
+      assert.equal(await ignoreDiagnostic({ ...base, occurrence: 1 }), true);
+      assert.equal(await ignoreDiagnostic({ ...base, occurrence: 2 }), true);
+      const saved = JSON.parse(
+        fs.readFileSync(path.join(root, ".pl-navigator.jsonc"), "utf-8")
+      );
+      assert.deepStrictEqual(saved.ignoredDiagnostics, [
+        {
+          file: "questions/q/info.json",
+          rule: "schema",
+          message: "missing a property",
+          occurrence: 1,
+        },
+        {
+          file: "questions/q/info.json",
+          rule: "schema",
+          message: "missing a property",
+          occurrence: 2,
+        },
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("files that were never opened are checked too", async () => {

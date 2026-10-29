@@ -63,6 +63,13 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
   "schemaCacheDir": ".cache/pl-schemas",
   // Turn rules off or change their severity: "off", "info", "warning", or "error"
   "rules": { "duplicate-question-id": "error" },
+  // Exact occurrences suppressed by VS Code's "Ignore this violation" quick fix
+  "ignoredDiagnostics": [{
+    "file": "questions/draft/info.json",
+    "rule": "unused-question",
+    "message": "question \"draft\" is not used by any assessment",
+    "occurrence": 1
+  }],
   // Questions no assessment uses: "ignored", "info" (default), "warning", or "error"
   "unusedQuestions": "warning",
   // Tags and assessment sets no question or assessment uses (default "warning")
@@ -74,6 +81,11 @@ Put a `.pl-navigator.jsonc` (JSON with comments) next to `infoCourse.json`:
   "excludes": ["courseInstances/Archive/**", "questions/drafts/**"]
 }
 ```
+
+An ignored diagnostic is matched by its course-relative file, rule, exact
+message, and 1-based occurrence among diagnostics in that file with the same
+rule and message. This keeps otherwise identical occurrences independently
+selectable.
 
 PrairieLearn has no numbered releases; it deploys continuously from its
 `master` branch. So a version is one of:

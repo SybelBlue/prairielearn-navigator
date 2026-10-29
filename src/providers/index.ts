@@ -6,6 +6,11 @@ export {
 } from "./completions";
 export { ConfigProvider } from "./config";
 export {
+  DiagnosticQuickFixProvider,
+  diagnosticRuleId,
+  ignoreDiagnostic,
+} from "./diagnosticActions";
+export {
   addGeneratedUuid,
   invalidRootUuidDiagnosticCode,
   missingRootUuidDiagnosticCode,

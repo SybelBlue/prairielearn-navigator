@@ -7,7 +7,7 @@ import { IsoDate, matchesRange, versionDate } from "../plVersion";
 import { questionDirsWithoutInfo } from "../questionDirs";
 import { ReferenceIndex } from "../referenceIndex";
 import { SchemaStore } from "../schemas";
-import { ruleDiagnosticCode, RuleId, rules } from "./registry";
+import { isRuleId, ruleDiagnosticCode, RuleId, rules } from "./registry";
 import { RuleEntry, RuleImpl, RuleTable } from "./types";
 
 /** The implementation of each rule that applies to `relPath` at `plDate`. */
@@ -85,7 +85,42 @@ export async function runRules(
         return diagnostics.map((d) => withRuleSetting(d, id, config));
       })
   );
-  return results.flat().sort((a, b) => a.startOffset - b.startOffset);
+  return withoutIgnoredDiagnostics(
+    filePath,
+    results.flat().sort((a, b) => a.startOffset - b.startOffset),
+    config
+  );
+}
+
+/** Removes exact per-file diagnostic occurrences suppressed in the config. */
+export function withoutIgnoredDiagnostics(
+  filePath: string,
+  diagnostics: Diagnostic[],
+  config: NavigatorConfig
+): Diagnostic[] {
+  const ignores = config.ignoredDiagnostics.filter((ignore) => ignore.file === filePath);
+  if (ignores.length === 0) {
+    return diagnostics;
+  }
+  const occurrences = new Map<string, number>();
+  return diagnostics.filter((diagnostic) => {
+    const prefix = "prairielearn-navigator/";
+    const id = diagnostic.code?.startsWith(prefix)
+      ? diagnostic.code.slice(prefix.length).split("/")[0]
+      : undefined;
+    if (id === undefined || !isRuleId(id)) {
+      return true;
+    }
+    const key = `${id}\0${diagnostic.message}`;
+    const occurrence = (occurrences.get(key) ?? 0) + 1;
+    occurrences.set(key, occurrence);
+    return !ignores.some(
+      (ignore) =>
+        ignore.rule === id &&
+        ignore.message === diagnostic.message &&
+        ignore.occurrence === occurrence
+    );
+  });
 }
 
 /** Tags a rule's diagnostic with its code and the configured severity. */
@@ -126,7 +161,14 @@ export function runCourseRules(
       severity: "error",
       related: [{ path: infoJson, message: "Expected location of info.json" }],
     };
-    out.set(anchor, [withRuleSetting(diagnostic, "question-info-missing", config)]);
+    const diagnostics = withoutIgnoredDiagnostics(
+      anchor,
+      [withRuleSetting(diagnostic, "question-info-missing", config)],
+      config
+    );
+    if (diagnostics.length > 0) {
+      out.set(anchor, diagnostics);
+    }
   }
   return out;
 }

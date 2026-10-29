@@ -18,7 +18,8 @@ This extension is still experimental and may change or break.
     referenced file, a "N uses" CodeLens at the top of referenced files, and
     **PrairieLearn: Find Uses of File** in the explorer's context menu (works
     for images too).
-- Completions, code lenses, and quick fixes that create missing files.
+- Completions, code lenses, and quick fixes that create missing files, ignore
+  one diagnostic occurrence in a file, or open that rule's severity setting.
 - UUID completions in PrairieLearn info files, generated with `uuidgen` by
   default, plus quick fixes for a missing or invalid root `uuid` field.
 - Editor-title buttons for switching between a question's `question.html`,
@@ -44,6 +45,11 @@ The older `unusedQuestions`, `unusedTags`, `unusedAssessmentSets`, and
 `missingQuestionInfo` setting names remain supported as aliases. The uniform
 `diagnostics.*` setting takes precedence when both specify a severity in the
 same scope.
+
+Every PrairieLearn Navigator diagnostic offers **Ignore this violation in this
+file**, which adds an exact file/rule/message/occurrence suppression to
+`.pl-navigator.jsonc`, and **Configure severity for …**, which opens that
+rule's dropdown in VS Code Settings.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
 back online.

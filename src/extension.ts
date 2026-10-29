@@ -14,11 +14,13 @@ import {
   ConfigProvider,
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
+  DiagnosticQuickFixProvider,
   anyFileSelector,
   FileReferenceProvider,
   fileReferenceSelector,
   findUsesCommand,
   isEmptyUuidValue,
+  ignoreDiagnostic,
   MissingFileQuickFixProvider,
   QuestionCompletionItemProvider,
   QuestionHeaderCodeLensProvider,
@@ -118,6 +120,10 @@ export function activate(context: vscode.ExtensionContext) {
       "prairielearn-navigator.addGeneratedUuid",
       addGeneratedUuid,
     ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.ignoreDiagnostic",
+      ignoreDiagnostic,
+    ),
 
     // Diagnostics
     ...new RuleDiagnosticCollection(
@@ -203,6 +209,13 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.languages.registerCodeActionsProvider(
       "json",
       new MissingFileQuickFixProvider(),
+      {
+        providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
+      },
+    ),
+    vscode.languages.registerCodeActionsProvider(
+      anyFileSelector,
+      new DiagnosticQuickFixProvider(courseCache),
       {
         providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
       },

@@ -10,6 +10,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `prairielearn-navigator.diagnostics.<rule-id>` VS Code severity dropdown with
   `default`, `off`, `info`, `warning`, and `error` choices. The four severity
   settings added in 1.1.2 remain supported as deprecated aliases.
+- Every rule diagnostic now offers quick fixes to ignore that exact occurrence
+  in its file through `.pl-navigator.jsonc`, or open the rule's VS Code severity
+  setting. The CLI honors the same `ignoredDiagnostics` suppressions.
 
 ## [1.1.2] - 2026-10-29
 

@@ -15,6 +15,13 @@ export const ruleSetting = z.enum(["off", "info", "warning", "error"]);
 type RuleSetting = z.infer<typeof ruleSetting>;
 export const severitySetting = z.enum(["ignored", "info", "warning", "error"]);
 
+const ignoredDiagnosticSetting = z.object({
+  file: z.string().min(1),
+  rule: z.string().refine(isRuleId, "unknown rule"),
+  message: z.string().min(1),
+  occurrence: z.number().int().positive(),
+}).strict();
+
 /** Config keys that are shorthand for one rule's setting, with "ignored" for "off". */
 const severityKeys = {
   unusedQuestions: "unused-question",
@@ -29,11 +36,22 @@ interface Exclude {
   glob: string;
 }
 
+/** One exact diagnostic occurrence suppressed for one file. */
+export interface IgnoredDiagnostic {
+  /** Absolute path of the file containing the diagnostic. */
+  file: string;
+  rule: RuleId;
+  message: string;
+  /** 1-based occurrence among diagnostics with this rule and message. */
+  occurrence: number;
+}
+
 export interface NavigatorConfig {
   plVersion: PlVersion;
   /** Absolute. */
   schemaCacheDir: string;
   rules: Partial<Record<RuleId, RuleSetting>>;
+  ignoredDiagnostics: IgnoredDiagnostic[];
   /** Files never checked. Every source adds to this rather than replacing it. */
   excludes: Exclude[];
 }
@@ -84,6 +102,7 @@ export function loadConfig(
     plVersion: "latest",
     schemaCacheDir: defaultSchemaCacheDir(),
     rules: {},
+    ignoredDiagnostics: [],
     excludes: [],
     ...options.defaults,
   };
@@ -205,6 +224,20 @@ const fields = {
       config.excludes = [
         ...config.excludes,
         ...globs.map((glob) => ({ base: baseDir, glob: glob.replace(/^\.\//, "") })),
+      ];
+    }
+  ),
+  ignoredDiagnostics: field(
+    z.array(ignoredDiagnosticSetting),
+    "ignoredDiagnostics must be an array of diagnostic suppressions",
+    (diagnostics, { config, baseDir }) => {
+      config.ignoredDiagnostics = [
+        ...config.ignoredDiagnostics,
+        ...diagnostics.map((diagnostic) => ({
+          ...diagnostic,
+          file: path.resolve(baseDir, diagnostic.file),
+          rule: diagnostic.rule as RuleId,
+        })),
       ];
     }
   ),

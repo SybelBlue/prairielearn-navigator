@@ -54,6 +54,63 @@
         ]
       }
     },
+    "ignoredDiagnostics": {
+      "description": "Exact diagnostic occurrences to suppress. Use the VS Code quick fix to add entries.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "file",
+          "rule",
+          "message",
+          "occurrence"
+        ],
+        "properties": {
+          "file": {
+            "description": "File containing the diagnostic, relative to this config file.",
+            "type": "string",
+            "minLength": 1
+          },
+          "rule": {
+            "description": "Rule id of the diagnostic.",
+            "enum": [
+              "json-syntax",
+              "schema",
+              "duplicate-question-id",
+              "unused-question",
+              "unused-tag",
+              "unused-assessment-set",
+              "question-info-missing",
+              "client-files-course-exist",
+              "client-files-question-exist",
+              "server-files-course-exist",
+              "question-exists",
+              "element-files-exist",
+              "pl-figure-file-exist",
+              "pl-file-download-file-exist",
+              "pl-code-file-exist",
+              "pl-file-editor-file-exist",
+              "pl-graph-file-exist",
+              "pl-rich-text-editor-file-exist",
+              "pl-excalidraw-file-exist",
+              "pl-xss-safe-file-exist",
+              "pl-template-file-exist"
+            ]
+          },
+          "message": {
+            "description": "Exact diagnostic message to suppress.",
+            "type": "string",
+            "minLength": 1
+          },
+          "occurrence": {
+            "description": "1-based occurrence among diagnostics in the file with this rule and message.",
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
     "unusedQuestions": {
       "description": "Severity of the diagnostic on a question's info.json title when no assessment uses the question. Shorthand for rules[\"unused-question\"], with \"ignored\" for \"off\".",
       "enum": [

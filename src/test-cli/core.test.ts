@@ -114,6 +114,27 @@ test("excludes add up across sources and match relative to where they are declar
   assert.match(bad.problems[0].message, /excludes must be an array/);
 });
 
+test("ignored diagnostics resolve files relative to their config source", () => {
+  const { config, problems } = loadConfig(null, {
+    overridesBaseDir: brokenCourse,
+    overrides: {
+      ignoredDiagnostics: [{
+        file: "questions/deps/info.json",
+        rule: "client-files-course-exist",
+        message: "file not found",
+        occurrence: 1,
+      }],
+    },
+  });
+  assert.deepEqual(problems, []);
+  assert.deepEqual(config.ignoredDiagnostics, [{
+    file: path.join(brokenCourse, "questions/deps/info.json"),
+    rule: "client-files-course-exist",
+    message: "file not found",
+    occurrence: 1,
+  }]);
+});
+
 test("invalid config values are reported and replaced by defaults", () => {
   const { config, problems } = loadConfig(null, {
     configPath: path.join(fixtures, "configs/invalid.jsonc"),
@@ -163,6 +184,10 @@ test("the config file's JSON schema matches the config keys, rule ids, and setti
     Object.keys(rules).sort()
   );
   assert.deepEqual(schema.properties.rules.additionalProperties.enum, ruleSetting.options);
+  assert.deepEqual(
+    [...schema.properties.ignoredDiagnostics.items.properties.rule.enum].sort(),
+    Object.keys(rules).sort()
+  );
   // The unused* shorthands are the only top-level enums
   const shorthands = Object.values(schema.properties).filter((p) => (p as { enum?: unknown }).enum);
   assert.ok(shorthands.length > 0);
@@ -221,6 +246,40 @@ test("runRules stamps rule codes and applies severity overrides", async () => {
 
   const off = { ...config, rules: { "client-files-course-exist": "off" as const } };
   assert.deepEqual(await runRules(file, text, { courseRoot: brokenCourse, config: off, schemas }), []);
+});
+
+test("an ignored diagnostic suppresses only the selected occurrence in its file", async () => {
+  const file = path.join(
+    brokenCourse,
+    "courseInstances/Fa26/assessments/hw1/infoAssessment.json"
+  );
+  const text = fs.readFileSync(file, "utf-8");
+  const message = 'Duplicate question ID: "good" appears 2 times';
+  const { config } = loadConfig(brokenCourse, {
+    overridesBaseDir: brokenCourse,
+    overrides: {
+      ignoredDiagnostics: [{
+        file: path.relative(brokenCourse, file),
+        rule: "duplicate-question-id",
+        message,
+        occurrence: 2,
+      }],
+    },
+  });
+  const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
+  const diagnostics = await runRules(file, text, {
+    courseRoot: brokenCourse,
+    config: { ...config, rules: { schema: "off", "question-exists": "off" } },
+    schemas,
+  });
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => [
+      text.slice(diagnostic.startOffset, diagnostic.endOffset),
+      diagnostic.message,
+    ]),
+    [["good", message]]
+  );
+  assert.equal(text.slice(0, diagnostics[0].startOffset).split("\n").length, 10);
 });
 
 test("unused questions are noted on their title, given the reference index", async () => {
