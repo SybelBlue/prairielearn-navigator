@@ -5,6 +5,7 @@ import {
   jsonSyntax,
   referencesExist,
   schemaRule,
+  unusedQuestion,
 } from "./impls";
 import { RuleEntry, RuleTable } from "./types";
 
@@ -32,6 +33,10 @@ const otherRules = {
 
   "duplicate-question-id": [
     ["*", courseFiles.assessment, duplicateQuestionIds],
+  ],
+
+  "unused-question": [
+    ["*", courseFiles.question, unusedQuestion],
   ],
 } as const satisfies RuleTable;
 

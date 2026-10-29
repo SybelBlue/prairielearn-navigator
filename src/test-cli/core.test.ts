@@ -199,6 +199,47 @@ test("runRules stamps rule codes and applies severity overrides", async () => {
   assert.deepEqual(await runRules(file, text, { courseRoot: brokenCourse, config: off, schemas }), []);
 });
 
+test("unused questions are noted on their title, given the reference index", async () => {
+  const { config } = loadConfig(brokenCourse);
+  const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
+  const references = indexCourse(brokenCourse, "2026-01-01");
+  const check = async (question: string, withIndex = true) => {
+    const file = path.join(brokenCourse, "questions", question, "info.json");
+    const text = fs.readFileSync(file, "utf-8");
+    const ds = await runRules(file, text, {
+      courseRoot: brokenCourse,
+      config,
+      schemas,
+      references: withIndex ? references : undefined,
+    });
+    return ds
+      .filter((d) => d.code === "prairielearn-navigator/unused-question")
+      .map((d) => [text.slice(d.startOffset, d.endOffset), d.severity, d.message]);
+  };
+
+  assert.deepEqual(await check("deps"), [
+    ['"Q"', "info", 'question "deps" is not used by any assessment'],
+  ]);
+  assert.deepEqual(await check("good"), []);
+  assert.deepEqual(await check("topic/nested"), []);
+  assert.deepEqual(await check("deps", false), []);
+});
+
+test("unusedQuestions is shorthand for the unused-question rule", () => {
+  const ruleFor = (unusedQuestions: string) =>
+    loadConfig(null, { overrides: { unusedQuestions } }).config.rules["unused-question"];
+  assert.equal(ruleFor("ignored"), "off");
+  assert.equal(ruleFor("info"), "info");
+  assert.equal(ruleFor("warning"), "warning");
+  assert.equal(ruleFor("error"), "error");
+
+  const { config, problems } = loadConfig(null, { overrides: { unusedQuestions: "off" } });
+  assert.equal(config.rules["unused-question"], undefined);
+  assert.deepEqual(problems.map((p) => p.message), [
+    'unusedQuestions must be "ignored", "info", "warning", or "error"',
+  ]);
+});
+
 test("schema diagnostics retain structured missing-property metadata", async () => {
   const file = path.join(brokenCourse, "questions/good/info.json");
   const { config } = loadConfig(brokenCourse);

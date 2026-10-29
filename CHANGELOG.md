@@ -6,6 +6,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- New `unused-question` rule: a question that no assessment uses gets a
+  diagnostic on its `info.json` title. Its severity is set by
+  `unusedQuestions` (`ignored`, `info`, `warning`, or `error`; default
+  `info`) in `.pl-navigator.jsonc`, the `prairielearn-navigator.unusedQuestions`
+  setting, or the CLI's `--unused-questions`.
+- Rules can now be set to `info`. The CLI prints infos and counts them in its
+  summary, and `--format github` emits them as notices. They don't affect the
+  exit code.
+
 ## [1.1.1] - 2026-10-27
 
 - Added action-style UUID completion for `uuid` fields in PrairieLearn info

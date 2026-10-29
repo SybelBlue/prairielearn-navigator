@@ -25,6 +25,7 @@
           "json-syntax",
           "schema",
           "duplicate-question-id",
+          "unused-question",
           "client-files-course-exist",
           "client-files-question-exist",
           "server-files-course-exist",
@@ -44,10 +45,21 @@
       "additionalProperties": {
         "enum": [
           "off",
+          "info",
           "warning",
           "error"
         ]
       }
+    },
+    "unusedQuestions": {
+      "description": "Severity of the diagnostic on a question's info.json title when no assessment uses the question. Shorthand for rules[\"unused-question\"], with \"ignored\" for \"off\".",
+      "enum": [
+        "ignored",
+        "info",
+        "warning",
+        "error"
+      ],
+      "default": "info"
     },
     "excludes": {
       "description": "Glob patterns of files never to check, relative to this file, e.g. \"courseInstances/Archive/**\".",

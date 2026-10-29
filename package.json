@@ -89,11 +89,30 @@
             "type": "string",
             "enum": [
               "off",
+              "info",
               "warning",
               "error"
             ]
           },
           "markdownDescription": "Turn rules off or change their severity, by rule id, e.g. `{ \"schema\": \"off\" }`."
+        },
+        "prairielearn-navigator.unusedQuestions": {
+          "type": "string",
+          "enum": [
+            "ignored",
+            "info",
+            "warning",
+            "error"
+          ],
+          "enumDescriptions": [
+            "Do not report unused questions.",
+            "Report unused questions as information.",
+            "Report unused questions as warnings.",
+            "Report unused questions as errors."
+          ],
+          "default": "info",
+          "scope": "resource",
+          "markdownDescription": "Severity of the diagnostic on a question's `info.json` title when no assessment uses the question. Set in `.vscode/settings.json` to override the course's `.pl-navigator.jsonc`."
         },
         "prairielearn-navigator.excludes": {
           "type": "array",

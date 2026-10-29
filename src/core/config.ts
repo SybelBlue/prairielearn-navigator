@@ -10,8 +10,9 @@ import { isRuleId, RuleId } from "./rules/registry";
 /** Looked up in the course root, next to infoCourse.json. */
 export const configFileName = ".pl-navigator.jsonc";
 
-type RuleSetting = "off" | "warning" | "error";
-const ruleSettings: readonly string[] = ["off", "warning", "error"];
+type RuleSetting = "off" | "info" | "warning" | "error";
+const ruleSettings: readonly string[] = ["off", "info", "warning", "error"];
+const unusedQuestionSettings: readonly string[] = ["ignored", "info", "warning", "error"];
 
 /** A glob and the directory it is relative to. */
 interface Exclude {
@@ -38,7 +39,7 @@ export function isExcluded(config: NavigatorConfig, file: string): boolean {
 }
 
 /** Same keys as the config file; from CLI flags or VS Code settings. */
-export type ConfigOverrides = Partial<Record<keyof NavigatorConfig, unknown>>;
+export type ConfigOverrides = Partial<Record<keyof NavigatorConfig | "unusedQuestions", unknown>>;
 
 /** A config problem, located in `file` when it came from one. */
 export type ConfigProblem = Diagnostic & { file?: string };
@@ -172,17 +173,28 @@ function apply(
         break;
       case "rules":
         if (typeof value !== "object" || value === null || Array.isArray(value)) {
-          report("rules must be an object of rule id to \"off\" | \"warning\" | \"error\"", [key]);
+          report("rules must be an object of rule id to \"off\" | \"info\" | \"warning\" | \"error\"", [key]);
           break;
         }
         for (const [id, setting] of Object.entries(value)) {
           if (!isRuleId(id)) {
             unknown(`unknown rule "${id}"`, [key, id]);
           } else if (typeof setting !== "string" || !ruleSettings.includes(setting)) {
-            report(`rule "${id}" must be "off", "warning", or "error"`, [key, id]);
+            report(`rule "${id}" must be "off", "info", "warning", or "error"`, [key, id]);
           } else {
             config.rules = { ...config.rules, [id]: setting as RuleSetting };
           }
+        }
+        break;
+      case "unusedQuestions":
+        // Shorthand for the unused-question rule's setting
+        if (typeof value !== "string" || !unusedQuestionSettings.includes(value)) {
+          report("unusedQuestions must be \"ignored\", \"info\", \"warning\", or \"error\"", [key]);
+        } else {
+          config.rules = {
+            ...config.rules,
+            "unused-question": value === "ignored" ? "off" : (value as RuleSetting),
+          };
         }
         break;
       default:

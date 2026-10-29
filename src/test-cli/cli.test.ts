@@ -31,7 +31,7 @@ test("broken course exits 1 with code frames", () => {
   );
   assert.match(stdout, /13 \|\s+\{ "id": "noHtml", "points": 1 \},/);
   assert.match(stdout, /\s+\^{6} incomplete question/);
-  assert.match(stdout, /23 errors, 4 warnings in 8 files \(22 files, 6 questions checked\)/);
+  assert.match(stdout, /23 errors, 4 warnings, 6 infos in 8 files \(22 files, 6 questions checked\)/);
 });
 
 test("lists every checked file, with each assessment's questions under it", () => {
@@ -91,7 +91,7 @@ test("missing pl-figure files are errors", () => {
   );
   assert.match(stdout, /5:64 error: file not found: clientFilesCourse\/gone\.png/);
   assert.match(stdout, /invalid pl-figure directory "serverFilesCourse"/);
-  assert.match(stdout, /4 errors in 1 file \(2 files, 0 questions checked\)/);
+  assert.match(stdout, /4 errors, 1 info in 1 file \(2 files, 0 questions checked\)/);
 });
 
 test("every element and JSON field that names a file is checked", () => {
@@ -105,14 +105,14 @@ test("every element and JSON field that names a file is checked", () => {
   assert.match(stdout, /error: file not found: questions\/jsonRefs\/clientFilesQuestion\/missing\.css/);
   assert.match(stdout, /error: file or directory not found: serverFilesCourse\/graders \[server-files-course-exist\]/);
   assert.match(stdout, /error: file not found: elements\/my-el\/missing\.js \[element-files-exist\]/);
-  assert.match(stdout, /11 errors, 1 warning in 3 files/);
+  assert.match(stdout, /11 errors, 1 warning, 2 infos in 3 files/);
 });
 
 test("comments and trailing commas in course JSON are errors, as in PrairieLearn", () => {
   const { stdout } = runCli("check", "broken/questions/commented");
   assert.match(stdout, /info\.json:2:3 error: comments are not allowed/);
   assert.match(stdout, /info\.json:6:15 error: trailing commas are not allowed/);
-  assert.match(stdout, /2 errors in 1 file/);
+  assert.match(stdout, /2 errors, 1 info in 1 file/);
 });
 
 test("validates against the pinned PrairieLearn schema", () => {
@@ -136,6 +136,43 @@ test("--config can turn rules off or change their severity", () => {
   assert.equal(code, 0);
   assert.doesNotMatch(stdout, /\[schema\]/);
   assert.match(stdout, /warning: file not found: clientFilesCourse\/missing\.css/);
+});
+
+test("unused questions are infos by default", () => {
+  const { code, stdout } = runCli("check", "broken/questions/commented");
+  assert.equal(code, 1); // from its syntax errors
+  assert.match(
+    stdout,
+    /info\.json:4:12 info: question "commented" is not used by any assessment \[unused-question\]/
+  );
+  assert.doesNotMatch(runCli("check", "clean").stdout, /unused-question/);
+});
+
+test("--unused-questions sets their severity", () => {
+  const ignored = runCli("check", "--unused-questions", "ignored", "broken/questions/commented");
+  assert.doesNotMatch(ignored.stdout, /unused-question/);
+  assert.match(ignored.stdout, /2 errors in 1 file/);
+
+  const errors = runCli("check", "--unused-questions", "error", "broken/questions/commented");
+  assert.match(errors.stdout, /4:12 error: question "commented" is not used/);
+  assert.match(errors.stdout, /3 errors in 1 file/);
+
+  const github = runCli("check", "--format", "github", "broken/questions/commented");
+  assert.match(github.stdout, /^::notice file=.*commented\/info\.json,line=4,.*\[unused-question\]$/m);
+
+  const bogus = runCli("check", "--unused-questions", "bogus", "clean");
+  assert.equal(bogus.code, 1);
+  assert.match(bogus.stderr, /unusedQuestions must be "ignored", "info", "warning", or "error"/);
+});
+
+test("unusedQuestions in the config file sets their severity", () => {
+  const { stdout } = runCli(
+    "check",
+    "--config",
+    "configs/unused.jsonc",
+    "broken/questions/commented"
+  );
+  assert.match(stdout, /4:12 warning: question "commented" is not used/);
 });
 
 test("config problems are reported on the config file", () => {

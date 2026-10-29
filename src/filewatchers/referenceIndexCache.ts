@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
 import { versionDate } from "../core/plVersion";
 import { indexCourseAsync, ReferenceIndex, Use } from "../core/referenceIndex";
@@ -11,7 +12,11 @@ export interface ReferencesChanged {
   courseRoot: string;
   /** The path that was created, edited, or deleted. */
   changed: string;
-  /** Files whose references point at or into `changed`. */
+  /**
+   * Files whose diagnostics may change: those whose references point at or
+   * into `changed`, and the info.json of questions `changed` started or
+   * stopped using.
+   */
   affected: string[];
 }
 
@@ -145,7 +150,9 @@ export class ReferenceIndexCache {
       return;
     }
     const file = uri.fsPath;
+    const usedQuestions = new Set<string>();
     if (index.holdsReferences(file)) {
+      const before = questionsUsedIn(index, file);
       if (text !== undefined) {
         index.update(file, text);
       } else if (fs.existsSync(file)) {
@@ -153,8 +160,16 @@ export class ReferenceIndexCache {
       } else {
         index.remove(file);
       }
+      const after = questionsUsedIn(index, file);
+      before.forEach((q) => after.has(q) || usedQuestions.add(q));
+      after.forEach((q) => before.has(q) || usedQuestions.add(q));
     }
-    const affected = index.filesAffectedBy(file);
+    const affected = [
+      ...new Set([
+        ...index.filesAffectedBy(file),
+        ...[...usedQuestions].map((q) => path.join(q, "info.json")),
+      ]),
+    ];
     if (affected.length > 0) {
       this.onChangedEmitter.fire({ courseRoot, changed: file, affected });
     }
@@ -164,4 +179,14 @@ export class ReferenceIndexCache {
     this.disposables.forEach((d) => d.dispose());
     this.onChangedEmitter.dispose();
   }
+}
+
+/** Directories of the questions `file` references. */
+function questionsUsedIn(index: ReferenceIndex, file: string): Set<string> {
+  return new Set(
+    index
+      .usesIn(file)
+      .filter((use) => use.ref.spec.target === "question")
+      .map((use) => use.ref.target!)
+  );
 }

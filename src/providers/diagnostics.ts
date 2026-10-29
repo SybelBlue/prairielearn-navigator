@@ -98,8 +98,8 @@ export class RuleDiagnosticCollection {
 
   private async checkCourse(courseRoot: string) {
     const started = Date.now();
-    // Build the index, so changes to referenced files are reported
-    this.references.indexFor(vscode.Uri.file(courseRoot));
+    // Wait for the index: rules read it, and changes to referenced files are reported through it
+    await this.references.whenIndexed(vscode.Uri.file(courseRoot));
     const files = checkableFiles(courseRoot);
     const current = new Set(files);
     // Forget files that are gone or no longer checkable
@@ -138,7 +138,8 @@ export class RuleDiagnosticCollection {
         return;
       }
       const schemas = this.configs.schemasFor(config);
-      const diagnostics = await runRules(file, text, { courseRoot, config, schemas });
+      const references = this.references.indexFor(uri);
+      const diagnostics = await runRules(file, text, { courseRoot, config, schemas, references });
       this.configs.reportSchemaProblems(schemas);
       if (this.generation.get(file) === generation) {
         this.collection.set(uri, toVscodeDiagnostics(text, diagnostics));
@@ -183,7 +184,9 @@ function toVscodeDiagnostics(
       d.message,
       d.severity === "error"
         ? vscode.DiagnosticSeverity.Error
-        : vscode.DiagnosticSeverity.Warning
+        : d.severity === "warning"
+          ? vscode.DiagnosticSeverity.Warning
+          : vscode.DiagnosticSeverity.Information
     );
     diagnostic.source = "prairielearn-navigator";
     if (

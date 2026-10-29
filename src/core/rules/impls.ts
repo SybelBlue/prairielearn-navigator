@@ -187,3 +187,23 @@ export const duplicateQuestionIds: RuleImpl = (ctx) => {
       }))
     );
 };
+
+/** Notes a question that no assessment uses, on its title. */
+export const unusedQuestion: RuleImpl = ({ references, filePath, courseRoot, doc }) => {
+  if (!references || doc.errors.length > 0) {
+    return []; // jsonSyntax reports syntax errors
+  }
+  const dir = path.dirname(filePath);
+  const used = references
+    .usesOf(dir)
+    .some((use) => use.ref.spec.target === "question" && use.ref.target === dir);
+  if (used) {
+    return [];
+  }
+  const localId = path.relative(path.join(courseRoot, "questions"), dir).split(path.sep).join("/");
+  return [{
+    ...rangeOf(doc, ["title"]),
+    message: `question "${localId}" is not used by any assessment`,
+    severity: "info",
+  }];
+};

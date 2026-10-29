@@ -28,11 +28,26 @@ async function runQuestionSourceCommand(command: string): Promise<string> {
   return vscode.window.activeTextEditor?.document.uri.fsPath ?? "";
 }
 
-/** Ours only: VS Code's JSON service also reports, e.g., comments in .json. */
-function ourDiagnostics(uri: vscode.Uri): vscode.Diagnostic[] {
+const unusedQuestionCode = "prairielearn-navigator/unused-question";
+
+/**
+ * Ours only: VS Code's JSON service also reports, e.g., comments in .json.
+ * Most fixture questions are unused, so that note is left out unless asked for.
+ */
+function ourDiagnostics(uri: vscode.Uri, options: { unused?: boolean } = {}): vscode.Diagnostic[] {
   return vscode.languages
     .getDiagnostics(uri)
-    .filter((d) => d.source === "prairielearn-navigator");
+    .filter((d) => d.source === "prairielearn-navigator")
+    .filter((d) => options.unused || d.code !== unusedQuestionCode);
+}
+
+async function until<T>(get: () => T, done: (value: T) => boolean): Promise<T> {
+  let value = get();
+  for (let i = 0; i < 100 && !done(value); i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    value = get();
+  }
+  return value;
 }
 
 async function diagnosticsFor(uri: vscode.Uri): Promise<vscode.Diagnostic[]> {
@@ -409,6 +424,45 @@ suite("PrairieLearn Navigator", () => {
     assert.ok(
       titleItems.every((item) => !item.when.includes("currentQuestionFile")),
     );
+  });
+
+  test("an unused question is noted on its title, live as assessments change", async () => {
+    const unused = () =>
+      ourDiagnostics(depsInfo, { unused: true }).filter((d) => d.code === unusedQuestionCode);
+    const noted = await until(unused, (ds) => ds.length === 1);
+    assert.deepStrictEqual(
+      noted.map((d) => [d.severity, d.range.start.line, d.message]),
+      [[vscode.DiagnosticSeverity.Information, 2, 'question "deps" is not used by any assessment']]
+    );
+
+    const editor = await vscode.window.showTextDocument(assessment);
+    try {
+      const at = positionOf(editor.document, '{ "id": "good"').translate(0, -1);
+      await editor.edit((e) => e.insert(at, '{ "id": "deps", "points": 1 },\n        '));
+      assert.deepStrictEqual(await until(unused, (ds) => ds.length === 0), []);
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+    assert.strictEqual((await until(unused, (ds) => ds.length === 1)).length, 1);
+  });
+
+  test("the unusedQuestions setting sets the note's severity", async () => {
+    const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
+    const unused = () =>
+      ourDiagnostics(depsInfo, { unused: true }).filter((d) => d.code === unusedQuestionCode);
+    try {
+      await settings.update("unusedQuestions", "error", vscode.ConfigurationTarget.Workspace);
+      const errors = await until(unused, (ds) =>
+        ds.length === 1 && ds[0].severity === vscode.DiagnosticSeverity.Error
+      );
+      assert.deepStrictEqual(errors.map((d) => d.severity), [vscode.DiagnosticSeverity.Error]);
+
+      await settings.update("unusedQuestions", "ignored", vscode.ConfigurationTarget.Workspace);
+      assert.deepStrictEqual(await until(unused, (ds) => ds.length === 0), []);
+    } finally {
+      await settings.update("unusedQuestions", undefined, vscode.ConfigurationTarget.Workspace);
+      fs.rmSync(path.join(course, ".vscode"), { recursive: true, force: true });
+    }
   });
 
   test(".vscode/settings.json overrides the course config", async () => {

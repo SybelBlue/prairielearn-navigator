@@ -13,6 +13,7 @@ import { courseRelativePath } from "../core/courseFiles";
 import { Diagnostic, offsetToPosition } from "../core/diagnostic";
 import { versionDate } from "../core/plVersion";
 import { questionFilePathsFromId } from "../core/questionPaths";
+import { indexCourse, ReferenceIndex } from "../core/referenceIndex";
 import { findFileRefs, sourceOf } from "../core/references/extract";
 import { isCheckable, runRules } from "../core/rules/run";
 import { SchemaStore } from "../core/schemas";
@@ -49,6 +50,8 @@ type Format = "pretty" | "github";
 interface CourseSetup {
   loaded: LoadedConfig;
   schemas: SchemaStore;
+  /** Built only when a rule reads it. */
+  references?: ReferenceIndex;
 }
 
 class Setups {
@@ -76,7 +79,11 @@ class Setups {
         });
         this.stores.set(schemaCacheDir, schemas);
       }
-      setup = { loaded, schemas };
+      const references =
+        loaded.config.rules["unused-question"] === "off"
+          ? undefined
+          : indexCourse(courseRoot, versionDate(loaded.config.plVersion));
+      setup = { loaded, schemas, references };
       this.byCourse.set(courseRoot, setup);
     }
     return setup;
@@ -131,6 +138,7 @@ async function checkFile(
     courseRoot: courseId,
     config: setup.loaded.config,
     schemas: setup.schemas,
+    references: setup.references,
   });
   const erroredIds = new Set(
     diagnostics
@@ -179,8 +187,8 @@ function formatError(error: CheckError, source: string): string {
   const lines = source.split("\n");
   const errorLine = error.line - 1; // 0-based index
 
-  const isWarning = error.severity === "warning";
-  const color = isWarning ? "yellow" : "red";
+  const color =
+    error.severity === "error" ? "red" : error.severity === "warning" ? "yellow" : "cyan";
   const header =
     styleText("bold", `${error.file}:${error.line}:${error.column}`) +
     " " +
@@ -242,7 +250,9 @@ function formatGithubAnnotation(error: CheckError): string {
     `endColumn=${error.endColumn}`,
     `title=prairielearn-navigator`,
   ].join(",");
-  return `::${error.severity} ${props}::${escapeGithubData(error.message)}`;
+  // GitHub's lowest annotation level is "notice"
+  const level = error.severity === "info" ? "notice" : error.severity;
+  return `::${level} ${props}::${escapeGithubData(error.message)}`;
 }
 
 function formatSummary(
@@ -250,13 +260,17 @@ function formatSummary(
   filesWithErrors: number,
   totalFiles: number,
   totalQuestions: number,
-  totalWarnings = 0
+  totalWarnings = 0,
+  totalInfos = 0
 ): string {
   const checked =
     `${totalFiles} ${totalFiles === 1 ? "file" : "files"}, ` +
     `${totalQuestions} ${totalQuestions === 1 ? "question" : "questions"} checked`;
+  const infos = totalInfos > 0 ? `${totalInfos} ${totalInfos === 1 ? "info" : "infos"}` : "";
   if (totalErrors === 0 && totalWarnings === 0) {
-    return styleText("green", `No errors found (${checked})`);
+    return infos
+      ? styleText("green", "No errors found") + `, ${styleText("cyan", infos)} (${checked})`
+      : styleText("green", `No errors found (${checked})`);
   }
   const parts: string[] = [];
   if (totalErrors > 0) {
@@ -266,6 +280,9 @@ function formatSummary(
   if (totalWarnings > 0) {
     const warnStr = totalWarnings === 1 ? "warning" : "warnings";
     parts.push(styleText("yellow", `${totalWarnings} ${warnStr}`));
+  }
+  if (infos) {
+    parts.push(styleText("cyan", infos));
   }
   const errFileStr = filesWithErrors === 1 ? "file" : "files";
   const where = filesWithErrors > 0 ? ` in ${filesWithErrors} ${errFileStr}` : "";
@@ -386,23 +403,34 @@ Options:
   --exclude <glob>          Skip matching files (relative to the current
                             directory; repeatable). Adds to the config
                             file's "excludes".
+  --unused-questions <ignored|info|warning|error>
+                            Severity for questions no assessment uses
+                            (default: info)
   --help                    Show this help message
 
 Dated versions are resolved with the GitHub API; set GITHUB_TOKEN to avoid
 its rate limit.
 
-Exit status is 1 if any errors are found; warnings do not affect it.
+Exit status is 1 if any errors are found; warnings and infos do not affect it.
 
 Examples:
   prairielearn-navigator check
   prairielearn-navigator check path/to/course
   prairielearn-navigator check --pl-version 2025-06-01
   prairielearn-navigator check --exclude "questions/archive/**"
+  prairielearn-navigator check --unused-questions error
   prairielearn-navigator check "courseInstances/Fa26/**"
   prairielearn-navigator check "**/assessments/hw*/infoAssessment.json"
   prairielearn-navigator check --format github`;
 
-const VALUE_OPTIONS = ["--format", "--config", "--pl-version", "--schema-cache", "--exclude"];
+const VALUE_OPTIONS = [
+  "--format",
+  "--config",
+  "--pl-version",
+  "--schema-cache",
+  "--exclude",
+  "--unused-questions",
+];
 /** Options that may be given more than once. */
 const REPEATABLE_OPTIONS = ["--exclude"];
 
@@ -461,6 +489,7 @@ export async function run(args: string[]): Promise<number> {
     excludes: options["--exclude"]?.split("\0"),
     plVersion: options["--pl-version"],
     schemaCacheDir: options["--schema-cache"],
+    unusedQuestions: options["--unused-questions"],
   };
   // Surface bad flags (and a missing --config) before doing any work
   const flagProblems = loadConfig(null, {
@@ -493,6 +522,7 @@ export async function run(args: string[]): Promise<number> {
 
   let totalErrors = 0;
   let totalWarnings = 0;
+  let totalInfos = 0;
   let filesWithErrors = 0;
   const checkedQuestions = new Set<string>();
   const listing: string[] = [];
@@ -502,10 +532,14 @@ export async function run(args: string[]): Promise<number> {
 
   const report = (errors: CheckError[], source: () => string) => {
     const fileErrors = errors.filter((e) => e.severity === "error").length;
+    const fileWarnings = errors.filter((e) => e.severity === "warning").length;
     if (errors.length > 0) {
-      filesWithErrors++;
+      if (fileErrors + fileWarnings > 0) {
+        filesWithErrors++;
+      }
       totalErrors += fileErrors;
-      totalWarnings += errors.length - fileErrors;
+      totalWarnings += fileWarnings;
+      totalInfos += errors.length - fileErrors - fileWarnings;
       if (format === "github") {
         output.push(...errors.map(formatGithubAnnotation));
       } else {
@@ -513,7 +547,7 @@ export async function run(args: string[]): Promise<number> {
         output.push(...errors.map((e) => formatError(e, text) + "\n"));
       }
     }
-    return fileErrors;
+    return { fileErrors, fileWarnings };
   };
 
   for (const [file, courseRoot] of files) {
@@ -522,12 +556,14 @@ export async function run(args: string[]): Promise<number> {
       courseRoot === null
         ? notInCourse(displayPath)
         : await checkFile(file, courseRoot, displayPath, setups.get(courseRoot));
-    const fileErrors = report(errors, () => fs.readFileSync(file, "utf-8"));
+    const { fileErrors, fileWarnings } = report(errors, () => fs.readFileSync(file, "utf-8"));
 
     listing.push(
-      errors.length > 0
-        ? styleText(fileErrors > 0 ? "red" : "yellow", displayPath)
-        : styleText("dim", displayPath)
+      fileErrors > 0
+        ? styleText("red", displayPath)
+        : fileWarnings > 0
+          ? styleText("yellow", displayPath)
+          : styleText("dim", displayPath)
     );
     for (const q of questions) {
       checkedQuestions.add(q.infoJson);
@@ -578,7 +614,8 @@ export async function run(args: string[]): Promise<number> {
       filesWithErrors,
       files.length,
       checkedQuestions.size,
-      totalWarnings
+      totalWarnings,
+      totalInfos
     )
   );
   // Only errors affect exit code, not warnings

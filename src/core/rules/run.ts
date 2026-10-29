@@ -3,6 +3,7 @@ import { courseRelativePath, matchesGlob } from "../courseFiles";
 import { Diagnostic } from "../diagnostic";
 import { JsonDoc, parseJsonDoc } from "../json";
 import { IsoDate, matchesRange, versionDate } from "../plVersion";
+import { ReferenceIndex } from "../referenceIndex";
 import { SchemaStore } from "../schemas";
 import { ruleDiagnosticCode, RuleId, rules } from "./registry";
 import { RuleEntry, RuleImpl, RuleTable } from "./types";
@@ -41,9 +42,14 @@ export function isCheckable(relPath: string): boolean {
 export async function runRules(
   filePath: string,
   text: string,
-  options: { courseRoot: string; config: NavigatorConfig; schemas: SchemaStore }
+  options: {
+    courseRoot: string;
+    config: NavigatorConfig;
+    schemas: SchemaStore;
+    references?: ReferenceIndex;
+  }
 ): Promise<Diagnostic[]> {
-  const { courseRoot, config, schemas } = options;
+  const { courseRoot, config, schemas, references } = options;
   const relPath = courseRelativePath(courseRoot, filePath);
   const plDate = versionDate(config.plVersion);
   let doc: JsonDoc | undefined;
@@ -59,6 +65,7 @@ export async function runRules(
     plVersion: config.plVersion,
     plDate,
     schemas,
+    references,
   };
 
   const results = await Promise.all(
@@ -77,7 +84,7 @@ export async function runRules(
           (d): Diagnostic => ({
             ...d,
             code: ruleDiagnosticCode(id),
-            severity: setting === "warning" || setting === "error" ? setting : d.severity,
+            severity: setting !== undefined && setting !== "off" ? setting : d.severity,
           })
         );
       })

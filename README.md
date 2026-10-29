@@ -7,8 +7,8 @@ This extension is still experimental and may change or break.
 ## Features
 
 - Diagnostics for course files: PrairieLearn schema validation for a chosen
-  PrairieLearn version; missing, incomplete, and duplicate questions; and every
-  file a course names that doesn't exist (see the
+  PrairieLearn version; missing, incomplete, duplicate, and unused questions;
+  and every file a course names that doesn't exist (see the
   [rules](packages/cli/README.md#rules)).
 - For every one of those file references:
   - **jump to the file**: go-to-definition and Ctrl/Cmd-click;
@@ -34,7 +34,8 @@ also reads. User-level settings rank below that file.
 | `prairielearn-navigator.plVersion` | `latest` (default), a date (`YYYY-MM-DD`), or a commit sha |
 | `prairielearn-navigator.schemaCacheDir` | Schema cache, relative to the workspace folder. Default: the extension's storage |
 | `prairielearn-navigator.uuidCommand` | Shell command for UUID completions. It must print one UUID. Default: `uuidgen` |
-| `prairielearn-navigator.rules` | Rule id → `off` / `warning` / `error` |
+| `prairielearn-navigator.rules` | Rule id → `off` / `info` / `warning` / `error` |
+| `prairielearn-navigator.unusedQuestions` | Severity for a question no assessment uses, shown on its `info.json` title: `ignored` / `info` (default) / `warning` / `error` |
 | `prairielearn-navigator.excludes` | Glob patterns of files never to check, relative to the workspace folder. Adds to the course file's `excludes` rather than replacing them. |
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going

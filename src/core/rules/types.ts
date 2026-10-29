@@ -1,6 +1,7 @@
 import { Diagnostic } from "../diagnostic";
 import { JsonDoc } from "../json";
 import { IsoDate, PlVersion, VersionRange } from "../plVersion";
+import { ReferenceIndex } from "../referenceIndex";
 import { SchemaStore } from "../schemas";
 
 /** Everything a rule may inspect about the file being checked. */
@@ -15,6 +16,11 @@ export interface RuleContext {
   /** The date `plVersion` stands for, used to select version-ranged rules. */
   plDate: IsoDate;
   schemas: SchemaStore;
+  /**
+   * The course's reference index, when the caller has built one; cross-file
+   * rules report nothing without it.
+   */
+  references?: ReferenceIndex;
 }
 
 export type RuleImpl = (ctx: RuleContext) => Diagnostic[] | Promise<Diagnostic[]>;

@@ -4,7 +4,7 @@
  * to their own position types.
  */
 
-type Severity = "error" | "warning";
+type Severity = "error" | "warning" | "info";
 
 interface RelatedInfo {
   path: string;
