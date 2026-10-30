@@ -637,7 +637,7 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "vscode:prepublish": "npm run knip && npm run package",
     "compile": "webpack",
     "watch": "webpack --watch",
     "package": "webpack --mode production --config-name extension --devtool hidden-source-map",
@@ -646,6 +646,7 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
+    "knip": "knip",
     "test": "node scripts/run-vscode-tests.mjs",
     "test:cli": "vitest run",
     "test:package": "node scripts/test-package.mjs",
@@ -663,6 +664,7 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^9.39.1",
+    "knip": "^6.44.0",
     "ts-loader": "^9.5.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3",

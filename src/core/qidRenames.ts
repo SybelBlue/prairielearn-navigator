@@ -24,7 +24,7 @@ export interface QidReferenceFileChange {
 }
 
 /** Returns a problem with a QID, or undefined when it is a safe relative path. */
-export function qidProblem(qid: string): string | undefined {
+function qidProblem(qid: string): string | undefined {
   if (qid.length === 0) {
     return "QIDs must not be empty";
   }
@@ -42,7 +42,7 @@ export function qidProblem(qid: string): string | undefined {
 }
 
 /** The absolute directory named by a validated QID. */
-export function qidDirectory(courseRoot: string, qid: string): string {
+function qidDirectory(courseRoot: string, qid: string): string {
   return path.join(courseRoot, "questions", ...qid.split("/"));
 }
 

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   cli:
-    name: Lint and CLI tests
+    name: Lint, Knip, and CLI tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -26,6 +26,8 @@ jobs:
         run: npm ci
       - name: Run ESLint
         run: npm run lint
+      - name: Run Knip
+        run: npm run knip
       - name: Run core and CLI tests
         run: npm run test:cli
       - name: Test the packed npm library

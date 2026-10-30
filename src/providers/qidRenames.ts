@@ -17,7 +17,7 @@ export interface QidRenameCoursePlan {
   renames: QidRename[];
 }
 
-export interface QidRenamePrompt {
+interface QidRenamePrompt {
   edits: readonly QidReferenceEdit[];
   renames: readonly QidRename[];
 }

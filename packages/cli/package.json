@@ -38,6 +38,6 @@
   },
   "scripts": {
     "prepack": "npm --prefix ../.. run build:npm && cp ../../LICENSE .",
-    "prepublishOnly": "npm --prefix ../.. run lint && npm --prefix ../.. run test:cli"
+    "prepublishOnly": "npm --prefix ../.. run lint && npm --prefix ../.. run knip && npm --prefix ../.. run test:cli"
   }
 }

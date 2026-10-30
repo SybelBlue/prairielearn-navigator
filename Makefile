@@ -4,7 +4,7 @@ SHELL := /bin/bash
 BUMP := $(filter major minor patch,$(MAKECMDGOALS))
 
 .DEFAULT_GOAL := help
-.PHONY: help install build build-cli watch lint test test-cli test-all check \
+.PHONY: help install build build-cli watch lint knip test test-cli test-all check \
 	package pack-cli clean publish publish-vscode major minor patch
 
 help: ## Show this help
@@ -26,13 +26,16 @@ watch: ## Rebuild bundles on change
 lint: ## Run ESLint
 	npm run lint
 
+knip: ## Check for unused files, dependencies, and exports
+	npm run knip
+
 test: ## Run the VS Code extension tests (Electron)
 	npm test
 
 test-cli: ## Run the core and CLI tests (Vitest)
 	npm run test:cli
 
-test-all: lint test-cli test ## Run lint and every test suite
+test-all: lint knip test-cli test ## Run static checks and every test suite
 
 check: build-cli ## Run the CLI, e.g. make check ARGS="path/to/course"
 	npm run check -- $(ARGS)

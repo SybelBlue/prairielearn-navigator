@@ -182,8 +182,9 @@ git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null && die "Tag 
 gh auth status >/dev/null 2>&1 || die "gh is not logged in. Run: gh auth login"
 require_vsce_login
 
-step "Running lint and tests"
+step "Running static checks and tests"
 npm run lint
+npm run knip
 npm run test:cli
 npm run test:package
 npm test

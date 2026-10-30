@@ -40,6 +40,7 @@ jobs:
           fi
 
       - run: npm run lint
+      - run: npm run knip
       - run: npm run test:cli
       - run: npm run test:package
       - run: npm run build:npm
