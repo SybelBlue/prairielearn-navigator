@@ -30,3 +30,8 @@ export {
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
+export {
+  prepareQidRenameWorkspaceEdit,
+  qidRenamesForFileMoves,
+  registerQidRenameParticipant,
+} from "./qidRenames";

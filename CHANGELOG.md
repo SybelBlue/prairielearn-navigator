@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Added a `rename-qids` CLI command that previews or writes bulk semantic QID
+  reference updates for assessments, alternatives, and question templates.
+- Moving or renaming question folders in VS Code now offers to update affected
+  QID references as part of the same undoable operation.
+
 ## [1.2.1] - 2026-10-29
 
 - Broad perf improvements to single and bulk actions.

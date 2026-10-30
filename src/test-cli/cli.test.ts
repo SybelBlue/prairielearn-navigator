@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "vitest";
 import { run } from "../cli/runner";
@@ -7,16 +8,117 @@ import { run } from "../cli/runner";
 const fixtures = path.join(__dirname, "fixtures");
 
 async function runCli(...args: string[]) {
+  return runCliAt(fixtures, ...args);
+}
+
+async function runCliAt(cwd: string, ...args: string[]) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const code = await run(args, {
-    cwd: fixtures,
+    cwd,
     stdout: (message = "") => stdout.push(message),
     stderr: (message = "") => stderr.push(message),
   });
   const output = (lines: string[]) => lines.length > 0 ? lines.join("\n") + "\n" : "";
   return { code, stdout: output(stdout), stderr: output(stderr) };
 }
+
+test("rename-qids previews and writes multiple semantic QID mappings", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-cli-"));
+  const course = path.join(root, "course");
+  fs.cpSync(path.join(fixtures, "broken"), course, { recursive: true });
+  const assessment = path.join(
+    course,
+    "courseInstances/Fa26/assessments/hw1/infoAssessment.json"
+  );
+  const template = path.join(course, "questions/jsonRefs/info.json");
+  const beforeAssessment = fs.readFileSync(assessment, "utf-8");
+  const beforeTemplate = fs.readFileSync(template, "utf-8");
+  try {
+    const preview = await runCliAt(
+      course,
+      "rename-qids",
+      "good",
+      "better",
+      "topic/nested",
+      "unit/nested"
+    );
+    assert.equal(preview.code, 0);
+    assert.match(preview.stdout, /Would update 4 references in 2 files/);
+    assert.match(preview.stdout, /"good" -> "better"/);
+    assert.match(preview.stdout, /"topic\/nested" -> "unit\/nested"/);
+    assert.equal(fs.readFileSync(assessment, "utf-8"), beforeAssessment);
+    assert.equal(fs.readFileSync(template, "utf-8"), beforeTemplate);
+
+    const written = await runCliAt(
+      course,
+      "rename-qids",
+      "--write",
+      "good",
+      "better",
+      "topic/nested",
+      "unit/nested"
+    );
+    assert.equal(written.code, 0);
+    assert.match(written.stdout, /Updated 4 references in 2 files/);
+    const assessmentValue = JSON.parse(fs.readFileSync(assessment, "utf-8"));
+    assert.deepEqual(
+      assessmentValue.zones[0].questions.map((question: { id: string }) => question.id),
+      [
+        "better",
+        "unit/nested",
+        "inlineText",
+        "noHtml",
+        "noInfo",
+        "doesNotExist",
+        "better",
+      ]
+    );
+    const templateValue = JSON.parse(fs.readFileSync(template, "utf-8"));
+    assert.equal(templateValue.template, "better");
+    assert.equal(templateValue.title, "Q");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rename-qids validates mappings and treats no matches as success", async () => {
+  const odd = await runCli("rename-qids", "--course", "clean", "old");
+  assert.equal(odd.code, 1);
+  assert.match(odd.stderr, /old\/new pairs/);
+
+  const escaping = await runCli(
+    "rename-qids",
+    "--course",
+    "clean",
+    "../old",
+    "new"
+  );
+  assert.equal(escaping.code, 1);
+  assert.match(escaping.stderr, /must not contain/);
+
+  const conflict = await runCli(
+    "rename-qids",
+    "--course",
+    "clean",
+    "old",
+    "one",
+    "old",
+    "two"
+  );
+  assert.equal(conflict.code, 1);
+  assert.match(conflict.stderr, /Conflicting QID renames/);
+
+  const none = await runCli(
+    "rename-qids",
+    "--course",
+    "clean",
+    "unused",
+    "new"
+  );
+  assert.equal(none.code, 0);
+  assert.match(none.stdout, /No semantic QID references matched/);
+});
 
 test("broken course exits 1 with code frames", async () => {
   const { code, stdout } = await runCli("check", "broken");

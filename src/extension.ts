@@ -26,6 +26,7 @@ import {
   QuestionHeaderCodeLensProvider,
   RuleDiagnosticCollection,
   removeUnusedQuestion,
+  registerQidRenameParticipant,
   UuidCompletionItemProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
@@ -117,6 +118,7 @@ export function activate(context: vscode.ExtensionContext) {
     assessmentCache,
     configProvider,
     referenceIndex,
+    registerQidRenameParticipant(courseCache, referenceIndex),
     vscode.commands.registerCommand(
       "prairielearn-navigator.reloadSchemas",
       () => configProvider.reset(true),

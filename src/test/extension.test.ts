@@ -11,8 +11,11 @@ import {
   isEmptyUuidValue,
   missingRootUuidDiagnosticCode,
   MissingFileQuickFixProvider,
+  prepareQidRenameWorkspaceEdit,
+  qidRenamesForFileMoves,
   UuidCompletionItemProvider,
 } from "../providers";
+import { indexCourse } from "../core/referenceIndex";
 import {
   debounceMsForExtensionMode,
   productionDebounceMs,
@@ -618,6 +621,158 @@ suite("PrairieLearn Navigator", () => {
     );
     const titles = lenses.map((l) => l.command?.title);
     assert.ok(titles.includes("2 references"), JSON.stringify(titles));
+  });
+
+  test("question folder moves plan semantic QID reference edits", async () => {
+    const oldUri = vscode.Uri.file(path.join(course, "questions/good"));
+    const newUri = vscode.Uri.file(path.join(course, "questions/better"));
+    const courseCache = { getCourseIdFor: () => course };
+    const groups = await qidRenamesForFileMoves(
+      [{ oldUri, newUri }],
+      courseCache
+    );
+    assert.deepStrictEqual(
+      groups.map((group) => group.renames),
+      [[{ oldQid: "good", newQid: "better" }]]
+    );
+
+    let prompted = 0;
+    const edit = await prepareQidRenameWorkspaceEdit(
+      [{ oldUri, newUri }],
+      new vscode.CancellationTokenSource().token,
+      courseCache,
+      { whenIndexed: async () => indexCourse(course, "2026-01-01") },
+      {
+        confirm: async (prompt) => {
+          prompted++;
+          assert.strictEqual(prompt.edits.length, 3);
+          assert.deepStrictEqual(prompt.renames, [
+            { oldQid: "good", newQid: "better" },
+          ]);
+          return true;
+        },
+      }
+    );
+    assert.strictEqual(prompted, 1);
+    assert.strictEqual(edit.size, 2);
+    assert.deepStrictEqual(
+      edit.entries()
+        .flatMap(([uri, edits]) =>
+          edits.map((textEdit) => [
+            path.relative(course, uri.fsPath),
+            textEdit.newText,
+          ])
+        )
+        .sort(),
+      [
+        ["courseInstances/Fa26/assessments/hw1/infoAssessment.json", "better"],
+        ["courseInstances/Fa26/assessments/hw1/infoAssessment.json", "better"],
+        ["questions/jsonRefs/info.json", "better"],
+      ]
+    );
+  });
+
+  test("ancestor question-folder moves batch nested QID changes", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-move-"));
+    const write = (relative: string, contents = "{}") => {
+      const file = path.join(root, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, contents);
+    };
+    try {
+      write("infoCourse.json");
+      write("questions/topic/a/info.json");
+      write("questions/topic/b/info.json");
+      write(
+        "courseInstances/Fa26/assessments/hw/infoAssessment.json",
+        '{ "zones": [{ "questions": [{ "id": "topic/a" }, { "id": "topic/b" }] }] }'
+      );
+      const oldUri = vscode.Uri.file(path.join(root, "questions/topic"));
+      const newUri = vscode.Uri.file(path.join(root, "questions/unit"));
+      const courseCache = { getCourseIdFor: () => root };
+      const groups = await qidRenamesForFileMoves(
+        [{ oldUri, newUri }],
+        courseCache
+      );
+      assert.deepStrictEqual(groups[0].renames, [
+        { oldQid: "topic/a", newQid: "unit/a" },
+        { oldQid: "topic/b", newQid: "unit/b" },
+      ]);
+
+      let promptCount = 0;
+      const edit = await prepareQidRenameWorkspaceEdit(
+        [{ oldUri, newUri }],
+        new vscode.CancellationTokenSource().token,
+        courseCache,
+        { whenIndexed: async () => indexCourse(root, "2026-01-01") },
+        {
+          confirm: async (prompt) => {
+            promptCount++;
+            assert.strictEqual(prompt.renames.length, 2);
+            assert.strictEqual(prompt.edits.length, 2);
+            return false;
+          },
+        }
+      );
+      assert.strictEqual(promptCount, 1);
+      assert.strictEqual(edit.size, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("QID move handling ignores unsupported moves and does not block on failure", async () => {
+    const courseCache = { getCourseIdFor: () => course };
+    const token = new vscode.CancellationTokenSource().token;
+    let promptCount = 0;
+    const confirm = async () => {
+      promptCount++;
+      return true;
+    };
+    const references = {
+      whenIndexed: async () => indexCourse(course, "2026-01-01"),
+    };
+    const internal = await prepareQidRenameWorkspaceEdit(
+      [{
+        oldUri: vscode.Uri.file(
+          path.join(course, "questions/figures/clientFilesQuestion/img")
+        ),
+        newUri: vscode.Uri.file(
+          path.join(course, "questions/figures/clientFilesQuestion/images")
+        ),
+      }],
+      token,
+      courseCache,
+      references,
+      { confirm }
+    );
+    const outside = await prepareQidRenameWorkspaceEdit(
+      [{
+        oldUri: vscode.Uri.file(path.join(course, "questions/good")),
+        newUri: vscode.Uri.file(path.join(course, "archive/good")),
+      }],
+      token,
+      courseCache,
+      references,
+      { confirm }
+    );
+    assert.strictEqual(internal.size, 0);
+    assert.strictEqual(outside.size, 0);
+    assert.strictEqual(promptCount, 0);
+
+    let warning = "";
+    const failed = await prepareQidRenameWorkspaceEdit(
+      [{
+        oldUri: vscode.Uri.file(path.join(course, "questions/good")),
+        newUri: vscode.Uri.file(path.join(course, "questions/better")),
+      }],
+      token,
+      courseCache,
+      { whenIndexed: async () => { throw new Error("index failed"); } },
+      { confirm, warn: (message) => { warning = message; } }
+    );
+    assert.strictEqual(failed.size, 0);
+    assert.match(warning, /index failed.*move will continue/i);
   });
 
   test("question source commands open every canonical sibling", async () => {

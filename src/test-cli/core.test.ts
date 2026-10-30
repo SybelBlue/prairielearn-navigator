@@ -8,6 +8,10 @@ import { findElements } from "../core/html";
 import { parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
 import { questionDirsWithoutInfo } from "../core/questionDirs";
+import {
+  planQidReferenceRenames,
+  prepareQidReferenceFileChanges,
+} from "../core/qidRenames";
 import { indexCourse } from "../core/referenceIndex";
 import { fileRefAt, findFileRefs, openTarget, sourceOf } from "../core/references/extract";
 import { RefSpec, refSpecs } from "../core/references/specs";
@@ -637,6 +641,126 @@ test("the reference index answers uses of files and of directory targets", () =>
   ]);
   index.remove(at("questions/figures/question.html"));
   assert.deepEqual(usesOf("clientFilesCourse/exists.css"), ["elements/my-el/info.json:1"]);
+});
+
+// ── QID renames ──
+
+test("QID rename planning covers repeated, alternative, and template references", () => {
+  const root = tmpDir();
+  const write = (relative: string, contents: string) => {
+    const file = path.join(root, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, contents);
+    return file;
+  };
+  try {
+    write("infoCourse.json", "{}");
+    const assessment = write(
+      "courseInstances/Fa26/assessments/hw/infoAssessment.json",
+      JSON.stringify({
+        title: "old is incidental text",
+        zones: [{
+          questions: [
+            { id: "old" },
+            { id: "old", alternatives: [{ id: "topic/one" }] },
+          ],
+        }],
+      }, undefined, 2)
+    );
+    const template = write(
+      "questions/template/info.json",
+      JSON.stringify({ title: "old", template: "old" }, undefined, 2)
+    );
+
+    const index = indexCourse(root, "2026-01-01");
+    const edits = planQidReferenceRenames(index, [
+      { oldQid: "old", newQid: "new" },
+      { oldQid: "topic/one", newQid: "unit/one" },
+      { oldQid: "old", newQid: "new" },
+    ]);
+    assert.deepEqual(
+      edits.map((edit) => [
+        path.relative(root, edit.file),
+        edit.expected,
+        edit.replacement,
+      ]),
+      [
+        [
+          "courseInstances/Fa26/assessments/hw/infoAssessment.json",
+          "old",
+          "new",
+        ],
+        [
+          "courseInstances/Fa26/assessments/hw/infoAssessment.json",
+          "old",
+          "new",
+        ],
+        [
+          "courseInstances/Fa26/assessments/hw/infoAssessment.json",
+          "topic/one",
+          "unit/one",
+        ],
+        ["questions/template/info.json", "old", "new"],
+      ]
+    );
+
+    const changes = prepareQidReferenceFileChanges(edits);
+    const changedAssessment = changes.find((change) => change.file === assessment);
+    const changedTemplate = changes.find((change) => change.file === template);
+    assert.ok(changedAssessment);
+    assert.ok(changedTemplate);
+    const assessmentValue = JSON.parse(changedAssessment.updated);
+    assert.equal(assessmentValue.title, "old is incidental text");
+    assert.deepEqual(
+      assessmentValue.zones[0].questions,
+      [
+        { id: "new" },
+        { id: "new", alternatives: [{ id: "unit/one" }] },
+      ]
+    );
+    assert.deepEqual(JSON.parse(changedTemplate.updated), {
+      title: "old",
+      template: "new",
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("QID rename planning rejects conflicts and stale source ranges", () => {
+  const root = tmpDir();
+  const assessment = path.join(
+    root,
+    "courseInstances/Fa26/assessments/hw/infoAssessment.json"
+  );
+  fs.mkdirSync(path.dirname(assessment), { recursive: true });
+  fs.writeFileSync(assessment, '{ "zones": [{ "questions": [{ "id": "old" }] }] }');
+  try {
+    const index = indexCourse(root, "2026-01-01");
+    assert.throws(
+      () =>
+        planQidReferenceRenames(index, [
+          { oldQid: "old", newQid: "one" },
+          { oldQid: "old", newQid: "two" },
+        ]),
+      /Conflicting QID renames/
+    );
+    assert.throws(
+      () => planQidReferenceRenames(index, [{ oldQid: "../old", newQid: "new" }]),
+      /must not contain/
+    );
+
+    const edits = planQidReferenceRenames(index, [
+      { oldQid: "old", newQid: "new" },
+    ]);
+    fs.writeFileSync(assessment, fs.readFileSync(assessment, "utf-8").replace("old", "other"));
+    assert.throws(
+      () => prepareQidReferenceFileChanges(edits),
+      /changed before it could be updated/
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // ── Schemas ──

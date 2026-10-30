@@ -18,6 +18,11 @@ This extension is still experimental and may change or break.
     referenced file, a "N uses" CodeLens at the top of referenced files, and
     **PrairieLearn: Find Uses of File** in the explorer's context menu (works
     for images too).
+- When a question directory, or an ancestor containing questions, is moved
+  within `questions/` in VS Code, offer to update all affected assessment IDs,
+  alternative IDs, and question templates as part of the same operation.
+- Preview or apply the same semantic QID reference updates from the CLI with
+  `prairielearn-navigator rename-qids`.
 - Completions, code lenses, and quick fixes that create missing files, ignore
   one diagnostic occurrence in a file, or open that rule's severity setting.
 - UUID completions in PrairieLearn info files, generated with `uuidgen` by
@@ -66,6 +71,17 @@ repo can fail CI on them:
 ```sh
 npx -y @sybelblue/prairielearn-navigator check --format github
 ```
+
+To update references after explicitly renaming one or more QIDs, preview the
+changes first and then apply them with `--write`:
+
+```sh
+npx -y @sybelblue/prairielearn-navigator rename-qids old new topic/one unit/one
+npx -y @sybelblue/prairielearn-navigator rename-qids --write old new topic/one unit/one
+```
+
+This command changes semantic QID references only; it never moves question
+directories or infers moves made by Git or shell tools.
 
 See [packages/cli/README.md](packages/cli/README.md) for options and a GitHub
 Actions example.

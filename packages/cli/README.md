@@ -1,7 +1,8 @@
 # @sybelblue/prairielearn-navigator
 
 Checks a [PrairieLearn](https://www.prairielearn.com) course for problems that
-should fail CI. These are the same diagnostics the
+should fail CI, and bulk-updates semantic QID references. The diagnostics are
+the same ones the
 [PrairieLearn Navigator](https://github.com/SybelBlue/prairielearn-navigator)
 VS Code extension shows. `check` looks at every course JSON file
 (`infoCourse.json`, `infoCourseInstance.json`, `infoAssessment.json`, the
@@ -154,6 +155,41 @@ the pull request. Run it from the repository root so annotation paths resolve:
 ```
 
 Requires Node.js 22 or newer.
+
+## Rename QIDs
+
+`rename-qids` bulk-updates semantic references to one or more question IDs:
+assessment question IDs, assessment alternative IDs, and question `template`
+values. It does not replace matching prose or comments.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator rename-qids [options] \
+  <old-qid> <new-qid> [<old-qid> <new-qid> ...]
+```
+
+| Option | |
+| --- | --- |
+| `--course <path>` | Course directory or a path inside one (default: `.`) |
+| `--write` | Apply the planned edits. Without this flag, the command only previews them. |
+
+For example:
+
+```sh
+# Preview four QID changes made necessary by a folder reorganization
+npx -y @sybelblue/prairielearn-navigator rename-qids \
+  algebra/add algebra/basics/add \
+  algebra/subtract algebra/basics/subtract
+
+# Apply the same reference edits
+npx -y @sybelblue/prairielearn-navigator rename-qids --write \
+  algebra/add algebra/basics/add \
+  algebra/subtract algebra/basics/subtract
+```
+
+The command changes references only. Move the question directories separately;
+the command can run before or after that move and does not require either QID's
+directory to exist. Automatic move detection is available only for moves made
+through the PrairieLearn Navigator VS Code extension.
 
 ## Library API
 
