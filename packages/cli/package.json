@@ -1,6 +1,6 @@
 {
   "name": "@sybelblue/prairielearn-navigator",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Check PrairieLearn courses and update semantic QID references",
   "license": "MIT",
   "repository": {
