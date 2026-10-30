@@ -11,7 +11,7 @@ interface RelatedInfo {
   message: string;
 }
 
-export type DiagnosticMetadata =
+type DiagnosticMetadata =
   | {
       kind: "schema-required-property";
       /** JSON path of the object that requires the property. */

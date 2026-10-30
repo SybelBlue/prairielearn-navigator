@@ -93,7 +93,7 @@ export async function runRules(
 }
 
 /** Removes exact per-file diagnostic occurrences suppressed in the config. */
-export function withoutIgnoredDiagnostics(
+function withoutIgnoredDiagnostics(
   filePath: string,
   diagnostics: Diagnostic[],
   config: NavigatorConfig

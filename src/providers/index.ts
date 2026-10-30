@@ -30,4 +30,3 @@ export {
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
-export { generateUuid } from "./uuid";

@@ -46,7 +46,7 @@ interface Exclude {
 }
 
 /** One exact diagnostic occurrence suppressed for one file. */
-export interface IgnoredDiagnostic {
+interface IgnoredDiagnostic {
   /** Absolute path of the file containing the diagnostic. */
   file: string;
   rule: RuleId;
