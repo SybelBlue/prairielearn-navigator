@@ -646,7 +646,7 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test",
+    "test": "node scripts/run-vscode-tests.mjs",
     "test:cli": "vitest run",
     "test:package": "node scripts/test-package.mjs",
     "test:size": "node scripts/check-build-size.mjs",

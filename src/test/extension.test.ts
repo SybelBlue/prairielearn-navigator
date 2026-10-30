@@ -19,7 +19,9 @@ import {
   testDebounceMs,
 } from "../timing";
 
-const course = path.resolve(__dirname, "../../src/test-cli/fixtures/broken");
+const fixtures = process.env.PL_NAVIGATOR_VSCODE_TEST_FIXTURES ??
+  path.resolve(__dirname, "../../src/test-cli/fixtures");
+const course = path.join(fixtures, "broken");
 const depsInfo = vscode.Uri.file(path.join(course, "questions/deps/info.json"));
 const assessment = vscode.Uri.file(
   path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json")
@@ -177,6 +179,18 @@ async function waitForBulkQuestionIds(
   throw new Error(
     `Timed out waiting for ${expected} question completions under ${prefix}; found ${ids.length}`,
   );
+}
+
+async function runInBatches<T>(
+  values: readonly T[],
+  batchSize: number,
+  run: (value: T, index: number) => Promise<void>,
+): Promise<void> {
+  for (let i = 0; i < values.length; i += batchSize) {
+    await Promise.all(
+      values.slice(i, i + batchSize).map((value, j) => run(value, i + j)),
+    );
+  }
 }
 
 function positionOf(doc: vscode.TextDocument, text: string): vscode.Position {
@@ -936,6 +950,9 @@ suite("PrairieLearn Navigator", () => {
   });
 
   test("500-file operations settle without stale diagnostics or cache entries", async function () {
+    if (!process.env.PL_NAVIGATOR_VSCODE_TEST_FIXTURES) {
+      this.skip(); // The npm wrapper supplies an isolated copy outside the repository.
+    }
     this.timeout(15_000);
     const count = 500;
     const localPrefix = "perfBulk";
@@ -957,9 +974,11 @@ suite("PrairieLearn Navigator", () => {
     fs.rmSync(root, { recursive: true, force: true });
     try {
       await measurePerformance("bulk-create-500-files", 1_000, async () => {
-        fs.mkdirSync(assetRoot, { recursive: true });
-        assetFiles.forEach((file, i) => fs.writeFileSync(file, `created ${i}`));
-        fs.writeFileSync(infoFile, info(false));
+        await fs.promises.mkdir(assetRoot, { recursive: true });
+        await runInBatches(assetFiles, 32, (file, i) =>
+          fs.promises.writeFile(file, `created ${i}`),
+        );
+        await fs.promises.writeFile(infoFile, info(false));
         const diagnostics = await until(
           () => diagnosticsUnder(root),
           (entries) => entries.length === 1,
@@ -971,8 +990,10 @@ suite("PrairieLearn Navigator", () => {
       });
 
       await measurePerformance("bulk-change-500-files", 1_000, async () => {
-        fs.writeFileSync(infoFile, info(true));
-        assetFiles.forEach((file, i) => fs.writeFileSync(file, `changed ${i}`));
+        await fs.promises.writeFile(infoFile, info(true));
+        await runInBatches(assetFiles, 32, (file, i) =>
+          fs.promises.writeFile(file, `changed ${i}`),
+        );
         const diagnostics = await until(
           () => diagnosticsUnder(root),
           (entries) =>
@@ -990,6 +1011,9 @@ suite("PrairieLearn Navigator", () => {
       });
 
       await measurePerformance("bulk-delete-500-files", 1_000, async () => {
+        // Drain asset removals before deleting info.json, whose diagnostics and
+        // completion entry are the observable sentinel for this operation.
+        await runInBatches(assetFiles, 32, (file) => fs.promises.unlink(file));
         await vscode.workspace.fs.delete(vscode.Uri.file(root), {
           recursive: true,
         });
