@@ -13,7 +13,6 @@ import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
 import { generateUuid, reportUuidGenerationError } from "./uuid";
 
-const debounceMs = 300;
 const batchSize = 32;
 export const missingRootUuidDiagnosticCode =
   `${ruleDiagnosticCode("schema")}/missing-required-property/uuid`;
@@ -37,11 +36,14 @@ export class RuleDiagnosticCollection {
   /** Bumped per check of a file, so a slower, older check never wins. */
   private generation = new Map<string, number>();
   private checkAllTimer: NodeJS.Timeout | undefined;
+  private referencedFiles = new Set<string>();
+  private referencedFilesTimer: NodeJS.Timeout | undefined;
 
   constructor(
     private courseCache: CourseCache,
     private references: ReferenceIndexCache,
-    private configs: ConfigProvider
+    private configs: ConfigProvider,
+    private readonly debounceMs = 300,
   ) {
     this.collection = vscode.languages.createDiagnosticCollection(
       "prairielearn-navigator"
@@ -52,7 +54,7 @@ export class RuleDiagnosticCollection {
 
     // A referenced file appearing, changing, or disappearing only affects
     // the files that reference it
-    references.onChanged(({ affected }) => affected.forEach((f) => this.checkFile(f)));
+    references.onChanged(({ affected }) => this.scheduleReferencedFiles(affected));
     configs.onChanged(() => this.scheduleCheckAll());
     courseCache.onUpdated(() => this.scheduleCheckAll());
     this.scheduleCheckAll();
@@ -76,6 +78,20 @@ export class RuleDiagnosticCollection {
         this.scheduleCourseRules(courseRoot);
       }
     };
+    const onQuestionsDeleted = (uri: vscode.Uri) => {
+      onQuestions(uri);
+      const prefix = uri.fsPath + path.sep;
+      for (const collection of [this.collection, this.courseCollection]) {
+        collection.forEach((existing) => {
+          if (
+            existing.fsPath === uri.fsPath ||
+            existing.fsPath.startsWith(prefix)
+          ) {
+            collection.delete(existing);
+          }
+        });
+      }
+    };
     return [
       this.collection,
       this.courseCollection,
@@ -85,7 +101,7 @@ export class RuleDiagnosticCollection {
       watcher.onDidDelete((uri) => this.checkFile(uri.fsPath)),
       questionsWatcher,
       questionsWatcher.onDidCreate(onQuestions),
-      questionsWatcher.onDidDelete(onQuestions),
+      questionsWatcher.onDidDelete(onQuestionsDeleted),
       vscode.workspace.onDidOpenTextDocument((doc) => this.checkFile(doc.uri.fsPath)),
       vscode.workspace.onDidChangeTextDocument((e) => this.scheduleCheck(e.document)),
       // Unsaved changes are discarded on close: go back to the disk
@@ -95,6 +111,7 @@ export class RuleDiagnosticCollection {
           this.timers.forEach((t) => clearTimeout(t));
           this.courseTimers.forEach((t) => clearTimeout(t));
           clearTimeout(this.checkAllTimer);
+          clearTimeout(this.referencedFilesTimer);
         },
       },
     ];
@@ -108,7 +125,7 @@ export class RuleDiagnosticCollection {
       setTimeout(() => {
         this.timers.delete(key);
         this.checkFile(key);
-      }, debounceMs)
+      }, this.debounceMs)
     );
   }
 
@@ -119,7 +136,7 @@ export class RuleDiagnosticCollection {
       setTimeout(() => {
         this.courseTimers.delete(courseRoot);
         this.checkCourseRules(courseRoot);
-      }, debounceMs)
+      }, this.debounceMs)
     );
   }
 
@@ -128,7 +145,19 @@ export class RuleDiagnosticCollection {
     clearTimeout(this.checkAllTimer);
     this.checkAllTimer = setTimeout(() => {
       this.courseCache.getCourseIds().forEach((root) => this.checkCourse(root));
-    }, debounceMs);
+    }, this.debounceMs);
+  }
+
+  /** Deduplicates checks requested by a burst of related reference updates. */
+  private scheduleReferencedFiles(files: string[]) {
+    files.forEach((file) => this.referencedFiles.add(file));
+    clearTimeout(this.referencedFilesTimer);
+    this.referencedFilesTimer = setTimeout(() => {
+      this.referencedFilesTimer = undefined;
+      const pending = [...this.referencedFiles];
+      this.referencedFiles.clear();
+      pending.forEach((file) => void this.checkFile(file));
+    }, Math.min(this.debounceMs, 10));
   }
 
   private async checkCourse(courseRoot: string) {

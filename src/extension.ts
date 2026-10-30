@@ -30,6 +30,7 @@ import {
 } from "./providers";
 import { DebugView } from "./debugView";
 import { QuestionSourceSwitcher } from "./questionSourceSwitcher";
+import { debounceMsForExtensionMode } from "./timing";
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -49,12 +50,17 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   // setup caches
+  const debounceMs = debounceMsForExtensionMode(context.extensionMode);
   const courseCache = new CourseCache();
   const instanceCache = new CourseInstanceCache(courseCache);
   const questionCache = new QuestionCache(courseCache);
   const questionSourceSwitcher = new QuestionSourceSwitcher(questionCache);
   const configProvider = new ConfigProvider(context);
-  const referenceIndex = new ReferenceIndexCache(courseCache, configProvider);
+  const referenceIndex = new ReferenceIndexCache(
+    courseCache,
+    configProvider,
+    debounceMs,
+  );
   const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
   const fileReferenceProvider = new FileReferenceProvider(
     courseCache,
@@ -62,7 +68,9 @@ export function activate(context: vscode.ExtensionContext) {
     referenceIndex,
   );
 
-  new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
+  if (context.extensionMode !== vscode.ExtensionMode.Test) {
+    new DebugView(courseCache, instanceCache, assessmentCache, questionCache);
+  }
   courseCache.onUpdated((ids) =>
     console.info(`prairielearn -- course cache update: ${ids}`),
   );
@@ -135,6 +143,7 @@ export function activate(context: vscode.ExtensionContext) {
       courseCache,
       referenceIndex,
       configProvider,
+      debounceMs,
     ).subscriptions(),
 
     // Jump-to-File and Uses Providers

@@ -18,8 +18,10 @@ export class CourseCache {
       if (event.type === "refreshed") {
         this.courseJsons.clear();
         event.uris.forEach((uri) => this.courseJsons.createId(uri));
-      } else {
+      } else if (event.type === "added") {
         this.courseJsons.createId(event.uri);
+      } else if (event.type === "removed") {
+        this.courseJsons.removeId(path.dirname(event.uri.fsPath));
       }
       this.onUpdatedEmitter.fire(this.courseJsons.getCourseIds());
     });

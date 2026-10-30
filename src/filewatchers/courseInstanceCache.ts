@@ -15,10 +15,8 @@ export class CourseInstanceCache {
     this.fileWatcher = new FileWatcher("**/infoCourseInstance.json");
 
     this.fileWatcher.onUpdated((event) => {
-      if (event.type === "refreshed") {
+      if (event.type !== "changed") {
         this.rebuildIndex(event.uris);
-      } else {
-        this.addToIndex(event.uri);
       }
       this.onUpdatedEmitter.fire(this.fileWatcher.getUris());
     });

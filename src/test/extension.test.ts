@@ -13,6 +13,11 @@ import {
   MissingFileQuickFixProvider,
   UuidCompletionItemProvider,
 } from "../providers";
+import {
+  debounceMsForExtensionMode,
+  productionDebounceMs,
+  testDebounceMs,
+} from "../timing";
 
 const course = path.resolve(__dirname, "../../src/test-cli/fixtures/broken");
 const depsInfo = vscode.Uri.file(path.join(course, "questions/deps/info.json"));
@@ -26,10 +31,12 @@ async function show(file: string): Promise<vscode.TextEditor> {
 }
 
 async function runQuestionSourceCommand(command: string): Promise<string> {
-  await vscode.commands.executeCommand(
-    `prairielearn-navigator.${command}`,
-  );
-  return vscode.window.activeTextEditor?.document.uri.fsPath ?? "";
+  return measurePerformance("question-source-navigation", 200, async () => {
+    await vscode.commands.executeCommand(
+      `prairielearn-navigator.${command}`,
+    );
+    return vscode.window.activeTextEditor?.document.uri.fsPath ?? "";
+  });
 }
 
 const unusedQuestionCode = "prairielearn-navigator/unused-question";
@@ -45,24 +52,131 @@ function ourDiagnostics(uri: vscode.Uri, options: { unused?: boolean } = {}): vs
     .filter((d) => options.unused || d.code !== unusedQuestionCode);
 }
 
-async function until<T>(get: () => T, done: (value: T) => boolean): Promise<T> {
-  let value = get();
-  for (let i = 0; i < 100 && !done(value); i++) {
-    await new Promise((r) => setTimeout(r, 100));
-    value = get();
+async function until<T>(
+  get: () => T,
+  done: (value: T) => boolean,
+  description = "diagnostics to settle",
+): Promise<T> {
+  const initial = get();
+  if (done(initial)) {
+    return initial;
   }
-  return value;
+  return new Promise<T>((resolve, reject) => {
+    let timer: NodeJS.Timeout | undefined;
+    let fallback: NodeJS.Timeout | undefined;
+    let subscription: vscode.Disposable;
+    const finish = (value: T) => {
+      clearTimeout(timer);
+      clearInterval(fallback);
+      subscription.dispose();
+      resolve(value);
+    };
+    const check = () => {
+      const value = get();
+      if (done(value)) {
+        finish(value);
+      }
+    };
+    subscription = vscode.languages.onDidChangeDiagnostics(() => check());
+    // Some VS Code collection updates do not emit a distinct event. Keep a
+    // fine-grained fallback without reintroducing the old 100ms latency tax.
+    fallback = setInterval(check, 10);
+    timer = setTimeout(() => {
+      clearInterval(fallback);
+      subscription.dispose();
+      reject(new Error(`Timed out after 2000ms waiting for ${description}`));
+    }, 2_000);
+    // Close the gap between the initial read and subscribing to the event.
+    check();
+  });
 }
 
 async function diagnosticsFor(uri: vscode.Uri): Promise<vscode.Diagnostic[]> {
-  for (let i = 0; i < 100; i++) {
-    const ds = ourDiagnostics(uri);
-    if (ds.length > 0) {
-      return ds;
+  return until(
+    () => ourDiagnostics(uri),
+    (diagnostics) => diagnostics.length > 0,
+    `diagnostics for ${uri.fsPath}`,
+  );
+}
+
+async function measurePerformance<T>(
+  action: string,
+  budgetMs: number,
+  run: () => Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  const result = await run();
+  const elapsedMs = Math.round((performance.now() - started) * 10) / 10;
+  const measurement = {
+    action,
+    elapsedMs,
+    budgetMs,
+    overBudget: elapsedMs > budgetMs,
+    vscodeVersion: vscode.version,
+    platform: `${process.platform}-${process.arch}`,
+  };
+  if (process.env.PL_NAVIGATOR_REPORT_PERF !== "0") {
+    console.log(`PL_NAVIGATOR_PERF ${JSON.stringify(measurement)}`);
+    if (measurement.overBudget) {
+      console.warn(
+        `PL_NAVIGATOR_PERF_WARNING ${action} took ${elapsedMs}ms (budget ${budgetMs}ms)`,
+      );
     }
-    await new Promise((r) => setTimeout(r, 100));
   }
-  return [];
+  return result;
+}
+
+function diagnosticsUnder(root: string): [vscode.Uri, vscode.Diagnostic[]][] {
+  const prefix = root + path.sep;
+  return vscode.languages
+    .getDiagnostics()
+    .filter(([uri]) => uri.fsPath.startsWith(prefix))
+    .map(
+      ([uri, diagnostics]): [vscode.Uri, vscode.Diagnostic[]] => [
+        uri,
+        diagnostics.filter(
+          (diagnostic) => diagnostic.source === "prairielearn-navigator",
+        ),
+      ],
+    )
+    .filter(([, diagnostics]) => diagnostics.length > 0);
+}
+
+async function assessmentQuestionCompletions(): Promise<string[]> {
+  const document = await vscode.workspace.openTextDocument(assessment);
+  const marker = '"id": "good';
+  const position = document.positionAt(
+    document.getText().indexOf(marker) + '"id": "'.length,
+  );
+  const completions = await vscode.commands.executeCommand<vscode.CompletionList>(
+    "vscode.executeCompletionItemProvider",
+    document.uri,
+    position,
+    '"',
+  );
+  return (completions?.items ?? []).map((item) =>
+    typeof item.label === "string" ? item.label : item.label.label,
+  );
+}
+
+async function waitForBulkQuestionIds(
+  prefix: string,
+  expected: number,
+): Promise<string[]> {
+  const deadline = performance.now() + 2_000;
+  let ids: string[] = [];
+  do {
+    ids = (await assessmentQuestionCompletions()).filter((id) =>
+      id.startsWith(prefix),
+    );
+    if (ids.length === expected) {
+      return ids;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  } while (performance.now() < deadline);
+  throw new Error(
+    `Timed out waiting for ${expected} question completions under ${prefix}; found ${ids.length}`,
+  );
 }
 
 function positionOf(doc: vscode.TextDocument, text: string): vscode.Position {
@@ -76,6 +190,23 @@ function positionAfter(doc: vscode.TextDocument, text: string): vscode.Position 
 suite("PrairieLearn Navigator", () => {
   suiteSetup(async () => {
     await vscode.extensions.getExtension("sybelblue.prairielearn-navigator")?.activate();
+  });
+
+  test("extension timing keeps production settling and accelerates tests", () => {
+    assert.strictEqual(productionDebounceMs, 300);
+    assert.strictEqual(testDebounceMs, 10);
+    assert.strictEqual(
+      debounceMsForExtensionMode(vscode.ExtensionMode.Production),
+      productionDebounceMs,
+    );
+    assert.strictEqual(
+      debounceMsForExtensionMode(vscode.ExtensionMode.Development),
+      productionDebounceMs,
+    );
+    assert.strictEqual(
+      debounceMsForExtensionMode(vscode.ExtensionMode.Test),
+      testDebounceMs,
+    );
   });
 
   test("missing clientFilesCourse dependencies are diagnosed", async () => {
@@ -612,12 +743,18 @@ suite("PrairieLearn Navigator", () => {
     const editor = await vscode.window.showTextDocument(assessment);
     try {
       const at = positionOf(editor.document, '{ "id": "good"').translate(0, -1);
-      await editor.edit((e) => e.insert(at, '{ "id": "deps", "points": 1 },\n        '));
-      assert.deepStrictEqual(await until(unused, (ds) => ds.length === 0), []);
+      await measurePerformance("diagnostics-document-edit", 200, async () => {
+        await editor.edit((e) =>
+          e.insert(at, '{ "id": "deps", "points": 1 },\n        '),
+        );
+        assert.deepStrictEqual(await until(unused, (ds) => ds.length === 0), []);
+      });
     } finally {
-      await vscode.commands.executeCommand("workbench.action.files.revert");
+      await measurePerformance("diagnostics-document-revert", 200, async () => {
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+        assert.strictEqual((await until(unused, (ds) => ds.length === 1)).length, 1);
+      });
     }
-    assert.strictEqual((await until(unused, (ds) => ds.length === 1)).length, 1);
   });
 
   test("unused tags and assessment sets are flagged live as questions and assessments change", async () => {
@@ -684,14 +821,17 @@ suite("PrairieLearn Navigator", () => {
         (d) => d.code === "prairielearn-navigator/client-files-course-exist"
       );
     try {
-      await settings.update(
-        "diagnostics.client-files-course-exist",
-        "info",
-        vscode.ConfigurationTarget.Workspace
-      );
-      const infos = await until(missing, (ds) =>
-        ds.length === 2 && ds.every((d) => d.severity === vscode.DiagnosticSeverity.Information)
-      );
+      const infos = await measurePerformance("diagnostics-settings-change", 200, async () => {
+        await settings.update(
+          "diagnostics.client-files-course-exist",
+          "info",
+          vscode.ConfigurationTarget.Workspace,
+        );
+        return until(missing, (ds) =>
+          ds.length === 2 &&
+          ds.every((d) => d.severity === vscode.DiagnosticSeverity.Information),
+        );
+      });
       assert.deepStrictEqual(
         infos.map((d) => d.severity),
         [vscode.DiagnosticSeverity.Information, vscode.DiagnosticSeverity.Information]
@@ -729,12 +869,25 @@ suite("PrairieLearn Navigator", () => {
 
     const infoJson = path.join(dir, "info.json");
     try {
-      fs.writeFileSync(infoJson, '{ "uuid": "c7c9d1d6-3d3e-4f0e-9c55-1f0a6b4f1e11", "title": "t", "topic": "t", "type": "v3" }');
-      assert.deepStrictEqual(await until(missing, (ds) => ds.length === 0), []);
+      await measurePerformance("diagnostics-file-create", 200, async () => {
+        await vscode.workspace.fs.writeFile(
+          vscode.Uri.file(infoJson),
+          Buffer.from('{ "uuid": "c7c9d1d6-3d3e-4f0e-9c55-1f0a6b4f1e11", "title": "t", "topic": "t", "type": "v3" }'),
+        );
+        assert.deepStrictEqual(await until(missing, (ds) => ds.length === 0), []);
+      });
+      // Let the question-file cache observe the creation before deleting the
+      // file; otherwise native watchers may coalesce a very short-lived file.
+      assert.deepStrictEqual(
+        await waitForBulkQuestionIds("onlyServer", 1),
+        ["onlyServer"],
+      );
     } finally {
-      fs.rmSync(infoJson, { force: true });
+      await measurePerformance("diagnostics-file-delete", 200, async () => {
+        await vscode.workspace.fs.delete(vscode.Uri.file(infoJson));
+        assert.strictEqual((await until(missing, (ds) => ds.length === 1)).length, 1);
+      });
     }
-    assert.strictEqual((await until(missing, (ds) => ds.length === 1)).length, 1);
   });
 
   test("the missingQuestionInfo setting sets that error's severity", async () => {
@@ -765,14 +918,13 @@ suite("PrairieLearn Navigator", () => {
         { "client-files-course-exist": "warning" },
         vscode.ConfigurationTarget.Workspace
       );
-      let severities: vscode.DiagnosticSeverity[] = [];
-      for (let i = 0; i < 50; i++) {
-        severities = ourDiagnostics(depsInfo).map((d) => d.severity);
-        if (severities.length > 0 && severities.every((s) => s === vscode.DiagnosticSeverity.Warning)) {
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 100));
-      }
+      const severities = await until(
+        () => ourDiagnostics(depsInfo).map((d) => d.severity),
+        (values) =>
+          values.length > 0 &&
+          values.every((severity) => severity === vscode.DiagnosticSeverity.Warning),
+        "workspace settings diagnostics",
+      );
       assert.deepStrictEqual(severities, [
         vscode.DiagnosticSeverity.Warning,
         vscode.DiagnosticSeverity.Warning,
@@ -780,6 +932,79 @@ suite("PrairieLearn Navigator", () => {
     } finally {
       await settings.update("rules", undefined, vscode.ConfigurationTarget.Workspace);
       fs.rmSync(path.join(course, ".vscode"), { recursive: true, force: true });
+    }
+  });
+
+  test("500-file operations settle without stale diagnostics or cache entries", async function () {
+    this.timeout(15_000);
+    const count = 500;
+    const localPrefix = "perfBulk";
+    const root = path.join(course, "questions", "perfBulk");
+    const infoFile = path.join(root, "info.json");
+    const assetRoot = path.join(root, "clientFilesQuestion");
+    const assetFiles = Array.from({ length: count - 1 }, (_, i) =>
+      path.join(assetRoot, `asset${String(i).padStart(4, "0")}.txt`),
+    );
+    const info = (changed: boolean) =>
+      JSON.stringify({
+        uuid: "00000000-0000-0000-0000-000000000500",
+        title: "Bulk file watcher question",
+        type: "v3",
+        topic: "T",
+        ...(changed ? { notAProperty: true } : {}),
+      });
+
+    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      await measurePerformance("bulk-create-500-files", 1_000, async () => {
+        fs.mkdirSync(assetRoot, { recursive: true });
+        assetFiles.forEach((file, i) => fs.writeFileSync(file, `created ${i}`));
+        fs.writeFileSync(infoFile, info(false));
+        const diagnostics = await until(
+          () => diagnosticsUnder(root),
+          (entries) => entries.length === 1,
+          "the question created with 499 assets to be diagnosed",
+        );
+        assert.strictEqual(diagnostics.length, 1);
+        const ids = await waitForBulkQuestionIds(localPrefix, 1);
+        assert.deepStrictEqual(ids, [localPrefix]);
+      });
+
+      await measurePerformance("bulk-change-500-files", 1_000, async () => {
+        fs.writeFileSync(infoFile, info(true));
+        assetFiles.forEach((file, i) => fs.writeFileSync(file, `changed ${i}`));
+        const diagnostics = await until(
+          () => diagnosticsUnder(root),
+          (entries) =>
+            entries.length === 1 &&
+            entries.every(([, values]) =>
+              values.some((diagnostic) =>
+                diagnostic.message.includes('unknown property "notAProperty"'),
+              ),
+            ),
+          "the question changed with 499 assets to be rediagnosed",
+        );
+        assert.strictEqual(diagnostics.length, 1);
+        const ids = await waitForBulkQuestionIds(localPrefix, 1);
+        assert.deepStrictEqual(ids, [localPrefix]);
+      });
+
+      await measurePerformance("bulk-delete-500-files", 1_000, async () => {
+        await vscode.workspace.fs.delete(vscode.Uri.file(root), {
+          recursive: true,
+        });
+        await until(
+          () => diagnosticsUnder(root),
+          (entries) => entries.length === 0,
+          `${count} deleted files to be removed from diagnostics`,
+        );
+        assert.deepStrictEqual(
+          await waitForBulkQuestionIds(localPrefix, 0),
+          [],
+        );
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
     }
   });
 });

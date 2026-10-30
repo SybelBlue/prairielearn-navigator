@@ -18,6 +18,10 @@ export class QuestionCache {
   private fileWatcher: FileWatcher;
   private tagMap: Map<string, Set<QuestionId>> = new Map();
   private onUpdatedEmitter = new vscode.EventEmitter<QuestionId[]>();
+  private updateTimer: NodeJS.Timeout | undefined;
+  private rebuildPending = false;
+  private notifyPending = false;
+  private disposables: vscode.Disposable[] = [];
 
   public readonly onUpdated = this.onUpdatedEmitter.event;
 
@@ -25,44 +29,68 @@ export class QuestionCache {
     // capture all question changes so that missing server.py/html files trigger
     this.fileWatcher = new FileWatcher("**/questions/**");
 
-    this.fileWatcher.onUpdated((event) => {
-      if (event.type === "refreshed") {
-        this.rebuildIndex(event.uris);
-      } else {
-        this.addToIndex(event.uri);
-      }
-      this.onUpdatedEmitter.fire(this.getQuestionIds());
-    });
+    this.disposables.push(
+      this.fileWatcher.onUpdated((event) => {
+        if (
+          event.type === "refreshed" ||
+          path.basename(event.uri.fsPath) === "info.json"
+        ) {
+          this.rebuildPending = true;
+        }
+        this.notifyPending = true;
+        this.scheduleUpdate();
+      }),
+      this.courseCache.onUpdated(() => {
+        this.rebuildPending = true;
+        this.notifyPending = true;
+        this.scheduleUpdate();
+      }),
+    );
+  }
 
-    this.courseCache.onUpdated(() => {
-      this.rebuildIndex(this.fileWatcher.getUris());
-      this.onUpdatedEmitter.fire(this.getQuestionIds());
-    });
+  /** Coalesce a file-system burst into one index rebuild and one notification. */
+  private scheduleUpdate() {
+    clearTimeout(this.updateTimer);
+    this.updateTimer = setTimeout(() => {
+      this.updateTimer = undefined;
+      if (this.rebuildPending) {
+        this.rebuildIndex(this.fileWatcher.getUris());
+      }
+      this.rebuildPending = false;
+      if (this.notifyPending) {
+        this.onUpdatedEmitter.fire(this.getQuestionIds());
+      }
+      this.notifyPending = false;
+    }, 100);
   }
 
   private rebuildIndex(uris: vscode.Uri[]) {
     this.questionIds = [];
+    this.tagMap.clear();
     if (uris.length * 2 < QuestionCache.regexSafeIds.size) {
-      this.clear();
+      QuestionCache.regexSafeIds.clear();
     }
     uris.forEach((uri) => this.addToIndex(uri));
-  }
-
-  private clear() {
-    QuestionCache.regexSafeIds.clear();
-    this.tagMap.clear();
   }
 
   private addToIndex(uri: vscode.Uri) {
     if (path.basename(uri.fsPath) !== "info.json") {
       return;
     }
+    let rawData: string;
+    try {
+      rawData = fs.readFileSync(uri.fsPath, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return; // deleted while a coalesced rebuild was in progress
+      }
+      throw error;
+    }
     const quid = this.courseCache.getQuestionIdFor(uri);
     this.questionIds.push(quid);
     if (!QuestionCache.regexSafeIds.has(quid.localId)) {
       QuestionCache.regexSafeIds.set(quid.localId, makeRegexSafe(quid.localId));
     }
-    const rawData = fs.readFileSync(uri.fsPath, 'utf-8');
     const info = parseJsonc(rawData) as { tags?: unknown } | undefined;
     const tags = Array.isArray(info?.tags) ? info.tags : [];
     for (const t of tags) {
@@ -113,6 +141,8 @@ export class QuestionCache {
   }
 
   public dispose() {
+    clearTimeout(this.updateTimer);
+    this.disposables.forEach((disposable) => disposable.dispose());
     this.fileWatcher.dispose();
     this.onUpdatedEmitter.dispose();
   }

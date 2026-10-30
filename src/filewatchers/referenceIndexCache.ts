@@ -6,8 +6,6 @@ import { indexCourseAsync, ReferenceIndex, Use } from "../core/referenceIndex";
 import { ConfigProvider } from "../providers/config";
 import { CourseCache } from "./courseCache";
 
-const debounceMs = 300;
-
 export interface ReferencesChanged {
   courseRoot: string;
   /** The path that was created, edited, or deleted. */
@@ -36,7 +34,8 @@ export class ReferenceIndexCache {
 
   constructor(
     private courseCache: CourseCache,
-    private configs: ConfigProvider
+    private configs: ConfigProvider,
+    private readonly debounceMs = 300,
   ) {
     // Targets can be any file (images, css, ...), so watch everything
     const watcher = vscode.workspace.createFileSystemWatcher("**/*");
@@ -123,7 +122,7 @@ export class ReferenceIndexCache {
       setTimeout(() => {
         this.timers.delete(key);
         this.refresh(document.uri, document.getText());
-      }, debounceMs)
+      }, this.debounceMs)
     );
   }
 
