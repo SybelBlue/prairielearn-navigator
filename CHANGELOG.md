@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Broad perf improvements to single and bulk actions.
+
 ## [1.2.0] - 2026-10-29
 
 - Optimize build sizes by using webpack.
