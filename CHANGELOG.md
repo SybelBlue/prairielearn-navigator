@@ -14,6 +14,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   `infoCourse.json` doesn't define and PrairieLearn has no default for, with a
   quick fix that defines the set as PrairieLearn would (`gray1`, with the name
   as abbreviation and heading) and selects its abbreviation to change.
+- Rename Symbol (F2) on an assessment set defined in `infoCourse.json`, either
+  on its definition or in an assessment's `set`, renames it across the course:
+  the definition, every assessment's `set`, and `.pl-navigator.jsonc`
+  suppressions that name it. Undefined sets, and new names `infoCourse.json`
+  already defines, are refused.
+- New `rename-assessment-sets` CLI command that previews or writes the same
+  assessment set rename.
+- Find All References on a defined assessment set, either on its definition or
+  in an assessment, lists the definition and every assessment's `set` naming
+  it.
 
 ## [1.2.4] - 2026-11-04
 

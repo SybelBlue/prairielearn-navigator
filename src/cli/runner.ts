@@ -1,7 +1,7 @@
 import { styleText } from "node:util";
 import { run as runCheck } from "./check";
 import { run as runRenameQids } from "./renameQids";
-import { run as runRenameTags } from "./renameTags";
+import { runRenameAssessmentSets, runRenameTags } from "./renameCourseNames";
 import { CliRuntime, processRuntime } from "./runtime";
 
 const USAGE = `Usage: prairielearn-navigator <command> [options]
@@ -10,6 +10,9 @@ Commands:
   check         Check a course's JSON files against PrairieLearn's schemas and rules
   rename-qids   Preview or write semantic QID reference updates
   rename-tags   Preview or write a rename of a tag defined in infoCourse.json
+  rename-assessment-sets
+                Preview or write a rename of an assessment set defined in
+                infoCourse.json
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
 
@@ -27,6 +30,8 @@ export async function run(
       return runRenameQids(args.slice(1), runtime);
     case "rename-tags":
       return runRenameTags(args.slice(1), runtime);
+    case "rename-assessment-sets":
+      return runRenameAssessmentSets(args.slice(1), runtime);
     case "--help":
     case "-h":
       runtime.stdout(USAGE);

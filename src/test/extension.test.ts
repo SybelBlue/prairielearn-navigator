@@ -1144,6 +1144,65 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("F2 and Find All References on a defined assessment set cover its definition and assessments", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const assessmentEditor = await vscode.window.showTextDocument(assessment);
+    const document = assessmentEditor.document;
+    // hw1's "type" is also "Homework", so find the set after its key
+    const atSet = () => document.positionAt(document.getText().indexOf('"Homework"', document.getText().indexOf('"set"')) + 1);
+    const references = async (uri: vscode.Uri, position: vscode.Position) =>
+      (await vscode.commands.executeCommand<vscode.Location[]>(
+        "vscode.executeReferenceProvider", uri, position
+      )).map((l) => `${path.relative(course, l.uri.fsPath)}:${l.range.start.line + 1}`).sort();
+
+    // A PrairieLearn default the course doesn't define
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand("vscode.prepareRename", assessment, atSet())),
+      /Only assessment sets defined in infoCourse.json can be renamed/
+    );
+    assert.deepStrictEqual(await references(assessment, atSet()), []);
+
+    const courseEditor = await vscode.window.showTextDocument(infoCourse);
+    try {
+      // Unsaved, so the providers must read the editor rather than the disk
+      const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+      await courseEditor.edit((e) =>
+        e.insert(end, ', "assessmentSets": [{ "abbreviation": "HW", "name": "Homework", "heading": "Homeworks", "color": "green1" }] ')
+      );
+      const atDefinition = () =>
+        courseEditor.document.positionAt(courseEditor.document.getText().indexOf('"Homework"') + 1);
+
+      const expected = ["courseInstances/Fa26/assessments/hw1/infoAssessment.json:5", "infoCourse.json:1"];
+      assert.deepStrictEqual(await references(assessment, atSet()), expected);
+      assert.deepStrictEqual(await references(infoCourse, atDefinition()), expected);
+
+      const prepared = await vscode.commands.executeCommand<{ range: vscode.Range; placeholder: string }>(
+        "vscode.prepareRename", infoCourse, atDefinition()
+      );
+      assert.strictEqual(courseEditor.document.getText(prepared.range), "Homework");
+      const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>(
+        "vscode.executeDocumentRenameProvider", assessment, atSet(), "Problem Set"
+      );
+      assert.deepStrictEqual(
+        edit.entries().map(([uri]) => uri.fsPath).sort(),
+        [assessment.fsPath, infoCourse.fsPath].sort()
+      );
+      assert.ok(await vscode.workspace.applyEdit(edit));
+      const assessmentJson = JSON.parse(document.getText()) as { type: string; set: string };
+      assert.deepStrictEqual([assessmentJson.type, assessmentJson.set], ["Homework", "Problem Set"]);
+      assert.deepStrictEqual(
+        (JSON.parse(courseEditor.document.getText()) as { assessmentSets: { name: string }[] })
+          .assessmentSets.map((set) => set.name),
+        ["Problem Set"]
+      );
+    } finally {
+      await vscode.window.showTextDocument(assessment);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+      await vscode.window.showTextDocument(infoCourse);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("Find All References on a defined tag lists its definition and question entries", async () => {
     const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
     // Used by hw1, so the file-uses fallback would list assessments

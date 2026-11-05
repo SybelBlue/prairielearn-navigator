@@ -161,6 +161,52 @@ test("rename-tags validates its arguments and the tags", async () => {
   assert.match(taken.stderr, /Tag "unused" is already defined/);
 });
 
+test("rename-assessment-sets previews and writes an assessment set rename", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-sets-"));
+  const course = path.join(root, "course");
+  fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
+  const infoCourse = path.join(course, "infoCourse.json");
+  const assessment = path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json");
+  const before = fs.readFileSync(assessment, "utf-8");
+  try {
+    const preview = await runCliAt(course, "rename-assessment-sets", "Homework", "Problem Set");
+    assert.equal(preview.code, 0, preview.stderr);
+    assert.match(preview.stdout, /"\\"Homework\\"" -> "\\"Problem Set\\""/);
+    assert.match(preview.stdout, /Would make 2 edits in 2 files/);
+    assert.equal(fs.readFileSync(assessment, "utf-8"), before);
+
+    const written = await runCliAt(course, "rename-assessment-sets", "--write", "Homework", "Problem Set");
+    assert.equal(written.code, 0, written.stderr);
+    assert.match(written.stdout, /Made 2 edits in 2 files/);
+    const json = JSON.parse(fs.readFileSync(assessment, "utf-8"));
+    assert.deepEqual([json.type, json.set], ["Homework", "Problem Set"]);
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(infoCourse, "utf-8")).assessmentSets.map((s: { name: string }) => s.name),
+      ["Problem Set", "Quiz"]
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rename-assessment-sets validates its arguments and the sets", async () => {
+  const help = await runCli("rename-assessment-sets", "--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /Usage: prairielearn-navigator rename-assessment-sets/);
+
+  const one = await runCli("rename-assessment-sets", "--course", "names", "Homework");
+  assert.equal(one.code, 1);
+  assert.match(one.stderr, /Exactly one old assessment set and one new assessment set/);
+
+  const undefinedSet = await runCli("rename-assessment-sets", "--course", "names", "Exam", "Final");
+  assert.equal(undefinedSet.code, 1);
+  assert.match(undefinedSet.stderr, /Assessment set "Exam" is not defined in infoCourse.json/);
+
+  const taken = await runCli("rename-assessment-sets", "--course", "names", "Homework", "Quiz");
+  assert.equal(taken.code, 1);
+  assert.match(taken.stderr, /Assessment set "Quiz" is already defined/);
+});
+
 test("broken course exits 1 with code frames", async () => {
   const { code, stdout } = await runCli("check", "broken");
   assert.equal(code, 1);

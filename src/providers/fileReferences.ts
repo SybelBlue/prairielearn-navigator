@@ -6,7 +6,7 @@ import { versionDate } from "../core/plVersion";
 import { Use } from "../core/referenceIndex";
 import { FileRef, fileRefAt, findFileRefs, openTarget, sourceOf } from "../core/references/extract";
 import { refSpecs } from "../core/references/specs";
-import { tagNameAt } from "../core/tags";
+import { courseNameAt } from "../core/courseNames";
 import { CourseCache, ReferenceIndexCache, useLocation } from "../filewatchers";
 import { ConfigProvider } from "./config";
 
@@ -74,13 +74,13 @@ export class FileReferenceProvider
     return fileRefAt(this.refsIn(document), document.offsetAt(position));
   }
 
-  private onTag(document: vscode.TextDocument, position: vscode.Position): boolean {
+  private onCourseName(document: vscode.TextDocument, position: vscode.Position): boolean {
     const courseRoot = this.courseCache.getCourseIdFor(document.uri);
     if (!courseRoot) {
       return false;
     }
     const relPath = courseRelativePath(courseRoot, document.uri.fsPath);
-    return tagNameAt(relPath, document.getText(), document.offsetAt(position)) !== undefined;
+    return courseNameAt(relPath, document.getText(), document.offsetAt(position)) !== undefined;
   }
 
   provideDefinition(
@@ -114,15 +114,15 @@ export class FileReferenceProvider
   }
 
   /**
-   * On a reference: every use of its target. On a tag: nothing, as
-   * CourseTagProvider answers. Elsewhere: every use of this file.
+   * On a reference: every use of its target. On a tag or assessment set:
+   * nothing, as CourseNameProvider answers. Elsewhere: every use of this file.
    */
   async provideReferences(
     document: vscode.TextDocument,
     position: vscode.Position
   ): Promise<vscode.Location[]> {
     const ref = this.refAt(document, position);
-    if (!ref && this.onTag(document, position)) {
+    if (!ref && this.onCourseName(document, position)) {
       return [];
     }
     const target = ref ? ref.target : document.uri.fsPath;

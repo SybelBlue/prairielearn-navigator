@@ -29,7 +29,7 @@ import {
   RuleDiagnosticCollection,
   removeUnusedQuestion,
   registerQidRenameParticipant,
-  CourseTagProvider,
+  CourseNameProvider,
   TagProvider,
   UuidCompletionItemProvider,
 } from "./providers";
@@ -68,7 +68,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
   const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
   const tagProvider = new TagProvider(courseCache);
-  const courseTagProvider = new CourseTagProvider(courseCache, referenceIndex);
+  const courseNameProvider = new CourseNameProvider(courseCache, referenceIndex);
   const fileReferenceProvider = new FileReferenceProvider(
     courseCache,
     configProvider,
@@ -105,9 +105,13 @@ export function activate(context: vscode.ExtensionContext) {
 
   // helpful constants
   const infoQuestionPatterns = [{ pattern: "**/questions/**/info.json" }];
-  const tagFilePatterns = [...infoQuestionPatterns, { pattern: "**/infoCourse.json" }];
   const infoAssessmentPatterns = [
     { pattern: "**/assessments/**/infoAssessment.json" },
+  ];
+  const courseNamePatterns = [
+    ...infoQuestionPatterns,
+    ...infoAssessmentPatterns,
+    { pattern: "**/infoCourse.json" },
   ];
   const infoFilePatterns: vscode.DocumentSelector = [
     { pattern: "**/info.json" },
@@ -184,9 +188,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Tag hover and jump to infoCourse.json
     vscode.languages.registerHoverProvider(infoQuestionPatterns, tagProvider),
     vscode.languages.registerDefinitionProvider(infoQuestionPatterns, tagProvider),
-    // Rename and find references of a defined tag across the course
-    vscode.languages.registerRenameProvider(tagFilePatterns, courseTagProvider),
-    vscode.languages.registerReferenceProvider(tagFilePatterns, courseTagProvider),
+    // Rename and find references of a defined tag or assessment set across the course
+    vscode.languages.registerRenameProvider(courseNamePatterns, courseNameProvider),
+    vscode.languages.registerReferenceProvider(courseNamePatterns, courseNameProvider),
 
     // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(

@@ -32,7 +32,7 @@ export {
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
-export { CourseTagProvider, TagProvider } from "./tags";
+export { CourseNameProvider, TagProvider } from "./courseNames";
 export {
   prepareQidRenameWorkspaceEdit,
   qidRenamesForFileMoves,

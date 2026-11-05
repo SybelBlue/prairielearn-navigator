@@ -28,6 +28,11 @@ This extension is still experimental and may change or break.
   does the same.
   Find All References on a defined tag, from its definition or a question,
   lists its definition and every question that uses it.
+- Assessment sets get the same: an undefined set has a quick fix that adds it
+  to `infoCourse.json`, and Rename Symbol (F2) and Find All References on a
+  defined set, from its definition or an assessment's `set`, cover its
+  definition, every assessment, and suppressions; the CLI's
+  `rename-assessment-sets` renames one too.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.

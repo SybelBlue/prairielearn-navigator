@@ -2,14 +2,11 @@ import * as path from "node:path";
 import { findNodeAtLocation, Node } from "jsonc-parser";
 import { configFileName } from "./config";
 import { courseFiles, courseRelativePath, matchesGlob } from "./courseFiles";
+import { NameKind } from "./courseNames";
 import { offsetToPosition } from "./diagnostic";
 import { FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
 import { ReferenceIndex } from "./referenceIndex";
-import { courseTags } from "./tags";
-
-/** Rules whose suppressions identify a tag by its name. */
-const tagRules = new Set(["unused-tag", "undefined-tag"]);
 
 function edit(file: string, text: string, start: number, end: number, replacement: string): FileEdit {
   return {
@@ -24,16 +21,13 @@ function edit(file: string, text: string, start: number, end: number, replacemen
 }
 
 /**
- * Edits to a question's `tags` array: the first `oldName` becomes `newName`,
- * unless the question already lists `newName`; every other `oldName` is removed.
+ * Edits to the items of a file using `kind` (a question's `tags`, an
+ * assessment's `set`): the first `oldName` becomes `newName`, unless the file
+ * already lists `newName`; every other `oldName` is removed.
  */
-function questionEdits(file: string, text: string, oldName: string, newName: string): FileEdit[] {
+function useEdits(kind: NameKind, file: string, text: string, oldName: string, newName: string): FileEdit[] {
   const tree = parseJsonDoc(text).tree;
-  const array = tree && findNodeAtLocation(tree, ["tags"]);
-  if (array?.type !== "array") {
-    return [];
-  }
-  const items = array.children ?? [];
+  const items = tree ? kind.useItems(tree) : [];
   const isString = (node: Node, name: string) => node.type === "string" && node.value === name;
   let keep = !items.some((node) => isString(node, newName));
   const out: FileEdit[] = [];
@@ -69,8 +63,8 @@ function questionEdits(file: string, text: string, oldName: string, newName: str
   return out;
 }
 
-/** Edits renaming `ignoredDiagnostics` identifiers for tag rules. */
-function suppressionEdits(file: string, text: string, oldName: string, newName: string): FileEdit[] {
+/** Edits renaming `ignoredDiagnostics` identifiers for `kind`'s rules. */
+function suppressionEdits(kind: NameKind, file: string, text: string, oldName: string, newName: string): FileEdit[] {
   const tree = parseJsonDoc(text).tree;
   const array = tree && findNodeAtLocation(tree, ["ignoredDiagnostics"]);
   if (array?.type !== "array") {
@@ -79,64 +73,66 @@ function suppressionEdits(file: string, text: string, oldName: string, newName: 
   return (array.children ?? []).flatMap((entry): FileEdit[] => {
     const rule = findNodeAtLocation(entry, ["rule"])?.value;
     const identifier = findNodeAtLocation(entry, ["identifier"]);
-    return typeof rule === "string" && tagRules.has(rule) && identifier?.value === oldName
+    return typeof rule === "string" && kind.rules.has(rule) && identifier?.value === oldName
       ? [edit(file, text, identifier.offset, identifier.offset + identifier.length, JSON.stringify(newName))]
       : [];
   });
 }
 
 /**
- * Questions that may list tag `name`: those the index knows use it, and any
- * of `extraFiles` that are questions (unsaved edits the index has not seen).
+ * Files that may use `name`: those the index knows use it, and any of
+ * `extraFiles` that use names of this kind (unsaved edits the index has not
+ * seen).
  */
-function questionsListingTag(index: ReferenceIndex, name: string, extraFiles: readonly string[]): Set<string> {
+function filesUsingName(kind: NameKind, index: ReferenceIndex, name: string, extraFiles: readonly string[]): Set<string> {
   return new Set([
-    ...index.filesUsing("tags").filter((file) => index.namesIn(file)?.tags.includes(name)),
-    ...extraFiles.filter((file) => matchesGlob(courseRelativePath(index.courseRoot, file), courseFiles.question)),
+    ...index.filesUsing(kind.collection).filter((file) => index.namesIn(file)?.[kind.collection].includes(name)),
+    ...extraFiles.filter((file) => matchesGlob(courseRelativePath(index.courseRoot, file), kind.useFiles)),
   ]);
 }
 
-/** Where a tag's name appears in a course file; positions are 1-based. */
-export interface TagOccurrence {
+/** Where a name appears in a course file; positions are 1-based. */
+export interface NameOccurrence {
   file: string;
   start: { line: number; column: number };
   end: { line: number; column: number };
 }
 
-function occurrence(file: string, text: string, start: number, end: number): TagOccurrence {
+function occurrence(file: string, text: string, start: number, end: number): NameOccurrence {
   return { file, start: offsetToPosition(text, start), end: offsetToPosition(text, end) };
 }
 
 /**
- * Where a tag infoCourse.json defines appears: its definitions there, and
- * every entry in a question's `tags` naming it. Empty when infoCourse.json
- * does not define it. `readText` and `extraFiles` are as for planTagRename.
+ * Where a tag or assessment set infoCourse.json defines appears: its
+ * definitions there, and every use naming it. Empty when infoCourse.json
+ * does not define it. `readText` and `extraFiles` are as for
+ * planCourseNameRename.
  */
-export function findTagReferences(
+export function findCourseNameReferences(
+  kind: NameKind,
   index: ReferenceIndex,
   name: string,
   readText: (file: string) => string | undefined,
   extraFiles: readonly string[] = []
-): { definitions: TagOccurrence[]; uses: TagOccurrence[] } {
+): { definitions: NameOccurrence[]; uses: NameOccurrence[] } {
   const infoCourse = path.join(index.courseRoot, courseFiles.course);
   const infoText = readText(infoCourse);
   const definitions = infoText === undefined
     ? []
-    : courseTags(parseJsonDoc(infoText))
-      .filter((tag) => tag.name === name)
-      .map((tag) => occurrence(infoCourse, infoText, tag.nameStart, tag.nameEnd));
+    : kind.definitions(parseJsonDoc(infoText))
+      .filter((d) => d.name === name)
+      .map((d) => occurrence(infoCourse, infoText, d.nameStart, d.nameEnd));
   if (definitions.length === 0) {
     return { definitions, uses: [] };
   }
-  const uses: TagOccurrence[] = [];
-  for (const file of [...questionsListingTag(index, name, extraFiles)].sort()) {
+  const uses: NameOccurrence[] = [];
+  for (const file of [...filesUsingName(kind, index, name, extraFiles)].sort()) {
     const text = readText(file);
     const tree = text === undefined ? undefined : parseJsonDoc(text).tree;
-    const array = tree && findNodeAtLocation(tree, ["tags"]);
-    if (text === undefined || array?.type !== "array") {
+    if (text === undefined || !tree) {
       continue;
     }
-    for (const node of array.children ?? []) {
+    for (const node of kind.useItems(tree)) {
       if (node.type === "string" && node.value === name) {
         uses.push(occurrence(file, text, node.offset, node.offset + node.length));
       }
@@ -146,26 +142,28 @@ export function findTagReferences(
 }
 
 /**
- * Plans renaming a tag infoCourse.json defines: its definition, every
- * question using it, and suppressions naming it. Throws, with a message for
- * the user, when the rename is not allowed.
+ * Plans renaming a tag or assessment set infoCourse.json defines: its
+ * definition, every file using it, and suppressions naming it. Throws, with
+ * a message for the user, when the rename is not allowed.
  *
  * `readText` gives a file's current text (an unsaved editor's, in VS Code).
- * `extraFiles` are questions to check besides those the index knows use the
- * tag, for edits the index has not caught up with.
+ * `extraFiles` are files to check besides those the index knows use the
+ * name, for edits the index has not caught up with.
  */
-export function planTagRename(
+export function planCourseNameRename(
+  kind: NameKind,
   index: ReferenceIndex,
   oldName: string,
   newName: string,
   readText: (file: string) => string | undefined,
   extraFiles: readonly string[] = []
 ): FileEdit[] {
+  const Noun = kind.noun[0].toUpperCase() + kind.noun.slice(1);
   if (newName.trim() === "") {
-    throw new Error("Tag names must not be empty");
+    throw new Error(`${Noun} names must not be empty`);
   }
   if (newName === oldName) {
-    throw new Error(`Tag "${oldName}" cannot be renamed to itself`);
+    throw new Error(`${Noun} "${oldName}" cannot be renamed to itself`);
   }
   const courseRoot = index.courseRoot;
   const infoCourse = path.join(courseRoot, courseFiles.course);
@@ -173,29 +171,29 @@ export function planTagRename(
   if (infoText === undefined) {
     throw new Error(`Could not read ${courseFiles.course}`);
   }
-  const defined = courseTags(parseJsonDoc(infoText));
-  if (!defined.some((tag) => tag.name === oldName)) {
-    throw new Error(`Tag "${oldName}" is not defined in ${courseFiles.course}`);
+  const defined = kind.definitions(parseJsonDoc(infoText));
+  if (!defined.some((d) => d.name === oldName)) {
+    throw new Error(`${Noun} "${oldName}" is not defined in ${courseFiles.course}`);
   }
-  if (defined.some((tag) => tag.name === newName)) {
-    throw new Error(`Tag "${newName}" is already defined in ${courseFiles.course}`);
+  if (defined.some((d) => d.name === newName)) {
+    throw new Error(`${Noun} "${newName}" is already defined in ${courseFiles.course}`);
   }
 
   const edits = defined
-    .filter((tag) => tag.name === oldName)
-    .map((tag) => edit(infoCourse, infoText, tag.nameStart, tag.nameEnd, JSON.stringify(newName)));
+    .filter((d) => d.name === oldName)
+    .map((d) => edit(infoCourse, infoText, d.nameStart, d.nameEnd, JSON.stringify(newName)));
 
-  for (const file of questionsListingTag(index, oldName, extraFiles)) {
+  for (const file of filesUsingName(kind, index, oldName, extraFiles)) {
     const text = readText(file);
     if (text !== undefined) {
-      edits.push(...questionEdits(file, text, oldName, newName));
+      edits.push(...useEdits(kind, file, text, oldName, newName));
     }
   }
 
   const config = path.join(courseRoot, configFileName);
   const configText = readText(config);
   if (configText !== undefined) {
-    edits.push(...suppressionEdits(config, configText, oldName, newName));
+    edits.push(...suppressionEdits(kind, config, configText, oldName, newName));
   }
 
   return edits.sort(

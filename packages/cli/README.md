@@ -212,6 +212,26 @@ npx -y @sybelblue/prairielearn-navigator rename-tags [options] <old-tag> <new-ta
 The old tag must be defined in `infoCourse.json`, and the new name must not
 be. In VS Code, Rename Symbol (F2) on the tag does the same.
 
+## Rename assessment sets
+
+`rename-assessment-sets` renames an assessment set defined in
+`infoCourse.json`: its definition, every assessment's `set`, and
+`ignoredDiagnostics` entries in `.pl-navigator.jsonc` that name it. The set's
+`abbreviation` and `heading` are left as they are.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator rename-assessment-sets [options] <old-set> <new-set>
+```
+
+| Option | |
+| --- | --- |
+| `--course <path>` | Course directory or a path inside one (default: `.`) |
+| `--write` | Apply the planned edits. Without this flag, the command only previews them. |
+
+Quote names with spaces, e.g. `rename-assessment-sets "Quiz" "Practice Quiz"`.
+The old set must be defined in `infoCourse.json`, and the new name must not
+be. In VS Code, Rename Symbol (F2) on the set does the same.
+
 ## Library API
 
 The package also exposes a typed, headless resolver for tools that need the

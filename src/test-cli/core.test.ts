@@ -24,7 +24,8 @@ import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
-import { findTagReferences, planTagRename } from "../core/tagRenames";
+import { findCourseNameReferences, planCourseNameRename } from "../core/courseNameRenames";
+import { assessmentSetKind, courseNameAt, tagKind } from "../core/courseNames";
 import { courseTags, plBadgeColors, plDefaultTag, tagAt, tagNameAt } from "../core/tags";
 import { vscodeRuleSettings } from "../providers/ruleSettings";
 
@@ -524,12 +525,12 @@ test("tag renames update the definition, questions, and suppressions", () => {
     );
     const index = indexCourse(course, "2026-01-01");
 
-    assert.throws(() => planTagRename(index, "old", " ", readText), /must not be empty/);
-    assert.throws(() => planTagRename(index, "old", "old", readText), /to itself/);
-    assert.throws(() => planTagRename(index, "numeric", "x", readText), /not defined in infoCourse.json/);
-    assert.throws(() => planTagRename(index, "old", "other", readText), /already defined/);
+    assert.throws(() => planCourseNameRename(tagKind, index, "old", " ", readText), /must not be empty/);
+    assert.throws(() => planCourseNameRename(tagKind, index, "old", "old", readText), /to itself/);
+    assert.throws(() => planCourseNameRename(tagKind, index, "numeric", "x", readText), /not defined in infoCourse.json/);
+    assert.throws(() => planCourseNameRename(tagKind, index, "old", "other", readText), /already defined/);
 
-    const edits = planTagRename(index, "old", "new", readText);
+    const edits = planCourseNameRename(tagKind, index, "old", "new", readText);
     assert.deepEqual(
       [...new Set(edits.map((e) => e.file))].sort(),
       [config, infoCourse, both, plain, twice].sort()
@@ -551,7 +552,8 @@ test("tag renames update the definition, questions, and suppressions", () => {
     // Names needing escapes round-trip, and unsaved questions can be added
     const unsaved = path.join(course, "questions", "unsaved", "info.json");
     const unsavedText = '{ "tags": ["new"] }';
-    const escaped = planTagRename(
+    const escaped = planCourseNameRename(
+      tagKind,
       indexCourse(course, "2026-01-01"),
       "new",
       'a"b',
@@ -589,18 +591,19 @@ test("tag references list the definition and every question entry", () => {
     const show = (o: { file: string; start: { line: number; column: number } }) =>
       `${path.relative(course, o.file)}:${o.start.line}:${o.start.column}`;
 
-    const refs = findTagReferences(index, "old", readText);
+    const refs = findCourseNameReferences(tagKind, index, "old", readText);
     assert.deepEqual(refs.definitions.map(show), ["infoCourse.json:2:22"]);
     assert.deepEqual(refs.uses.map(show), [
       "questions/plain/info.json:1:21",
       "questions/twice/info.json:1:12",
       "questions/twice/info.json:1:28",
     ]);
-    assert.deepEqual(findTagReferences(index, "numeric", readText), { definitions: [], uses: [] });
+    assert.deepEqual(findCourseNameReferences(tagKind, index, "numeric", readText), { definitions: [], uses: [] });
 
     // Unsaved questions are read through readText
     const unsaved = path.join(course, "questions", "unsaved", "info.json");
-    const withUnsaved = findTagReferences(
+    const withUnsaved = findCourseNameReferences(
+      tagKind,
       index,
       "old",
       (file) => file === unsaved ? '{ "tags": ["old"] }' : readText(file),
@@ -617,6 +620,120 @@ test("tag references list the definition and every question entry", () => {
     assert.equal(nameAt("questions/plain/info.json", plainText, '"old"')?.definition, false);
     assert.equal(nameAt(path.relative(course, plain), plainText, '"tags"'), undefined);
     assert.equal(nameAt("courseInstances/x/infoCourseInstance.json", plainText, '"old"'), undefined);
+  } finally {
+    fs.rmSync(course, { recursive: true, force: true });
+  }
+});
+
+test("assessment set renames update the definition, assessments, and suppressions", () => {
+  const course = tmpDir();
+  const write = (rel: string, text: string) => {
+    const file = path.join(course, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+    return file;
+  };
+  const read = (file: string) => fs.readFileSync(file, "utf-8");
+  const readText = (file: string) => fs.existsSync(file) ? read(file) : undefined;
+  const rename = (oldName: string, newName: string) =>
+    planCourseNameRename(assessmentSetKind, indexCourse(course, "2026-01-01"), oldName, newName, readText);
+  try {
+    const infoCourse = write(
+      "infoCourse.json",
+      '{ "tags": [{ "name": "HW" }], "assessmentSets": [{ "abbreviation": "HW", "name": "HW", "heading": "HW" }, { "name": "Quiz" }] }'
+    );
+    const hw1 = write("courseInstances/Fa26/assessments/hw1/infoAssessment.json", '{ "set": "HW", "number": "1" }');
+    const hw2 = write("courseInstances/Sp27/assessments/hw2/infoAssessment.json", '{ "number": "2", "set": "HW" }');
+    const quiz = write("courseInstances/Fa26/assessments/q1/infoAssessment.json", '{ "set": "Quiz" }');
+    const question = write("questions/q/info.json", '{ "tags": ["HW"] }');
+    const config = write(
+      ".pl-navigator.jsonc",
+      '{ "ignoredDiagnostics": [\n' +
+        '  { "file": "infoCourse.json", "rule": "unused-assessment-set", "identifier": "HW" },\n' +
+        '  { "file": "a/infoAssessment.json", "rule": "undefined-assessment-set", "identifier": "HW" },\n' +
+        '  { "file": "infoCourse.json", "rule": "unused-tag", "identifier": "HW" }\n] }'
+    );
+
+    assert.throws(() => rename("HW", ""), /^Error: Assessment set names must not be empty$/);
+    assert.throws(() => rename("HW", "HW"), /Assessment set "HW" cannot be renamed to itself/);
+    assert.throws(() => rename("Exam", "x"), /Assessment set "Exam" is not defined in infoCourse.json/);
+    assert.throws(() => rename("HW", "Quiz"), /Assessment set "Quiz" is already defined/);
+
+    const edits = rename("HW", "Homework");
+    assert.deepEqual([...new Set(edits.map((e) => e.file))].sort(), [config, infoCourse, hw1, hw2].sort());
+    for (const change of prepareFileChanges(edits)) {
+      fs.writeFileSync(change.file, change.updated);
+    }
+    assert.deepEqual(
+      courseAssessmentSets(parseJsonDoc(read(infoCourse))).map(({ name, abbreviation }) => [name, abbreviation]),
+      [["Homework", "HW"], ["Quiz", undefined]]
+    );
+    assert.deepEqual(courseTags(parseJsonDoc(read(infoCourse))).map((t) => t.name), ["HW"]);
+    assert.equal(JSON.parse(read(hw1)).set, "Homework");
+    assert.equal(JSON.parse(read(hw2)).set, "Homework");
+    assert.equal(JSON.parse(read(quiz)).set, "Quiz");
+    assert.deepEqual(JSON.parse(read(question)).tags, ["HW"]);
+    assert.deepEqual(
+      (parseJsonc(read(config)) as { ignoredDiagnostics: { identifier: string }[] })
+        .ignoredDiagnostics.map((d) => d.identifier),
+      ["Homework", "Homework", "HW"]
+    );
+  } finally {
+    fs.rmSync(course, { recursive: true, force: true });
+  }
+});
+
+test("assessment set references list the definition and every assessment's set", () => {
+  const course = tmpDir();
+  const write = (rel: string, text: string) => {
+    const file = path.join(course, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+    return file;
+  };
+  const readText = (file: string) => fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : undefined;
+  try {
+    const infoCourseText = '{\n  "assessmentSets": [{ "name": "Lab" }, { "name": "Quiz" }]\n}';
+    const infoCourse = write("infoCourse.json", infoCourseText);
+    const labText = '{ "set": "Lab", "number": "1" }';
+    const lab = write("courseInstances/Fa26/assessments/lab1/infoAssessment.json", labText);
+    write("courseInstances/Sp27/assessments/lab2/infoAssessment.json", '{\n  "set": "Lab"\n}');
+    write("courseInstances/Fa26/assessments/q1/infoAssessment.json", '{ "set": "Quiz" }');
+    write("questions/q/info.json", '{ "tags": ["Lab"] }');
+    const index = indexCourse(course, "2026-01-01");
+    const show = (o: { file: string; start: { line: number; column: number } }) =>
+      `${path.relative(course, o.file)}:${o.start.line}:${o.start.column}`;
+
+    const refs = findCourseNameReferences(assessmentSetKind, index, "Lab", readText);
+    assert.deepEqual(refs.definitions.map(show), ["infoCourse.json:2:32"]);
+    assert.deepEqual(refs.uses.map(show), [
+      "courseInstances/Fa26/assessments/lab1/infoAssessment.json:1:10",
+      "courseInstances/Sp27/assessments/lab2/infoAssessment.json:2:10",
+    ]);
+    assert.deepEqual(
+      findCourseNameReferences(assessmentSetKind, index, "Homework", readText),
+      { definitions: [], uses: [] }
+    );
+
+    // Unsaved assessments are read through readText; other files are not uses
+    const unsaved = path.join(course, "courseInstances", "Fa26", "assessments", "new", "infoAssessment.json");
+    const withUnsaved = findCourseNameReferences(
+      assessmentSetKind,
+      index,
+      "Lab",
+      (file) => file === unsaved ? '{ "set": "Lab" }' : readText(file),
+      [unsaved, infoCourse, path.join(course, "questions/q/info.json")]
+    );
+    assert.deepEqual(withUnsaved.uses.map((o) => o.file).filter((f) => !f.includes("lab")), [unsaved]);
+
+    const nameAt = (rel: string, text: string, needle: string) => {
+      const found = courseNameAt(rel, text, text.indexOf(needle) + 1);
+      return found && [found.kind.noun, found.name, found.definition];
+    };
+    assert.deepEqual(nameAt("infoCourse.json", infoCourseText, '"Lab"'), ["assessment set", "Lab", true]);
+    assert.deepEqual(nameAt(path.relative(course, lab), labText, '"Lab"'), ["assessment set", "Lab", false]);
+    assert.deepEqual(nameAt("questions/q/info.json", '{ "tags": ["Lab"] }', '"Lab"'), ["tag", "Lab", false]);
+    assert.equal(nameAt(path.relative(course, lab), labText, '"1"'), undefined);
   } finally {
     fs.rmSync(course, { recursive: true, force: true });
   }

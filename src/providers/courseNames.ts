@@ -4,6 +4,8 @@ import * as vscode from "vscode";
 import { courseFiles, courseRelativePath } from "../core/courseFiles";
 import { offsetToPosition } from "../core/diagnostic";
 import { parseJsonDoc } from "../core/json";
+import { findCourseNameReferences, planCourseNameRename } from "../core/courseNameRenames";
+import { courseNameAt } from "../core/courseNames";
 import {
   CourseTag,
   courseTags,
@@ -12,9 +14,7 @@ import {
   plDefaultTag,
   tagAt,
   TagInfo,
-  tagNameAt,
 } from "../core/tags";
-import { findTagReferences, planTagRename } from "../core/tagRenames";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 
 /** A file's text, from its editor if open, else from disk. */
@@ -134,44 +134,44 @@ export class TagProvider implements vscode.HoverProvider, vscode.DefinitionProvi
 }
 
 /**
- * For a tag infoCourse.json defines, from its definition or from a question
- * using it: renames it across the course (the definition, every question's
- * entry, and suppressions naming it), and Find All References lists its
- * definition and every question's entry.
+ * For a tag or assessment set infoCourse.json defines, from its definition
+ * or from a question or assessment using it: renames it across the course
+ * (the definition, every use, and suppressions naming it), and Find All
+ * References lists its definition and every use.
  */
-export class CourseTagProvider implements vscode.RenameProvider, vscode.ReferenceProvider {
+export class CourseNameProvider implements vscode.RenameProvider, vscode.ReferenceProvider {
   constructor(
     private courseCache: Pick<CourseCache, "getCourseIdFor">,
     private references: Pick<ReferenceIndexCache, "whenIndexed">
   ) {}
 
   /**
-   * The tag at `position`, with the offsets of its string including quotes,
-   * and whether infoCourse.json defines it.
+   * The tag or set name at `position`, with the offsets of its string
+   * including quotes, and whether infoCourse.json defines it.
    */
-  private tagAtPosition(document: vscode.TextDocument, position: vscode.Position) {
+  private nameAtPosition(document: vscode.TextDocument, position: vscode.Position) {
     const courseRoot = this.courseCache.getCourseIdFor(document.uri);
     if (!courseRoot) {
       return undefined;
     }
     const text = document.getText();
-    const tag = tagNameAt(courseRelativePath(courseRoot, document.uri.fsPath), text, document.offsetAt(position));
-    if (!tag) {
+    const found = courseNameAt(courseRelativePath(courseRoot, document.uri.fsPath), text, document.offsetAt(position));
+    if (!found) {
       return undefined;
     }
-    const infoText = tag.definition ? text : currentText(path.join(courseRoot, courseFiles.course));
-    const defined = tag.definition ||
-      (infoText !== undefined && courseTags(parseJsonDoc(infoText)).some((t) => t.name === tag.name));
-    return { courseRoot, name: tag.name, start: tag.start, end: tag.end, defined };
+    const infoText = found.definition ? text : currentText(path.join(courseRoot, courseFiles.course));
+    const defined = found.definition ||
+      (infoText !== undefined && found.kind.definitions(parseJsonDoc(infoText)).some((d) => d.name === found.name));
+    return { courseRoot, ...found, defined };
   }
 
-  /** The tag at `position`. Throws when it is a tag infoCourse.json doesn't define. */
+  /** The name at `position`. Throws when infoCourse.json doesn't define it. */
   private renameable(document: vscode.TextDocument, position: vscode.Position) {
-    const tag = this.tagAtPosition(document, position);
-    if (tag && !tag.defined) {
-      throw new Error(`Only tags defined in ${courseFiles.course} can be renamed`);
+    const found = this.nameAtPosition(document, position);
+    if (found && !found.defined) {
+      throw new Error(`Only ${found.kind.noun}s defined in ${courseFiles.course} can be renamed`);
     }
-    return tag;
+    return found;
   }
 
   /** Index of the course at `courseRoot`, and its unsaved files the index may not have caught up with. */
@@ -187,11 +187,11 @@ export class CourseTagProvider implements vscode.RenameProvider, vscode.Referenc
     document: vscode.TextDocument,
     position: vscode.Position
   ): { range: vscode.Range; placeholder: string } | undefined {
-    const tag = this.renameable(document, position);
-    return tag && {
+    const found = this.renameable(document, position);
+    return found && {
       // Inside the quotes
-      range: new vscode.Range(document.positionAt(tag.start + 1), document.positionAt(tag.end - 1)),
-      placeholder: tag.name,
+      range: new vscode.Range(document.positionAt(found.start + 1), document.positionAt(found.end - 1)),
+      placeholder: found.name,
     };
   }
 
@@ -200,16 +200,16 @@ export class CourseTagProvider implements vscode.RenameProvider, vscode.Referenc
     position: vscode.Position,
     newName: string
   ): Promise<vscode.WorkspaceEdit | undefined> {
-    const tag = this.renameable(document, position);
-    if (!tag) {
+    const found = this.renameable(document, position);
+    if (!found) {
       return undefined;
     }
-    const { index, dirty } = await this.indexed(document, tag.courseRoot);
+    const { index, dirty } = await this.indexed(document, found.courseRoot);
     if (!index) {
-      throw new Error(`Could not index the course at ${tag.courseRoot}`);
+      throw new Error(`Could not index the course at ${found.courseRoot}`);
     }
     const workspaceEdit = new vscode.WorkspaceEdit();
-    for (const edit of planTagRename(index, tag.name, newName, currentText, dirty)) {
+    for (const edit of planCourseNameRename(found.kind, index, found.name, newName, currentText, dirty)) {
       workspaceEdit.replace(
         vscode.Uri.file(edit.file),
         new vscode.Range(edit.start.line - 1, edit.start.column - 1, edit.end.line - 1, edit.end.column - 1),
@@ -224,15 +224,15 @@ export class CourseTagProvider implements vscode.RenameProvider, vscode.Referenc
     position: vscode.Position,
     context: vscode.ReferenceContext
   ): Promise<vscode.Location[]> {
-    const tag = this.tagAtPosition(document, position);
-    if (!tag?.defined) {
+    const found = this.nameAtPosition(document, position);
+    if (!found?.defined) {
       return [];
     }
-    const { index, dirty } = await this.indexed(document, tag.courseRoot);
+    const { index, dirty } = await this.indexed(document, found.courseRoot);
     if (!index) {
       return [];
     }
-    const { definitions, uses } = findTagReferences(index, tag.name, currentText, dirty);
+    const { definitions, uses } = findCourseNameReferences(found.kind, index, found.name, currentText, dirty);
     return [...(context.includeDeclaration ? definitions : []), ...uses].map(
       (o) => new vscode.Location(
         vscode.Uri.file(o.file),
