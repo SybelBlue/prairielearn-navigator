@@ -10,6 +10,7 @@ import {
 import {
   addGeneratedUuid,
   AssessmentCompletionItemProvider,
+  AssessmentSetCompletionItemProvider,
   AssessmentQuestionIdCodeLensProvider,
   ConfigProvider,
   CourseHeaderCodeLensProvider,
@@ -201,6 +202,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.languages.registerCompletionItemProvider(
       infoAssessmentPatterns,
       new AssessmentCompletionItemProvider(questionCache),
+      `"`,
+    ),
+    vscode.languages.registerCompletionItemProvider(
+      infoAssessmentPatterns,
+      new AssessmentSetCompletionItemProvider(courseCache),
       `"`,
     ),
     vscode.languages.registerCompletionItemProvider(

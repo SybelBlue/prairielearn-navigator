@@ -1,5 +1,6 @@
 export {
   AssessmentCompletionItemProvider,
+  AssessmentSetCompletionItemProvider,
   isEmptyUuidValue,
   QuestionCompletionItemProvider,
   UuidCompletionItemProvider,

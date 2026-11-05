@@ -1,5 +1,14 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
-import { QuestionCache } from "../filewatchers";
+import {
+  AssessmentSetInfo,
+  courseAssessmentSets,
+  plDefaultAssessmentSetList,
+} from "../core/assessmentSets";
+import { courseFiles } from "../core/courseFiles";
+import { parseJsonDoc } from "../core/json";
+import { CourseCache, QuestionCache } from "../filewatchers";
+import { currentText } from "./courseNames";
 import { generateUuid, reportUuidGenerationError } from "./uuid";
 
 /** Whether the cursor is between the quotes of an empty `uuid` value. */
@@ -149,5 +158,54 @@ export class QuestionCompletionItemProvider
     );
     const range = new vscode.Range(startPos, position);
     return this.tagCompletions.map((tc) => ({ ...tc, range }));
+  }
+}
+
+/**
+ * Completes an assessment's `set` with the assessment sets infoCourse.json
+ * defines, then PrairieLearn's default sets it doesn't override.
+ */
+export class AssessmentSetCompletionItemProvider
+  implements vscode.CompletionItemProvider
+{
+  constructor(private courseCache: Pick<CourseCache, "getCourseIdFor">) {}
+
+  provideCompletionItems(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+  ): vscode.CompletionItem[] | undefined {
+    const linePrefix = document
+      .lineAt(position)
+      .text.slice(0, position.character);
+    const match = linePrefix.match(/"set"\s*:\s*"([^"]*)$/);
+    const courseRoot = this.courseCache.getCourseIdFor(document.uri);
+    if (!match || !courseRoot) {
+      return;
+    }
+    const range = new vscode.Range(
+      position.translate(0, -match[1].length),
+      position,
+    );
+    const infoText = currentText(path.join(courseRoot, courseFiles.course));
+    const defined = infoText === undefined
+      ? []
+      : courseAssessmentSets(parseJsonDoc(infoText));
+    const definedNames = new Set(defined.map((set) => set.name));
+    const item = (set: AssessmentSetInfo, order: number, source: string) => {
+      const completion = new vscode.CompletionItem(
+        { label: set.name, description: set.abbreviation },
+        vscode.CompletionItemKind.EnumMember,
+      );
+      completion.detail = set.heading ? `${set.heading} (${source})` : source;
+      completion.sortText = String(order).padStart(4, "0");
+      completion.range = range;
+      return completion;
+    };
+    return [
+      ...defined.map((set, i) => item(set, i, courseFiles.course)),
+      ...plDefaultAssessmentSetList()
+        .filter((set) => !definedNames.has(set.name))
+        .map((set, i) => item(set, defined.length + i, "PrairieLearn default")),
+    ];
   }
 }

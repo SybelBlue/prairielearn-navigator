@@ -1098,6 +1098,37 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("an assessment's set completes defined sets, then PrairieLearn defaults", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const document = await vscode.workspace.openTextDocument(assessment);
+    const setNames = async () => {
+      const position = document.positionAt(document.getText().indexOf('"set": "') + '"set": "'.length);
+      const completions = await vscode.commands.executeCommand<vscode.CompletionList>(
+        "vscode.executeCompletionItemProvider", document.uri, position, '"'
+      );
+      return (completions?.items ?? [])
+        .filter((item) => item.kind === vscode.CompletionItemKind.EnumMember)
+        .sort((a, b) => (a.sortText ?? "").localeCompare(b.sortText ?? ""))
+        .map((item) => typeof item.label === "string" ? item.label : item.label.label);
+    };
+    const defaults = [
+      "Homework", "Quiz", "Practice Quiz", "Exam", "Practice Exam", "Prep", "Machine Problem", "Worksheet", "Unknown",
+    ];
+    assert.deepStrictEqual(await setNames(), defaults);
+
+    const courseEditor = await vscode.window.showTextDocument(infoCourse);
+    try {
+      const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+      await courseEditor.edit((e) =>
+        e.insert(end, ', "assessmentSets": [{ "name": "Lab" }, { "abbreviation": "Q", "name": "Quiz" }] ')
+      );
+      assert.deepStrictEqual(await setNames(), ["Lab", "Quiz", ...defaults.filter((name) => name !== "Quiz")]);
+    } finally {
+      await vscode.window.showTextDocument(infoCourse);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("undefined assessment sets are noted live and can be defined", async () => {
     const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
     const undefinedSets = () =>

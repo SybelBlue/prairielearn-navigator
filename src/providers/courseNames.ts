@@ -25,7 +25,7 @@ import {
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 
 /** A file's text, from its editor if open, else from disk. */
-function currentText(file: string): string | undefined {
+export function currentText(file: string): string | undefined {
   const open = vscode.workspace.textDocuments.find((doc) => doc.uri.fsPath === file);
   if (open) {
     return open.getText();

@@ -29,6 +29,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Find All References on a defined assessment set, either on its definition or
   in an assessment, lists the definition and every assessment's `set` naming
   it.
+- An assessment's `set` completes the assessment sets `infoCourse.json`
+  defines, then PrairieLearn's default sets it doesn't redefine.
 
 ## [1.2.4] - 2026-11-04
 

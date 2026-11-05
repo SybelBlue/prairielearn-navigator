@@ -30,6 +30,11 @@ export function plDefaultAssessmentSet(name: string): AssessmentSetInfo | undefi
   return plDefaultAssessmentSets.find((set) => set.name === name);
 }
 
+/** Every PrairieLearn default assessment set, in PrairieLearn's order. */
+export function plDefaultAssessmentSetList(): readonly AssessmentSetInfo[] {
+  return plDefaultAssessmentSets;
+}
+
 /** The color PrairieLearn gives an assessment set that infoCourse.json does not define. */
 export const implicitAssessmentSetColor = "gray1";
 

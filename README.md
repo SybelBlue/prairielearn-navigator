@@ -36,6 +36,8 @@ This extension is still experimental and may change or break.
   on a defined set, from its definition or an assessment, cover its
   definition and every assessment; renaming also updates suppressions, and
   the CLI's `rename-assessment-sets` does the same.
+  An assessment's `set` completes the course's sets and PrairieLearn's
+  defaults.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.
