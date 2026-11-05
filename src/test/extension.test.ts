@@ -1041,6 +1041,58 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("F2 renames a defined tag across the course and refuses undefined ones", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const courseEditor = await vscode.window.showTextDocument(infoCourse);
+    try {
+      const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+      await courseEditor.edit((e) => e.insert(end, ', "tags": [{ "name": "t1", "color": "red1" }] '));
+      const questionEditor = await vscode.window.showTextDocument(depsInfo);
+      try {
+        // Unsaved, so the rename must read the editor rather than the disk
+        await questionEditor.edit((e) =>
+          e.insert(new vscode.Position(0, 1), '\n  "tags": ["t1", "nope"],')
+        );
+        const document = questionEditor.document;
+        const at = (doc: vscode.TextDocument, tag: string) =>
+          doc.positionAt(doc.getText().indexOf(`"${tag}"`) + 1);
+
+        await assert.rejects(
+          Promise.resolve(vscode.commands.executeCommand("vscode.prepareRename", depsInfo, at(document, "nope"))),
+          /Only tags defined in infoCourse.json can be renamed/
+        );
+        const prepared = await vscode.commands.executeCommand<{ range: vscode.Range; placeholder: string }>(
+          "vscode.prepareRename", depsInfo, at(document, "t1")
+        );
+        assert.strictEqual(document.getText(prepared.range), "t1");
+        const fromDefinition = await vscode.commands.executeCommand<{ range: vscode.Range }>(
+          "vscode.prepareRename", infoCourse, at(courseEditor.document, "t1")
+        );
+        assert.strictEqual(courseEditor.document.getText(fromDefinition.range), "t1");
+
+        const edit = await vscode.commands.executeCommand<vscode.WorkspaceEdit>(
+          "vscode.executeDocumentRenameProvider", depsInfo, at(document, "t1"), "t2"
+        );
+        assert.deepStrictEqual(
+          edit.entries().map(([uri]) => uri.fsPath).sort(),
+          [depsInfo.fsPath, infoCourse.fsPath].sort()
+        );
+        assert.ok(await vscode.workspace.applyEdit(edit));
+        assert.deepStrictEqual(JSON.parse(document.getText()).tags, ["t2", "nope"]);
+        assert.deepStrictEqual(
+          (JSON.parse(courseEditor.document.getText()) as { tags: { name: string }[] }).tags.map((t) => t.name),
+          ["t2"]
+        );
+      } finally {
+        await vscode.window.showTextDocument(depsInfo);
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+      }
+    } finally {
+      await vscode.window.showTextDocument(infoCourse);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("the unusedQuestions setting sets the note's severity", async () => {
     const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
     const unused = () =>

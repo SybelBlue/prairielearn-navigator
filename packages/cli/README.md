@@ -192,6 +192,25 @@ the command can run before or after that move and does not require either QID's
 directory to exist. Automatic move detection is available only for moves made
 through the PrairieLearn Navigator VS Code extension.
 
+## Rename tags
+
+`rename-tags` renames a tag defined in `infoCourse.json`: its definition, every
+question's `tags` entry, and `ignoredDiagnostics` entries in
+`.pl-navigator.jsonc` that name it. A question that already lists the new name
+drops the old one instead of listing the tag twice.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator rename-tags [options] <old-tag> <new-tag>
+```
+
+| Option | |
+| --- | --- |
+| `--course <path>` | Course directory or a path inside one (default: `.`) |
+| `--write` | Apply the planned edits. Without this flag, the command only previews them. |
+
+The old tag must be defined in `infoCourse.json`, and the new name must not
+be. In VS Code, Rename Symbol (F2) on the tag does the same.
+
 ## Library API
 
 The package also exposes a typed, headless resolver for tools that need the

@@ -6,6 +6,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Rename Symbol (F2) on a tag defined in `infoCourse.json`, either on its
+  definition or in a question's `info.json`, renames it across the course: the
+  definition, every question's `tags` entry, and `.pl-navigator.jsonc`
+  suppressions that name it. A question that already lists the new name drops
+  the old one instead of duplicating it. Undefined tags, and new names
+  `infoCourse.json` already defines, are refused.
+- New `rename-tags` CLI command that previews or writes the same tag rename.
 - Marketplace releases now publish from GitHub Actions with trusted publishing
   (short-lived OIDC credentials) instead of a locally stored personal access
   token. `make publish` dispatches the new `publish-vscode.yml` workflow once

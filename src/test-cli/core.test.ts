@@ -5,13 +5,11 @@ import * as path from "node:path";
 import { test } from "vitest";
 import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from "../core/config";
 import { findElements } from "../core/html";
-import { parseJsonDoc, rangeOf } from "../core/json";
+import { parseJsonc, parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
 import { questionDirsWithoutInfo } from "../core/questionDirs";
-import {
-  planQidReferenceRenames,
-  prepareQidReferenceFileChanges,
-} from "../core/qidRenames";
+import { prepareFileChanges } from "../core/fileEdits";
+import { planQidReferenceRenames } from "../core/qidRenames";
 import { indexCourse } from "../core/referenceIndex";
 import { fileRefAt, findFileRefs, openTarget, sourceOf } from "../core/references/extract";
 import { RefSpec, refSpecs } from "../core/references/specs";
@@ -19,6 +17,7 @@ import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
+import { planTagRename } from "../core/tagRenames";
 import { courseTags, plBadgeColors, plDefaultTag, tagAt } from "../core/tags";
 import { vscodeRuleSettings } from "../providers/ruleSettings";
 
@@ -415,6 +414,78 @@ test("tag helpers find definitions and the tag under the cursor", () => {
   assert.equal(Object.keys(plBadgeColors).length, 30);
 });
 
+test("tag renames update the definition, questions, and suppressions", () => {
+  const course = tmpDir();
+  const write = (rel: string, text: string) => {
+    const file = path.join(course, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+    return file;
+  };
+  const read = (file: string) => fs.readFileSync(file, "utf-8");
+  const readText = (file: string) => fs.existsSync(file) ? read(file) : undefined;
+  try {
+    const infoCourse = write(
+      "infoCourse.json",
+      '{ "tags": [{ "name": "old", "color": "red1" }, { "name": "other" }] }'
+    );
+    const plain = write("questions/plain/info.json", '{ "tags": ["other", "old"] }');
+    const both = write("questions/both/info.json", '{ "tags": ["old", "new", "other"] }');
+    const twice = write("questions/twice/info.json", '{ "tags": ["other", "old", "old"] }');
+    const untouched = write("questions/untouched/info.json", '{ "tags": ["other"] }');
+    const config = write(
+      ".pl-navigator.jsonc",
+      '{ "ignoredDiagnostics": [\n' +
+        '  { "file": "infoCourse.json", "rule": "unused-tag", "identifier": "old" },\n' +
+        '  { "file": "infoCourse.json", "rule": "unused-assessment-set", "identifier": "old" }\n] }'
+    );
+    const index = indexCourse(course, "2026-01-01");
+
+    assert.throws(() => planTagRename(index, "old", " ", readText), /must not be empty/);
+    assert.throws(() => planTagRename(index, "old", "old", readText), /to itself/);
+    assert.throws(() => planTagRename(index, "numeric", "x", readText), /not defined in infoCourse.json/);
+    assert.throws(() => planTagRename(index, "old", "other", readText), /already defined/);
+
+    const edits = planTagRename(index, "old", "new", readText);
+    assert.deepEqual(
+      [...new Set(edits.map((e) => e.file))].sort(),
+      [config, infoCourse, both, plain, twice].sort()
+    );
+    for (const change of prepareFileChanges(edits)) {
+      fs.writeFileSync(change.file, change.updated);
+    }
+    assert.deepEqual(courseTags(parseJsonDoc(read(infoCourse))).map((t) => t.name), ["new", "other"]);
+    assert.deepEqual(JSON.parse(read(plain)).tags, ["other", "new"]);
+    assert.deepEqual(JSON.parse(read(both)).tags, ["new", "other"]);
+    assert.deepEqual(JSON.parse(read(twice)).tags, ["other", "new"]);
+    assert.deepEqual(JSON.parse(read(untouched)).tags, ["other"]);
+    assert.deepEqual(
+      (parseJsonc(read(config)) as { ignoredDiagnostics: { identifier: string }[] })
+        .ignoredDiagnostics.map((d) => d.identifier),
+      ["new", "old"]
+    );
+
+    // Names needing escapes round-trip, and unsaved questions can be added
+    const unsaved = path.join(course, "questions", "unsaved", "info.json");
+    const unsavedText = '{ "tags": ["new"] }';
+    const escaped = planTagRename(
+      indexCourse(course, "2026-01-01"),
+      "new",
+      'a"b',
+      (file) => file === unsaved ? unsavedText : readText(file),
+      [unsaved, config]
+    );
+    assert.ok(escaped.some((e) => e.file === unsaved && e.replacement === '"a\\"b"'));
+    for (const change of prepareFileChanges(escaped.filter((e) => e.file !== unsaved))) {
+      fs.writeFileSync(change.file, change.updated);
+    }
+    assert.deepEqual(courseTags(parseJsonDoc(read(infoCourse))).map((t) => t.name), ['a"b', "other"]);
+    assert.deepEqual(JSON.parse(read(plain)).tags, ["other", 'a"b']);
+  } finally {
+    fs.rmSync(course, { recursive: true, force: true });
+  }
+});
+
 test("severity keys are shorthand for their rule's setting", () => {
   const shorthands = [
     ["unusedQuestions", "unused-question"],
@@ -762,7 +833,7 @@ test("QID rename planning covers repeated, alternative, and template references"
       ]
     );
 
-    const changes = prepareQidReferenceFileChanges(edits);
+    const changes = prepareFileChanges(edits);
     const changedAssessment = changes.find((change) => change.file === assessment);
     const changedTemplate = changes.find((change) => change.file === template);
     assert.ok(changedAssessment);
@@ -813,7 +884,7 @@ test("QID rename planning rejects conflicts and stale source ranges", () => {
     ]);
     fs.writeFileSync(assessment, fs.readFileSync(assessment, "utf-8").replace("old", "other"));
     assert.throws(
-      () => prepareQidReferenceFileChanges(edits),
+      () => prepareFileChanges(edits),
       /changed before it could be updated/
     );
   } finally {

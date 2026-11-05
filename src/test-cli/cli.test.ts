@@ -120,6 +120,47 @@ test("rename-qids validates mappings and treats no matches as success", async ()
   assert.match(none.stdout, /No semantic QID references matched/);
 });
 
+test("rename-tags previews and writes a tag rename", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-tags-"));
+  const course = path.join(root, "course");
+  fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
+  const infoCourse = path.join(course, "infoCourse.json");
+  const question = path.join(course, "questions/q/info.json");
+  const before = fs.readFileSync(question, "utf-8");
+  try {
+    const preview = await runCliAt(course, "rename-tags", "used", "homework");
+    assert.equal(preview.code, 0, preview.stderr);
+    assert.match(preview.stdout, /"\\"used\\"" -> "\\"homework\\""/);
+    assert.match(preview.stdout, /Would make 2 edits in 2 files/);
+    assert.equal(fs.readFileSync(question, "utf-8"), before);
+
+    const written = await runCliAt(course, "rename-tags", "--write", "used", "homework");
+    assert.equal(written.code, 0, written.stderr);
+    assert.match(written.stdout, /Made 2 edits in 2 files/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(question, "utf-8")).tags, ["homework"]);
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(infoCourse, "utf-8")).tags.map((t: { name: string }) => t.name),
+      ["homework", "unused"]
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rename-tags validates its arguments and the tags", async () => {
+  const one = await runCli("rename-tags", "--course", "names", "used");
+  assert.equal(one.code, 1);
+  assert.match(one.stderr, /Exactly one old tag and one new tag/);
+
+  const undefinedTag = await runCli("rename-tags", "--course", "names", "nope", "new");
+  assert.equal(undefinedTag.code, 1);
+  assert.match(undefinedTag.stderr, /Tag "nope" is not defined in infoCourse.json/);
+
+  const taken = await runCli("rename-tags", "--course", "names", "used", "unused");
+  assert.equal(taken.code, 1);
+  assert.match(taken.stderr, /Tag "unused" is already defined/);
+});
+
 test("broken course exits 1 with code frames", async () => {
   const { code, stdout } = await runCli("check", "broken");
   assert.equal(code, 1);

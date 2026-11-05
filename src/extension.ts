@@ -29,6 +29,7 @@ import {
   removeUnusedQuestion,
   registerQidRenameParticipant,
   TagProvider,
+  TagRenameProvider,
   UuidCompletionItemProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
@@ -176,6 +177,11 @@ export function activate(context: vscode.ExtensionContext) {
     // Tag hover and jump to infoCourse.json
     vscode.languages.registerHoverProvider(infoQuestionPatterns, tagProvider),
     vscode.languages.registerDefinitionProvider(infoQuestionPatterns, tagProvider),
+    // Rename a defined tag across the course
+    vscode.languages.registerRenameProvider(
+      [...infoQuestionPatterns, { pattern: "**/infoCourse.json" }],
+      new TagRenameProvider(courseCache, referenceIndex),
+    ),
 
     // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(

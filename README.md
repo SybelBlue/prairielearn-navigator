@@ -22,6 +22,9 @@ This extension is still experimental and may change or break.
 - Tags in a question's `info.json` show their color, as PrairieLearn draws the
   badge, and description on hover, and go-to-definition jumps to the tag in
   `infoCourse.json`. An undefined tag has a quick fix that adds it there.
+  Rename Symbol (F2) on a defined tag renames it in `infoCourse.json`, every
+  question, and `.pl-navigator.jsonc` suppressions; the CLI's `rename-tags`
+  does the same.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.

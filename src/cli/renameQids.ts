@@ -1,15 +1,9 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
-import { findCourseRoot } from "../core/course";
+import { prepareFileChanges } from "../core/fileEdits";
 import { today } from "../core/plVersion";
-import {
-  planQidReferenceRenames,
-  prepareQidReferenceFileChanges,
-  QidRename,
-  QidReferenceEdit,
-  QidReferenceFileChange,
-} from "../core/qidRenames";
+import { planQidReferenceRenames, QidRename } from "../core/qidRenames";
 import { indexCourse } from "../core/referenceIndex";
+import { displayEdit, resolveCourseRoot, writeChanges } from "./edits";
 import { CliRuntime, processRuntime } from "./runtime";
 
 const USAGE = `Usage: prairielearn-navigator rename-qids [options] <old-qid> <new-qid> [<old-qid> <new-qid> ...]
@@ -76,45 +70,6 @@ function parseArgs(args: string[]): RenameQidsArgs | string {
   return { course, write, renames };
 }
 
-function resolveCourseRoot(value: string, cwd: string): string | null {
-  const resolved = path.resolve(cwd, value);
-  const stat = fs.statSync(resolved, { throwIfNoEntry: false });
-  if (!stat) {
-    return null;
-  }
-  return findCourseRoot(stat.isDirectory() ? path.join(resolved, "_") : resolved);
-}
-
-function displayEdit(edit: QidReferenceEdit, cwd: string): string {
-  const file = path.relative(cwd, edit.file) || edit.file;
-  return `${file}:${edit.start.line}:${edit.start.column} ${JSON.stringify(edit.expected)} -> ${JSON.stringify(edit.replacement)}`;
-}
-
-function writeChanges(changes: readonly QidReferenceFileChange[]): void {
-  const written: QidReferenceFileChange[] = [];
-  try {
-    for (const change of changes) {
-      fs.writeFileSync(change.file, change.updated);
-      written.push(change);
-    }
-  } catch (error) {
-    const rollbackErrors: unknown[] = [];
-    for (const change of written.reverse()) {
-      try {
-        fs.writeFileSync(change.file, change.original);
-      } catch (rollbackError) {
-        rollbackErrors.push(rollbackError);
-      }
-    }
-    if (rollbackErrors.length > 0) {
-      throw new Error(
-        `${error instanceof Error ? error.message : String(error)}; failed to roll back ${rollbackErrors.length} file(s)`
-      );
-    }
-    throw error;
-  }
-}
-
 export async function run(
   args: string[],
   runtime: CliRuntime = processRuntime()
@@ -154,7 +109,7 @@ export async function run(
     }
 
     // Validate every source range before reporting or writing any changes.
-    const changes = prepareQidReferenceFileChanges(edits);
+    const changes = prepareFileChanges(edits);
     edits.forEach((edit) => runtime.stdout(displayEdit(edit, runtime.cwd)));
     if (!parsed.write) {
       runtime.stdout(

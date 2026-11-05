@@ -13,16 +13,17 @@ import {
   tagAt,
   TagInfo,
 } from "../core/tags";
-import { CourseCache } from "../filewatchers";
+import { planTagRename } from "../core/tagRenames";
+import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 
-/** infoCourse.json's text, from its editor if open, else from disk. */
-function courseInfoText(infoCourse: string): string | undefined {
-  const open = vscode.workspace.textDocuments.find((doc) => doc.uri.fsPath === infoCourse);
+/** A file's text, from its editor if open, else from disk. */
+function currentText(file: string): string | undefined {
+  const open = vscode.workspace.textDocuments.find((doc) => doc.uri.fsPath === file);
   if (open) {
     return open.getText();
   }
   try {
-    return fs.readFileSync(infoCourse, "utf-8");
+    return fs.readFileSync(file, "utf-8");
   } catch {
     return undefined;
   }
@@ -77,7 +78,7 @@ export class TagProvider implements vscode.HoverProvider, vscode.DefinitionProvi
       return undefined;
     }
     const infoCourse = path.join(courseRoot, courseFiles.course);
-    const infoText = courseInfoText(infoCourse);
+    const infoText = currentText(infoCourse);
     const defined: CourseTag | undefined = infoText === undefined
       ? undefined
       : courseTags(parseJsonDoc(infoText)).find((t) => t.name === tag.name);
@@ -128,5 +129,84 @@ export class TagProvider implements vscode.HoverProvider, vscode.DefinitionProvi
       vscode.Uri.file(infoCourse),
       new vscode.Range(positionOf(defined.nameStart), positionOf(defined.nameEnd))
     );
+  }
+}
+
+/**
+ * Renames a tag infoCourse.json defines, from its definition or from a
+ * question using it: the definition, every question's entry, and
+ * suppressions naming it.
+ */
+export class TagRenameProvider implements vscode.RenameProvider {
+  constructor(
+    private courseCache: Pick<CourseCache, "getCourseIdFor">,
+    private references: Pick<ReferenceIndexCache, "whenIndexed">
+  ) {}
+
+  /**
+   * The tag at `position`, with the offsets of its string including quotes.
+   * Throws when it is a tag infoCourse.json doesn't define.
+   */
+  private renameable(document: vscode.TextDocument, position: vscode.Position) {
+    const courseRoot = this.courseCache.getCourseIdFor(document.uri);
+    if (!courseRoot) {
+      return undefined;
+    }
+    const text = document.getText();
+    const offset = document.offsetAt(position);
+    const infoCourse = path.join(courseRoot, courseFiles.course);
+    if (document.uri.fsPath === infoCourse) {
+      const tag = courseTags(parseJsonDoc(text)).find((t) => t.nameStart <= offset && offset <= t.nameEnd);
+      return tag && { courseRoot, name: tag.name, start: tag.nameStart, end: tag.nameEnd };
+    }
+    const tag = tagAt(text, parseJsonDoc(text), offset);
+    if (!tag) {
+      return undefined;
+    }
+    const infoText = currentText(infoCourse);
+    if (infoText === undefined || !courseTags(parseJsonDoc(infoText)).some((t) => t.name === tag.name)) {
+      throw new Error(`Only tags defined in ${courseFiles.course} can be renamed`);
+    }
+    return { courseRoot, name: tag.name, start: tag.start, end: tag.end };
+  }
+
+  prepareRename(
+    document: vscode.TextDocument,
+    position: vscode.Position
+  ): { range: vscode.Range; placeholder: string } | undefined {
+    const tag = this.renameable(document, position);
+    return tag && {
+      // Inside the quotes
+      range: new vscode.Range(document.positionAt(tag.start + 1), document.positionAt(tag.end - 1)),
+      placeholder: tag.name,
+    };
+  }
+
+  async provideRenameEdits(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    newName: string
+  ): Promise<vscode.WorkspaceEdit | undefined> {
+    const tag = this.renameable(document, position);
+    if (!tag) {
+      return undefined;
+    }
+    const index = await this.references.whenIndexed(document.uri);
+    if (!index) {
+      throw new Error(`Could not index the course at ${tag.courseRoot}`);
+    }
+    // Unsaved questions the index may not have caught up with yet
+    const dirty = vscode.workspace.textDocuments
+      .filter((doc) => doc.isDirty && doc.uri.fsPath.startsWith(tag.courseRoot + path.sep))
+      .map((doc) => doc.uri.fsPath);
+    const workspaceEdit = new vscode.WorkspaceEdit();
+    for (const edit of planTagRename(index, tag.name, newName, currentText, dirty)) {
+      workspaceEdit.replace(
+        vscode.Uri.file(edit.file),
+        new vscode.Range(edit.start.line - 1, edit.start.column - 1, edit.end.line - 1, edit.end.column - 1),
+        edit.replacement
+      );
+    }
+    return workspaceEdit;
   }
 }
