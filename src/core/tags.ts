@@ -1,5 +1,6 @@
 import { findNodeAtLocation, getLocation } from "jsonc-parser";
-import { JsonDoc } from "./json";
+import { courseFiles, matchesGlob } from "./courseFiles";
+import { JsonDoc, parseJsonDoc } from "./json";
 
 /**
  * PrairieLearn's badge colors: text and background of `.badge.color-*` in
@@ -161,4 +162,25 @@ export function tagAt(
     return undefined;
   }
   return { name: node.value as string, index: path[1], start: node.offset, end: node.offset + node.length };
+}
+
+/**
+ * The tag name at `offset` in a course file: a definition's `name` in
+ * infoCourse.json, or an entry of a question's `tags` array. Offsets cover
+ * the string including its quotes. `relPath` is relative to the course root.
+ */
+export function tagNameAt(
+  relPath: string,
+  text: string,
+  offset: number
+): { name: string; start: number; end: number; definition: boolean } | undefined {
+  if (relPath === courseFiles.course) {
+    const tag = courseTags(parseJsonDoc(text)).find((t) => t.nameStart <= offset && offset <= t.nameEnd);
+    return tag && { name: tag.name, start: tag.nameStart, end: tag.nameEnd, definition: true };
+  }
+  if (matchesGlob(relPath, courseFiles.question)) {
+    const tag = tagAt(text, parseJsonDoc(text), offset);
+    return tag && { name: tag.name, start: tag.start, end: tag.end, definition: false };
+  }
+  return undefined;
 }

@@ -25,6 +25,8 @@ This extension is still experimental and may change or break.
   Rename Symbol (F2) on a defined tag renames it in `infoCourse.json`, every
   question, and `.pl-navigator.jsonc` suppressions; the CLI's `rename-tags`
   does the same.
+  Find All References on a defined tag, from its definition or a question,
+  lists its definition and every question that uses it.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.

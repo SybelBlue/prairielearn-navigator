@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { courseFiles } from "../core/courseFiles";
+import { courseFiles, courseRelativePath } from "../core/courseFiles";
 import { offsetToPosition } from "../core/diagnostic";
 import { parseJsonDoc } from "../core/json";
 import {
@@ -12,8 +12,9 @@ import {
   plDefaultTag,
   tagAt,
   TagInfo,
+  tagNameAt,
 } from "../core/tags";
-import { planTagRename } from "../core/tagRenames";
+import { findTagReferences, planTagRename } from "../core/tagRenames";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 
 /** A file's text, from its editor if open, else from disk. */
@@ -133,41 +134,53 @@ export class TagProvider implements vscode.HoverProvider, vscode.DefinitionProvi
 }
 
 /**
- * Renames a tag infoCourse.json defines, from its definition or from a
- * question using it: the definition, every question's entry, and
- * suppressions naming it.
+ * For a tag infoCourse.json defines, from its definition or from a question
+ * using it: renames it across the course (the definition, every question's
+ * entry, and suppressions naming it), and Find All References lists its
+ * definition and every question's entry.
  */
-export class TagRenameProvider implements vscode.RenameProvider {
+export class CourseTagProvider implements vscode.RenameProvider, vscode.ReferenceProvider {
   constructor(
     private courseCache: Pick<CourseCache, "getCourseIdFor">,
     private references: Pick<ReferenceIndexCache, "whenIndexed">
   ) {}
 
   /**
-   * The tag at `position`, with the offsets of its string including quotes.
-   * Throws when it is a tag infoCourse.json doesn't define.
+   * The tag at `position`, with the offsets of its string including quotes,
+   * and whether infoCourse.json defines it.
    */
-  private renameable(document: vscode.TextDocument, position: vscode.Position) {
+  private tagAtPosition(document: vscode.TextDocument, position: vscode.Position) {
     const courseRoot = this.courseCache.getCourseIdFor(document.uri);
     if (!courseRoot) {
       return undefined;
     }
     const text = document.getText();
-    const offset = document.offsetAt(position);
-    const infoCourse = path.join(courseRoot, courseFiles.course);
-    if (document.uri.fsPath === infoCourse) {
-      const tag = courseTags(parseJsonDoc(text)).find((t) => t.nameStart <= offset && offset <= t.nameEnd);
-      return tag && { courseRoot, name: tag.name, start: tag.nameStart, end: tag.nameEnd };
-    }
-    const tag = tagAt(text, parseJsonDoc(text), offset);
+    const tag = tagNameAt(courseRelativePath(courseRoot, document.uri.fsPath), text, document.offsetAt(position));
     if (!tag) {
       return undefined;
     }
-    const infoText = currentText(infoCourse);
-    if (infoText === undefined || !courseTags(parseJsonDoc(infoText)).some((t) => t.name === tag.name)) {
+    const infoText = tag.definition ? text : currentText(path.join(courseRoot, courseFiles.course));
+    const defined = tag.definition ||
+      (infoText !== undefined && courseTags(parseJsonDoc(infoText)).some((t) => t.name === tag.name));
+    return { courseRoot, name: tag.name, start: tag.start, end: tag.end, defined };
+  }
+
+  /** The tag at `position`. Throws when it is a tag infoCourse.json doesn't define. */
+  private renameable(document: vscode.TextDocument, position: vscode.Position) {
+    const tag = this.tagAtPosition(document, position);
+    if (tag && !tag.defined) {
       throw new Error(`Only tags defined in ${courseFiles.course} can be renamed`);
     }
-    return { courseRoot, name: tag.name, start: tag.start, end: tag.end };
+    return tag;
+  }
+
+  /** Index of the course at `courseRoot`, and its unsaved files the index may not have caught up with. */
+  private async indexed(document: vscode.TextDocument, courseRoot: string) {
+    const index = await this.references.whenIndexed(document.uri);
+    const dirty = vscode.workspace.textDocuments
+      .filter((doc) => doc.isDirty && doc.uri.fsPath.startsWith(courseRoot + path.sep))
+      .map((doc) => doc.uri.fsPath);
+    return { index, dirty };
   }
 
   prepareRename(
@@ -191,14 +204,10 @@ export class TagRenameProvider implements vscode.RenameProvider {
     if (!tag) {
       return undefined;
     }
-    const index = await this.references.whenIndexed(document.uri);
+    const { index, dirty } = await this.indexed(document, tag.courseRoot);
     if (!index) {
       throw new Error(`Could not index the course at ${tag.courseRoot}`);
     }
-    // Unsaved questions the index may not have caught up with yet
-    const dirty = vscode.workspace.textDocuments
-      .filter((doc) => doc.isDirty && doc.uri.fsPath.startsWith(tag.courseRoot + path.sep))
-      .map((doc) => doc.uri.fsPath);
     const workspaceEdit = new vscode.WorkspaceEdit();
     for (const edit of planTagRename(index, tag.name, newName, currentText, dirty)) {
       workspaceEdit.replace(
@@ -208,5 +217,27 @@ export class TagRenameProvider implements vscode.RenameProvider {
       );
     }
     return workspaceEdit;
+  }
+
+  async provideReferences(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    context: vscode.ReferenceContext
+  ): Promise<vscode.Location[]> {
+    const tag = this.tagAtPosition(document, position);
+    if (!tag?.defined) {
+      return [];
+    }
+    const { index, dirty } = await this.indexed(document, tag.courseRoot);
+    if (!index) {
+      return [];
+    }
+    const { definitions, uses } = findTagReferences(index, tag.name, currentText, dirty);
+    return [...(context.includeDeclaration ? definitions : []), ...uses].map(
+      (o) => new vscode.Location(
+        vscode.Uri.file(o.file),
+        new vscode.Range(o.start.line - 1, o.start.column - 1, o.end.line - 1, o.end.column - 1)
+      )
+    );
   }
 }

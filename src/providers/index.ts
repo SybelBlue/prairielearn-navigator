@@ -31,7 +31,7 @@ export {
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
-export { TagProvider, TagRenameProvider } from "./tags";
+export { CourseTagProvider, TagProvider } from "./tags";
 export {
   prepareQidRenameWorkspaceEdit,
   qidRenamesForFileMoves,

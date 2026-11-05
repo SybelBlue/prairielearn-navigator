@@ -86,6 +86,66 @@ function suppressionEdits(file: string, text: string, oldName: string, newName: 
 }
 
 /**
+ * Questions that may list tag `name`: those the index knows use it, and any
+ * of `extraFiles` that are questions (unsaved edits the index has not seen).
+ */
+function questionsListingTag(index: ReferenceIndex, name: string, extraFiles: readonly string[]): Set<string> {
+  return new Set([
+    ...index.filesUsingTags().filter((file) => index.namesIn(file)?.tags.includes(name)),
+    ...extraFiles.filter((file) => matchesGlob(courseRelativePath(index.courseRoot, file), courseFiles.question)),
+  ]);
+}
+
+/** Where a tag's name appears in a course file; positions are 1-based. */
+export interface TagOccurrence {
+  file: string;
+  start: { line: number; column: number };
+  end: { line: number; column: number };
+}
+
+function occurrence(file: string, text: string, start: number, end: number): TagOccurrence {
+  return { file, start: offsetToPosition(text, start), end: offsetToPosition(text, end) };
+}
+
+/**
+ * Where a tag infoCourse.json defines appears: its definitions there, and
+ * every entry in a question's `tags` naming it. Empty when infoCourse.json
+ * does not define it. `readText` and `extraFiles` are as for planTagRename.
+ */
+export function findTagReferences(
+  index: ReferenceIndex,
+  name: string,
+  readText: (file: string) => string | undefined,
+  extraFiles: readonly string[] = []
+): { definitions: TagOccurrence[]; uses: TagOccurrence[] } {
+  const infoCourse = path.join(index.courseRoot, courseFiles.course);
+  const infoText = readText(infoCourse);
+  const definitions = infoText === undefined
+    ? []
+    : courseTags(parseJsonDoc(infoText))
+      .filter((tag) => tag.name === name)
+      .map((tag) => occurrence(infoCourse, infoText, tag.nameStart, tag.nameEnd));
+  if (definitions.length === 0) {
+    return { definitions, uses: [] };
+  }
+  const uses: TagOccurrence[] = [];
+  for (const file of [...questionsListingTag(index, name, extraFiles)].sort()) {
+    const text = readText(file);
+    const tree = text === undefined ? undefined : parseJsonDoc(text).tree;
+    const array = tree && findNodeAtLocation(tree, ["tags"]);
+    if (text === undefined || array?.type !== "array") {
+      continue;
+    }
+    for (const node of array.children ?? []) {
+      if (node.type === "string" && node.value === name) {
+        uses.push(occurrence(file, text, node.offset, node.offset + node.length));
+      }
+    }
+  }
+  return { definitions, uses };
+}
+
+/**
  * Plans renaming a tag infoCourse.json defines: its definition, every
  * question using it, and suppressions naming it. Throws, with a message for
  * the user, when the rename is not allowed.
@@ -125,11 +185,7 @@ export function planTagRename(
     .filter((tag) => tag.name === oldName)
     .map((tag) => edit(infoCourse, infoText, tag.nameStart, tag.nameEnd, JSON.stringify(newName)));
 
-  const questions = new Set([
-    ...index.filesUsingTags().filter((file) => index.namesIn(file)?.tags.includes(oldName)),
-    ...extraFiles.filter((file) => matchesGlob(courseRelativePath(courseRoot, file), courseFiles.question)),
-  ]);
-  for (const file of questions) {
+  for (const file of questionsListingTag(index, oldName, extraFiles)) {
     const text = readText(file);
     if (text !== undefined) {
       edits.push(...questionEdits(file, text, oldName, newName));

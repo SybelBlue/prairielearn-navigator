@@ -1093,6 +1093,41 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("Find All References on a defined tag lists its definition and question entries", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    // Used by hw1, so the file-uses fallback would list assessments
+    const goodInfo = vscode.Uri.file(path.join(course, "questions/good/info.json"));
+    const courseEditor = await vscode.window.showTextDocument(infoCourse);
+    try {
+      const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+      await courseEditor.edit((e) => e.insert(end, ', "tags": [{ "name": "t1", "color": "red1" }] '));
+      const questionEditor = await vscode.window.showTextDocument(goodInfo);
+      try {
+        // Unsaved, so references must read the editor rather than the disk
+        await questionEditor.edit((e) =>
+          e.insert(new vscode.Position(0, 1), '\n  "tags": ["t1", "nope"],')
+        );
+        const at = (doc: vscode.TextDocument, tag: string) =>
+          doc.positionAt(doc.getText().indexOf(`"${tag}"`) + 1);
+        const references = async (uri: vscode.Uri, position: vscode.Position) =>
+          (await vscode.commands.executeCommand<vscode.Location[]>(
+            "vscode.executeReferenceProvider", uri, position
+          )).map((l) => `${path.relative(course, l.uri.fsPath)}:${l.range.start.line + 1}`).sort();
+
+        const expected = ["infoCourse.json:1", "questions/good/info.json:2"];
+        assert.deepStrictEqual(await references(goodInfo, at(questionEditor.document, "t1")), expected);
+        assert.deepStrictEqual(await references(infoCourse, at(courseEditor.document, "t1")), expected);
+        assert.deepStrictEqual(await references(goodInfo, at(questionEditor.document, "nope")), []);
+      } finally {
+        await vscode.window.showTextDocument(goodInfo);
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+      }
+    } finally {
+      await vscode.window.showTextDocument(infoCourse);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("the unusedQuestions setting sets the note's severity", async () => {
     const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
     const unused = () =>

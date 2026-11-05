@@ -28,8 +28,8 @@ import {
   RuleDiagnosticCollection,
   removeUnusedQuestion,
   registerQidRenameParticipant,
+  CourseTagProvider,
   TagProvider,
-  TagRenameProvider,
   UuidCompletionItemProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
@@ -67,6 +67,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
   const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
   const tagProvider = new TagProvider(courseCache);
+  const courseTagProvider = new CourseTagProvider(courseCache, referenceIndex);
   const fileReferenceProvider = new FileReferenceProvider(
     courseCache,
     configProvider,
@@ -103,6 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // helpful constants
   const infoQuestionPatterns = [{ pattern: "**/questions/**/info.json" }];
+  const tagFilePatterns = [...infoQuestionPatterns, { pattern: "**/infoCourse.json" }];
   const infoAssessmentPatterns = [
     { pattern: "**/assessments/**/infoAssessment.json" },
   ];
@@ -177,11 +179,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Tag hover and jump to infoCourse.json
     vscode.languages.registerHoverProvider(infoQuestionPatterns, tagProvider),
     vscode.languages.registerDefinitionProvider(infoQuestionPatterns, tagProvider),
-    // Rename a defined tag across the course
-    vscode.languages.registerRenameProvider(
-      [...infoQuestionPatterns, { pattern: "**/infoCourse.json" }],
-      new TagRenameProvider(courseCache, referenceIndex),
-    ),
+    // Rename and find references of a defined tag across the course
+    vscode.languages.registerRenameProvider(tagFilePatterns, courseTagProvider),
+    vscode.languages.registerReferenceProvider(tagFilePatterns, courseTagProvider),
 
     // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(

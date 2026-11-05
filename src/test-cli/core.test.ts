@@ -17,8 +17,8 @@ import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
-import { planTagRename } from "../core/tagRenames";
-import { courseTags, plBadgeColors, plDefaultTag, tagAt } from "../core/tags";
+import { findTagReferences, planTagRename } from "../core/tagRenames";
+import { courseTags, plBadgeColors, plDefaultTag, tagAt, tagNameAt } from "../core/tags";
 import { vscodeRuleSettings } from "../providers/ruleSettings";
 
 const fixtures = path.join(__dirname, "fixtures");
@@ -481,6 +481,59 @@ test("tag renames update the definition, questions, and suppressions", () => {
     }
     assert.deepEqual(courseTags(parseJsonDoc(read(infoCourse))).map((t) => t.name), ['a"b', "other"]);
     assert.deepEqual(JSON.parse(read(plain)).tags, ["other", 'a"b']);
+  } finally {
+    fs.rmSync(course, { recursive: true, force: true });
+  }
+});
+
+test("tag references list the definition and every question entry", () => {
+  const course = tmpDir();
+  const write = (rel: string, text: string) => {
+    const file = path.join(course, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+    return file;
+  };
+  const readText = (file: string) => fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : undefined;
+  try {
+    const infoCourseText = '{\n  "tags": [{ "name": "old" }, { "name": "other" }]\n}';
+    const infoCourse = write("infoCourse.json", infoCourseText);
+    const plainText = '{ "tags": ["other", "old"] }';
+    const plain = write("questions/plain/info.json", plainText);
+    const twice = write("questions/twice/info.json", '{ "tags": ["old", "other", "old"] }');
+    write("questions/untouched/info.json", '{ "tags": ["other", "numeric"] }');
+    const index = indexCourse(course, "2026-01-01");
+    const show = (o: { file: string; start: { line: number; column: number } }) =>
+      `${path.relative(course, o.file)}:${o.start.line}:${o.start.column}`;
+
+    const refs = findTagReferences(index, "old", readText);
+    assert.deepEqual(refs.definitions.map(show), ["infoCourse.json:2:22"]);
+    assert.deepEqual(refs.uses.map(show), [
+      "questions/plain/info.json:1:21",
+      "questions/twice/info.json:1:12",
+      "questions/twice/info.json:1:28",
+    ]);
+    assert.deepEqual(findTagReferences(index, "numeric", readText), { definitions: [], uses: [] });
+
+    // Unsaved questions are read through readText
+    const unsaved = path.join(course, "questions", "unsaved", "info.json");
+    const withUnsaved = findTagReferences(
+      index,
+      "old",
+      (file) => file === unsaved ? '{ "tags": ["old"] }' : readText(file),
+      [unsaved, infoCourse]
+    );
+    assert.ok(withUnsaved.uses.some((o) => o.file === unsaved));
+    assert.equal(withUnsaved.definitions.length, 1);
+
+    const nameAt = (rel: string, text: string, needle: string) =>
+      tagNameAt(rel, text, text.indexOf(needle) + 1);
+    assert.deepEqual(nameAt("infoCourse.json", infoCourseText, '"old"'), {
+      name: "old", start: infoCourseText.indexOf('"old"'), end: infoCourseText.indexOf('"old"') + 5, definition: true,
+    });
+    assert.equal(nameAt("questions/plain/info.json", plainText, '"old"')?.definition, false);
+    assert.equal(nameAt(path.relative(course, plain), plainText, '"tags"'), undefined);
+    assert.equal(nameAt("courseInstances/x/infoCourseInstance.json", plainText, '"old"'), undefined);
   } finally {
     fs.rmSync(course, { recursive: true, force: true });
   }

@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Find All References on a tag defined in `infoCourse.json`, either on its
+  definition or in a question's `info.json`, lists the definition and every
+  question's `tags` entry naming it. On a tag, the question's assessments are
+  no longer listed as uses of its `info.json`.
+
 ## [1.2.4] - 2026-11-04
 
 - Rename Symbol (F2) on a tag defined in `infoCourse.json`, either on its
