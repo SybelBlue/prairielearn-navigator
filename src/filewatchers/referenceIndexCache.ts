@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
 import { versionDate } from "../core/plVersion";
-import { indexCourseAsync, ReferenceIndex, Use } from "../core/referenceIndex";
+import { indexCourseAsync, ReferenceIndex, Use, UsedNames } from "../core/referenceIndex";
 import { ConfigProvider } from "../providers/config";
 import { CourseCache } from "./courseCache";
 
@@ -14,7 +14,8 @@ export interface ReferencesChanged {
    * Files whose diagnostics may change: those whose references point at or
    * into `changed`, the info.json of questions `changed` started or stopped
    * using, infoCourse.json when the tags or sets `changed` uses change, and
-   * every question using tags when the tags infoCourse.json defines change.
+   * every question or assessment using tags or sets when those
+   * infoCourse.json defines change.
    */
   affected: string[];
 }
@@ -152,11 +153,11 @@ export class ReferenceIndexCache {
     const file = uri.fsPath;
     const usedQuestions = new Set<string>();
     let namesChanged = false;
-    let tagsDefinedChanged = false;
+    const definedChanged: (keyof UsedNames)[] = [];
     if (index.indexes(file)) {
       const before = questionsUsedIn(index, file);
       const namesBefore = JSON.stringify(index.namesIn(file));
-      const tagsBefore = [...index.tagsDefined()].sort().join("\0");
+      const definedBefore = definedNames(index);
       if (text !== undefined) {
         index.update(file, text);
       } else if (fs.existsSync(file)) {
@@ -168,14 +169,19 @@ export class ReferenceIndexCache {
       before.forEach((q) => after.has(q) || usedQuestions.add(q));
       after.forEach((q) => before.has(q) || usedQuestions.add(q));
       namesChanged = JSON.stringify(index.namesIn(file)) !== namesBefore;
-      tagsDefinedChanged = [...index.tagsDefined()].sort().join("\0") !== tagsBefore;
+      const definedAfter = definedNames(index);
+      for (const kind of usedNameKinds) {
+        if (definedAfter[kind] !== definedBefore[kind]) {
+          definedChanged.push(kind);
+        }
+      }
     }
     const affected = [
       ...new Set([
         ...index.filesAffectedBy(file),
         ...[...usedQuestions].map((q) => path.join(q, "info.json")),
         ...(namesChanged ? [path.join(courseRoot, "infoCourse.json")] : []),
-        ...(tagsDefinedChanged ? index.filesUsingTags() : []),
+        ...definedChanged.flatMap((kind) => index.filesUsing(kind)),
       ]),
     ];
     if (affected.length > 0) {
@@ -187,6 +193,14 @@ export class ReferenceIndexCache {
     this.disposables.forEach((d) => d.dispose());
     this.onChangedEmitter.dispose();
   }
+}
+
+const usedNameKinds = ["tags", "assessmentSets"] as const satisfies readonly (keyof UsedNames)[];
+
+/** The names of each kind infoCourse.json defines, comparable as strings. */
+function definedNames(index: ReferenceIndex): Record<keyof UsedNames, string> {
+  const names = (kind: keyof UsedNames) => [...index.namesDefined(kind)].sort().join("\0");
+  return { tags: names("tags"), assessmentSets: names("assessmentSets") };
 }
 
 /** Directories of the questions `file` references. */

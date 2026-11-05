@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { implicitAssessmentSetColor, plDefaultAssessmentSet } from "../assessmentSets";
 import { Diagnostic } from "../diagnostic";
 import { parseJsonc, pointerToPath, rangeOf, strictJsonErrors } from "../json";
 import { questionFilePathsFromId } from "../questionPaths";
@@ -250,7 +251,7 @@ export const undefinedTags: RuleImpl = ({ references, doc }) => {
   if (!references || doc.errors.length > 0 || !Array.isArray(tags)) {
     return [];
   }
-  const defined = references.tagsDefined();
+  const defined = references.namesDefined("tags");
   return tags.flatMap((name: unknown, i): Diagnostic[] =>
     typeof name === "string" && !defined.has(name) && !plDefaultTag(name)
       ? [{
@@ -267,3 +268,27 @@ export const unusedAssessmentSets = unusedCourseNames(
   "assessmentSets",
   (name) => `assessment set "${name}" is not used by any assessment`
 );
+
+/**
+ * Notes an assessment's `set` when infoCourse.json does not define it and
+ * PrairieLearn has no default for it. PrairieLearn accepts it, creating a
+ * gray set whose abbreviation and heading are its name.
+ */
+export const undefinedAssessmentSets: RuleImpl = ({ references, doc }) => {
+  const set = (doc.value as { set?: unknown } | undefined)?.set;
+  if (
+    !references ||
+    doc.errors.length > 0 ||
+    typeof set !== "string" ||
+    references.namesDefined("assessmentSets").has(set) ||
+    plDefaultAssessmentSet(set)
+  ) {
+    return [];
+  }
+  return [{
+    ...rangeOf(doc, ["set"]),
+    message: `assessment set "${set}" is not defined in infoCourse.json (PrairieLearn will create it as ${implicitAssessmentSetColor})`,
+    severity: "info",
+    identifier: set,
+  }];
+};

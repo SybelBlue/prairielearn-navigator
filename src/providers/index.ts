@@ -6,6 +6,7 @@ export {
 } from "./completions";
 export { ConfigProvider } from "./config";
 export {
+  defineAssessmentSet,
   defineTag,
   DiagnosticQuickFixProvider,
   diagnosticRuleId,

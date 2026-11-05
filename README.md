@@ -9,8 +9,9 @@ This extension is still experimental and may change or break.
 - Diagnostics for course files: PrairieLearn schema validation for a chosen
   PrairieLearn version; missing, incomplete, duplicate, and unused questions;
   question directories PrairieLearn can't load for lack of an `info.json`;
-  unused tags and assessment sets; tags a question uses that `infoCourse.json`
-  doesn't define; and every file a course names that doesn't
+  unused tags and assessment sets; tags a question uses, and assessment sets
+  an assessment uses, that `infoCourse.json` doesn't define; and every file a
+  course names that doesn't
   exist (see the
   [rules](packages/cli/README.md#rules)).
 - For every one of those file references:
@@ -65,8 +66,8 @@ file**, which adds a suppression to `.pl-navigator.jsonc`, and **Configure
 severity for …**, which opens that rule's dropdown in VS Code Settings.
 Suppressions use semantic identifiers when available—question ids, tag names,
 and assessment-set names—and fall back to exact message/occurrence matching.
-Unused tags and assessment sets can be removed directly, undefined tags can be
-added to `infoCourse.json`, and an unused question
+Unused tags and assessment sets can be removed directly, undefined tags and
+assessment sets can be added to `infoCourse.json`, and an unused question
 can be moved to Trash after confirmation.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going

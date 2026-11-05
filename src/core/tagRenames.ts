@@ -91,7 +91,7 @@ function suppressionEdits(file: string, text: string, oldName: string, newName: 
  */
 function questionsListingTag(index: ReferenceIndex, name: string, extraFiles: readonly string[]): Set<string> {
   return new Set([
-    ...index.filesUsingTags().filter((file) => index.namesIn(file)?.tags.includes(name)),
+    ...index.filesUsing("tags").filter((file) => index.namesIn(file)?.tags.includes(name)),
     ...extraFiles.filter((file) => matchesGlob(courseRelativePath(index.courseRoot, file), courseFiles.question)),
   ]);
 }

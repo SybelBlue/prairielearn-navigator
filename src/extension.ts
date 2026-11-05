@@ -14,6 +14,7 @@ import {
   ConfigProvider,
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
+  defineAssessmentSet,
   defineTag,
   DiagnosticQuickFixProvider,
   anyFileSelector,
@@ -148,6 +149,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "prairielearn-navigator.defineTag",
       defineTag,
+    ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.defineAssessmentSet",
+      defineAssessmentSet,
     ),
 
     // Diagnostics

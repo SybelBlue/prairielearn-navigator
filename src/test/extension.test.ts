@@ -1041,6 +1041,57 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("undefined assessment sets are noted live and can be defined", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const undefinedSets = () =>
+      ourDiagnostics(assessment).filter((d) => d.code === "prairielearn-navigator/undefined-assessment-set");
+    const editor = await vscode.window.showTextDocument(assessment);
+    try {
+      const document = editor.document;
+      const homework = document.getText().indexOf('"Homework"', document.getText().indexOf('"set"'));
+      await editor.edit((e) =>
+        e.replace(new vscode.Range(document.positionAt(homework), document.positionAt(homework + '"Homework"'.length)), '"Lab"')
+      );
+      const [diagnostic] = await until(undefinedSets, (ds) => ds.length === 1);
+      assert.strictEqual(diagnostic.severity, vscode.DiagnosticSeverity.Information);
+      assert.strictEqual(document.getText(diagnostic.range), '"Lab"');
+      assert.strictEqual(
+        diagnostic.message,
+        'assessment set "Lab" is not defined in infoCourse.json (PrairieLearn will create it as gray1)'
+      );
+
+      const actions = new DiagnosticQuickFixProvider({ getCourseIdFor: () => course }).provideCodeActions(
+        document,
+        diagnostic.range,
+        { diagnostics: [diagnostic], only: vscode.CodeActionKind.QuickFix, triggerKind: vscode.CodeActionTriggerKind.Invoke }
+      );
+      const define = actions.find((action) => action.title === 'Define assessment set "Lab" in infoCourse.json');
+      assert.ok(define?.command && define.isPreferred);
+      try {
+        await vscode.commands.executeCommand(define.command.command, ...(define.command.arguments ?? []));
+        const active = vscode.window.activeTextEditor;
+        assert.strictEqual(active?.document.uri.fsPath, infoCourse.fsPath);
+        const defined = JSON.parse(active.document.getText()) as { assessmentSets: unknown[] };
+        assert.deepStrictEqual(defined.assessmentSets.at(-1), {
+          abbreviation: "Lab", name: "Lab", heading: "Lab", color: "gray1",
+        });
+        assert.strictEqual(active.document.getText(active.selection), "Lab");
+        assert.strictEqual(
+          active.document.offsetAt(active.selection.start),
+          active.document.getText().indexOf('"abbreviation": "Lab"') + '"abbreviation": "'.length
+        );
+        assert.deepStrictEqual(await until(undefinedSets, (ds) => ds.length === 0), []);
+      } finally {
+        await vscode.window.showTextDocument(infoCourse);
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+      }
+      assert.strictEqual((await until(undefinedSets, (ds) => ds.length === 1)).length, 1);
+    } finally {
+      await vscode.window.showTextDocument(assessment);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("F2 renames a defined tag across the course and refuses undefined ones", async () => {
     const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
     const courseEditor = await vscode.window.showTextDocument(infoCourse);

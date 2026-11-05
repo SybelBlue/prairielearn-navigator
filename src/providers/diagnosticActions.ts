@@ -12,7 +12,7 @@ import { configFileName } from "../core/config";
 import { courseFiles } from "../core/courseFiles";
 import { parseJsonc, parseJsonDoc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
-import { courseTags, implicitTagColor } from "../core/tags";
+import { assessmentSetKind, NameKind, tagKind } from "../core/courseNames";
 import { CourseCache } from "../filewatchers";
 import { vscodeRuleSettings } from "./ruleSettings";
 
@@ -34,7 +34,7 @@ export interface RemoveUnusedQuestionArgs {
   file: string;
 }
 
-export interface DefineTagArgs {
+export interface DefineCourseNameArgs {
   courseRoot: string;
   name: string;
 }
@@ -199,14 +199,22 @@ export async function removeUnusedQuestion(
 }
 
 /**
- * Adds a tag to infoCourse.json's `tags`, in the color PrairieLearn would give
- * it, then opens the file with that color selected to change it. The edit is
- * left unsaved.
+ * The key of the entry `defineCourseName` selects for the user to change
+ * first: the color PrairieLearn would give a tag, or the abbreviation of a
+ * set, which PrairieLearn would make the whole name.
  */
-export async function defineTag(args: DefineTagArgs): Promise<boolean> {
+const focusKey = { tags: "color", assessmentSets: "abbreviation" } as const;
+
+/**
+ * Adds a name to infoCourse.json as PrairieLearn would create it, then opens
+ * the file with one field selected to change it (see focusKey). If the name
+ * is already defined, selects that definition instead. The edit is left
+ * unsaved.
+ */
+async function defineCourseName(kind: NameKind, args: DefineCourseNameArgs): Promise<boolean> {
   const uri = vscode.Uri.file(path.join(args.courseRoot, courseFiles.course));
   const document = await vscode.workspace.openTextDocument(uri);
-  const existing = courseTags(parseJsonDoc(document.getText())).find((t) => t.name === args.name);
+  const existing = kind.definitions(parseJsonDoc(document.getText())).find((d) => d.name === args.name);
   if (existing) {
     const editor = await vscode.window.showTextDocument(document);
     const start = document.positionAt(existing.nameStart);
@@ -218,14 +226,14 @@ export async function defineTag(args: DefineTagArgs): Promise<boolean> {
   const root = parseJsonc(text);
   if (typeof root !== "object" || root === null || Array.isArray(root)) {
     void vscode.window.showErrorMessage(
-      `PrairieLearn Navigator: fix ${courseFiles.course} before defining a tag.`
+      `PrairieLearn Navigator: fix ${courseFiles.course} before defining this ${kind.noun}.`
     );
     return false;
   }
   const edits = modify(
     text,
-    ["tags", -1],
-    { name: args.name, color: implicitTagColor, description: args.name },
+    [kind.collection, -1],
+    kind.implicitDefinition(args.name),
     {
       formattingOptions: formattingOptions(
         text,
@@ -249,32 +257,45 @@ export async function defineTag(args: DefineTagArgs): Promise<boolean> {
   }
   const editor = await vscode.window.showTextDocument(document);
   const tree = parseTree(document.getText());
-  const tags = tree && findNodeAtLocation(tree, ["tags"]);
-  const added = tags?.children?.at(-1);
-  const color = added && findNodeAtLocation(added, ["color"]);
-  if (color) {
-    // Inside the quotes, so typing replaces the color name
+  const array = tree && findNodeAtLocation(tree, [kind.collection]);
+  const added = array?.children?.at(-1);
+  const focus = added && findNodeAtLocation(added, [focusKey[kind.collection]]);
+  if (focus) {
+    // Inside the quotes, so typing replaces the value
     editor.selection = new vscode.Selection(
-      document.positionAt(color.offset + 1),
-      document.positionAt(color.offset + color.length - 1)
+      document.positionAt(focus.offset + 1),
+      document.positionAt(focus.offset + focus.length - 1)
     );
     editor.revealRange(editor.selection);
   }
   return true;
 }
 
-/** The tag an undefined-tag diagnostic is on. */
-function undefinedTagName(
+/** Adds a tag to infoCourse.json's `tags`, in the color PrairieLearn would give it. */
+export function defineTag(args: DefineCourseNameArgs): Promise<boolean> {
+  return defineCourseName(tagKind, args);
+}
+
+/** Adds an assessment set to infoCourse.json's `assessmentSets`, as PrairieLearn would create it. */
+export function defineAssessmentSet(args: DefineCourseNameArgs): Promise<boolean> {
+  return defineCourseName(assessmentSetKind, args);
+}
+
+/** The kind of undefined name a diagnostic of `rule` is on, and its command to define one. */
+const definableRules: Partial<Record<RuleId, { kind: NameKind; command: string }>> = {
+  "undefined-tag": { kind: tagKind, command: "prairielearn-navigator.defineTag" },
+  "undefined-assessment-set": { kind: assessmentSetKind, command: "prairielearn-navigator.defineAssessmentSet" },
+};
+
+/** The name an undefined-tag or undefined-assessment-set diagnostic is on. */
+function undefinedName(
   document: vscode.TextDocument,
   diagnostic: vscode.Diagnostic
 ): string | undefined {
   const text = document.getText();
   const jsonPath = getLocation(text, document.offsetAt(diagnostic.range.start) + 1).path;
-  if (jsonPath[0] !== "tags" || typeof jsonPath[1] !== "number") {
-    return undefined;
-  }
   const tree = parseTree(text);
-  const node = tree && findNodeAtLocation(tree, ["tags", jsonPath[1]]);
+  const node = tree && jsonPath.length > 0 ? findNodeAtLocation(tree, jsonPath) : undefined;
   return typeof node?.value === "string" ? node.value : undefined;
 }
 
@@ -424,20 +445,19 @@ export class DiagnosticQuickFixProvider implements vscode.CodeActionProvider {
         actions.push(removal);
       }
 
-      const tag = rule === "undefined-tag" && courseRoot
-        ? undefinedTagName(document, diagnostic)
-        : undefined;
-      if (tag !== undefined) {
+      const definable = courseRoot ? definableRules[rule] : undefined;
+      const name = definable && undefinedName(document, diagnostic);
+      if (definable && name !== undefined) {
         const define = new vscode.CodeAction(
-          `Define tag "${tag}" in ${courseFiles.course}`,
+          `Define ${definable.kind.noun} "${name}" in ${courseFiles.course}`,
           vscode.CodeActionKind.QuickFix
         );
         define.diagnostics = [diagnostic];
         define.isPreferred = true;
         define.command = {
-          command: "prairielearn-navigator.defineTag",
+          command: definable.command,
           title: define.title,
-          arguments: [{ courseRoot, name: tag } satisfies DefineTagArgs],
+          arguments: [{ courseRoot, name } satisfies DefineCourseNameArgs],
         };
         actions.push(define);
       }

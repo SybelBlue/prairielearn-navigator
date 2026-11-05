@@ -3,6 +3,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "vitest";
+import {
+  assessmentSetAt,
+  assessmentSetNameAt,
+  courseAssessmentSets,
+  implicitAssessmentSet,
+  plDefaultAssessmentSet,
+} from "../core/assessmentSets";
 import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from "../core/config";
 import { findElements } from "../core/html";
 import { parseJsonc, parseJsonDoc, rangeOf } from "../core/json";
@@ -368,8 +375,8 @@ test("undefined tags are noted on the question, except PrairieLearn defaults", a
   const { config } = loadConfig(course);
   const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
   const references = indexCourse(course, "2026-01-01");
-  assert.deepEqual([...references.tagsDefined()], ["used"]);
-  assert.deepEqual(references.filesUsingTags(), [file]);
+  assert.deepEqual([...references.namesDefined("tags")], ["used"]);
+  assert.deepEqual(references.filesUsing("tags"), [file]);
   const undefinedTags = async (withIndex = true) =>
     (await runRules(file, text, {
       courseRoot: course,
@@ -388,7 +395,83 @@ test("undefined tags are noted on the question, except PrairieLearn defaults", a
   references.update(infoCourse, '{ "tags": [{ "name": "used" }, { "name": "nope" }] }');
   assert.deepEqual(await undefinedTags(), []);
   references.remove(infoCourse);
-  assert.deepEqual([...references.tagsDefined()], []);
+  assert.deepEqual([...references.namesDefined("tags")], []);
+});
+
+test("undefined assessment sets are noted on the assessment, except PrairieLearn defaults", async () => {
+  const course = tmpDir();
+  const infoCourse = path.join(course, "infoCourse.json");
+  fs.writeFileSync(infoCourse, '{ "assessmentSets": [{ "abbreviation": "L", "name": "Lab", "heading": "Labs", "color": "blue1" }] }');
+  const file = path.join(course, "courseInstances", "Fa26", "assessments", "a", "infoAssessment.json");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const { config } = loadConfig(course);
+  const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
+  const references = indexCourse(course, "2026-01-01");
+  assert.deepEqual([...references.namesDefined("assessmentSets")], ["Lab"]);
+  const undefinedSets = async (set: unknown, withIndex = true) => {
+    const text = JSON.stringify({ title: "A", set, number: "1" });
+    return (await runRules(file, text, {
+      courseRoot: course,
+      config,
+      schemas,
+      references: withIndex ? references : undefined,
+    }))
+      .filter((d) => d.code === "prairielearn-navigator/undefined-assessment-set")
+      .map((d) => [text.slice(d.startOffset, d.endOffset), d.severity, d.identifier, d.message]);
+  };
+
+  assert.deepEqual(await undefinedSets("Lab"), []);
+  assert.deepEqual(await undefinedSets("Practice Quiz"), []);
+  assert.deepEqual(await undefinedSets(3), []);
+  assert.deepEqual(await undefinedSets("Recitation"), [
+    [
+      '"Recitation"',
+      "info",
+      "Recitation",
+      'assessment set "Recitation" is not defined in infoCourse.json (PrairieLearn will create it as gray1)',
+    ],
+  ]);
+  assert.deepEqual(await undefinedSets("Recitation", false), []);
+
+  references.update(infoCourse, '{ "assessmentSets": [{ "name": "Recitation" }] }');
+  assert.deepEqual(await undefinedSets("Recitation"), []);
+  assert.deepEqual(await undefinedSets("Lab"), [
+    ['"Lab"', "info", "Lab", 'assessment set "Lab" is not defined in infoCourse.json (PrairieLearn will create it as gray1)'],
+  ]);
+  references.remove(infoCourse);
+  assert.deepEqual([...references.namesDefined("assessmentSets")], []);
+});
+
+test("assessment set helpers find definitions, defaults, and the set under the cursor", () => {
+  const info = '{\n  "assessmentSets": [\n    { "abbreviation": "L", "name": "Lab", "heading": "Labs", "color": "blue1" },\n    { "color": "red2" }\n  ]\n}';
+  const sets = courseAssessmentSets(parseJsonDoc(info));
+  assert.deepEqual(
+    sets.map(({ name, abbreviation, heading, color, index }) => ({ name, abbreviation, heading, color, index })),
+    [{ name: "Lab", abbreviation: "L", heading: "Labs", color: "blue1", index: 0 }]
+  );
+  assert.equal(info.slice(sets[0].nameStart, sets[0].nameEnd), '"Lab"');
+  assert.deepEqual(plDefaultAssessmentSet("Practice Quiz"), {
+    abbreviation: "PQ", name: "Practice Quiz", heading: "Practice Quizzes", color: "pink1",
+  });
+  assert.equal(plDefaultAssessmentSet("Lab"), undefined);
+  assert.deepEqual(implicitAssessmentSet("Lab"), { name: "Lab", abbreviation: "Lab", heading: "Lab", color: "gray1" });
+
+  const assessmentText = '{ "set": "Lab", "number": "3", "title": "Lab" }';
+  const at = (text: string, needle: string, rel: string) =>
+    assessmentSetNameAt(rel, text, text.indexOf(needle) + 1);
+  assert.deepEqual(
+    assessmentSetAt(assessmentText, parseJsonDoc(assessmentText), assessmentText.indexOf('"Lab"') + 1),
+    { name: "Lab", number: "3", start: 9, end: 14 }
+  );
+  assert.equal(assessmentSetAt(assessmentText, parseJsonDoc(assessmentText), assessmentText.lastIndexOf('"Lab"') + 1), undefined);
+  assert.deepEqual(at(info, '"Lab"', "infoCourse.json"), {
+    name: "Lab", start: sets[0].nameStart, end: sets[0].nameEnd, definition: true,
+  });
+  assert.equal(at(info, '"Labs"', "infoCourse.json"), undefined);
+  assert.deepEqual(at(assessmentText, '"Lab"', "courseInstances/Fa26/assessments/a/infoAssessment.json"), {
+    name: "Lab", start: 9, end: 14, definition: false,
+  });
+  assert.equal(at(assessmentText, '"Lab"', "questions/q/info.json"), undefined);
 });
 
 test("tag helpers find definitions and the tag under the cursor", () => {

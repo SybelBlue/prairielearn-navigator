@@ -216,6 +216,26 @@
           "scope": "resource",
           "markdownDescription": "Severity on a tag in a question's `info.json` that `infoCourse.json` does not define and is not a PrairieLearn default tag. PrairieLearn creates such tags in `gray1`."
         },
+        "prairielearn-navigator.diagnostics.undefined-assessment-set": {
+          "type": "string",
+          "enum": [
+            "default",
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
+          "enumDescriptions": [
+            "Use the severity configured elsewhere, or the rule's built-in severity.",
+            "Do not report this diagnostic.",
+            "Report this diagnostic as information.",
+            "Report this diagnostic as a warning.",
+            "Report this diagnostic as an error."
+          ],
+          "default": "default",
+          "scope": "resource",
+          "markdownDescription": "Severity on an assessment's `set` in `infoAssessment.json` when `infoCourse.json` does not define it and it is not a PrairieLearn default assessment set. PrairieLearn creates such sets in `gray1`, with the name as abbreviation and heading."
+        },
         "prairielearn-navigator.diagnostics.unused-assessment-set": {
           "type": "string",
           "enum": [

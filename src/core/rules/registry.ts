@@ -7,6 +7,7 @@ import {
   schemaRule,
   unusedAssessmentSets,
   unusedQuestion,
+  undefinedAssessmentSets,
   undefinedTags,
   unusedTags,
 } from "./impls";
@@ -54,6 +55,10 @@ const otherRules = {
     ["*", courseFiles.question, undefinedTags],
   ],
 
+  "undefined-assessment-set": [
+    ["*", courseFiles.assessment, undefinedAssessmentSets],
+  ],
+
   // Course-wide rather than per file: see runCourseRules
   "question-info-missing": [],
 } as const satisfies RuleTable;
@@ -90,6 +95,7 @@ export const indexedRules: readonly RuleId[] = [
   "unused-tag",
   "unused-assessment-set",
   "undefined-tag",
+  "undefined-assessment-set",
 ];
 
 export function isRuleId(id: string): id is RuleId {

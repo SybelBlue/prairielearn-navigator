@@ -6,6 +6,7 @@ import { parseJsonDoc } from "./json";
 import { IsoDate } from "./plVersion";
 import { FileRef, findFileRefs, holdsReferences, sourceOf } from "./references/extract";
 import { refSpecs } from "./references/specs";
+import { courseAssessmentSets } from "./assessmentSets";
 import { courseTags } from "./tags";
 
 /** One place a course file references a target. */
@@ -29,12 +30,12 @@ export interface UsedNames {
 /**
  * Reverse index of every file reference in one course: which files
  * reference a given target. Also records the tags and assessment sets each
- * file uses, and the tags infoCourse.json defines. Updated one file at a time.
+ * file uses, and those infoCourse.json defines. Updated one file at a time.
  */
 export class ReferenceIndex {
   private usesByFile = new Map<string, Use[]>();
   private namesByFile = new Map<string, UsedNames>();
-  private definedTags = new Set<string>();
+  private definedNames: Record<keyof UsedNames, Set<string>> = noNames();
   private filesByTarget = new Map<string, Set<string>>();
   /** How many targets lie under each directory, to answer directory events quickly. */
   private targetsUnder = new Map<string, number>();
@@ -62,7 +63,11 @@ export class ReferenceIndex {
   update(file: string, text: string) {
     this.remove(file);
     if (this.isCourseInfo(file)) {
-      this.definedTags = new Set(courseTags(parseJsonDoc(text)).map((tag) => tag.name));
+      const doc = parseJsonDoc(text);
+      this.definedNames = {
+        tags: new Set(courseTags(doc).map((tag) => tag.name)),
+        assessmentSets: new Set(courseAssessmentSets(doc).map((set) => set.name)),
+      };
       return;
     }
     const source = sourceOf(text);
@@ -99,7 +104,7 @@ export class ReferenceIndex {
 
   remove(file: string) {
     if (this.isCourseInfo(file)) {
-      this.definedTags = new Set();
+      this.definedNames = noNames();
       return;
     }
     for (const use of this.usesByFile.get(file) ?? []) {
@@ -133,14 +138,14 @@ export class ReferenceIndex {
     return out;
   }
 
-  /** Names of the tags infoCourse.json defines. */
-  tagsDefined(): ReadonlySet<string> {
-    return this.definedTags;
+  /** Names of this kind that infoCourse.json defines. */
+  namesDefined(kind: keyof UsedNames): ReadonlySet<string> {
+    return this.definedNames[kind];
   }
 
-  /** Files that use at least one tag. */
-  filesUsingTags(): string[] {
-    return [...this.namesByFile].filter(([, names]) => names.tags.length > 0).map(([file]) => file);
+  /** Files that use at least one name of this kind. */
+  filesUsing(kind: keyof UsedNames): string[] {
+    return [...this.namesByFile].filter(([, names]) => names[kind].length > 0).map(([file]) => file);
   }
 
   /** References made by `file`. */
@@ -206,6 +211,10 @@ export class ReferenceIndex {
     }
     return [...out];
   }
+}
+
+function noNames(): Record<keyof UsedNames, Set<string>> {
+  return { tags: new Set(), assessmentSets: new Set() };
 }
 
 /**
