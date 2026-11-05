@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-11-04
+
 - Hovering a tag in a question's `info.json` shows its color, as PrairieLearn's
   badge, and its description; go-to-definition jumps to the tag in
   `infoCourse.json`. PrairieLearn's default tags show their built-in color and
