@@ -1041,6 +1041,63 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("assessment sets hover with the assessment's badge and jump to infoCourse.json", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const assessmentEditor = await vscode.window.showTextDocument(assessment);
+    const document = assessmentEditor.document;
+    const setRange = () => {
+      const start = document.getText().indexOf('"', document.getText().indexOf(":", document.getText().indexOf('"set"')));
+      return new vscode.Range(document.positionAt(start), document.positionAt(document.getText().indexOf('"', start + 1) + 1));
+    };
+    const setTo = (name: string) =>
+      assessmentEditor.edit((e) => e.replace(setRange(), JSON.stringify(name)));
+    const hoverText = async () => {
+      const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+        "vscode.executeHoverProvider", document.uri, setRange().start.translate(0, 1)
+      );
+      return hovers
+        .flatMap((hover) => hover.contents)
+        .map((content) => typeof content === "string" ? content : content.value)
+        .find((value) => value.includes("&nbsp;**")) ?? "";
+    };
+    const definitions = () =>
+      vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>(
+        "vscode.executeDefinitionProvider", document.uri, setRange().start.translate(0, 1)
+      );
+    try {
+      // hw1 is number "1" in the PrairieLearn default Homework set
+      const homework = await hoverText();
+      assert.ok(homework.includes('<span style="color:#00632d;background-color:#d2ffe6;">&nbsp;HW1&nbsp;</span>'), homework);
+      assert.match(homework, /\*\*Homework\*\*[\s\S]*Heading: Homeworks[\s\S]*PrairieLearn default assessment set/);
+      assert.deepStrictEqual(await definitions(), []);
+
+      await setTo("Lab <1>");
+      assert.match(await hoverText(), /&nbsp;Lab &#60;1&#62;1&nbsp;[\s\S]*Not defined in infoCourse\.json\. PrairieLearn creates it as gray1/);
+
+      const courseEditor = await vscode.window.showTextDocument(infoCourse);
+      try {
+        const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+        await courseEditor.edit((e) =>
+          e.insert(end, ', "assessmentSets": [{ "abbreviation": "L", "name": "Lab <1>", "heading": "Labs", "color": "blue2" }] ')
+        );
+        const lab = await hoverText();
+        assert.ok(lab.includes('<span style="color:#084465;background-color:#9cd7f7;">&nbsp;L1&nbsp;</span>'), lab);
+        assert.match(lab, /Heading: Labs/);
+        assert.doesNotMatch(lab, /Not defined|default/);
+        const [definition] = await definitions();
+        assert.ok(definition instanceof vscode.Location);
+        assert.strictEqual(definition.uri.fsPath, infoCourse.fsPath);
+        assert.strictEqual(courseEditor.document.getText(definition.range), '"Lab <1>"');
+      } finally {
+        await vscode.window.showTextDocument(infoCourse);
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+      }
+    } finally {
+      await vscode.window.showTextDocument(assessment);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("undefined assessment sets are noted live and can be defined", async () => {
     const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
     const undefinedSets = () =>

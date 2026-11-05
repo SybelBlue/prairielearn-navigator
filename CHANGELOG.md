@@ -10,6 +10,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
   definition or in a question's `info.json`, lists the definition and every
   question's `tags` entry naming it. On a tag, the question's assessments are
   no longer listed as uses of its `info.json`.
+- Hovering an assessment's `set` in `infoAssessment.json` shows the badge
+  PrairieLearn draws for the assessment (the set's abbreviation and the
+  assessment's number, in the set's color) and the set's heading;
+  go-to-definition jumps to the set in `infoCourse.json`. PrairieLearn's
+  default sets show their built-in abbreviation, color, and heading.
 - New `undefined-assessment-set` rule (info) for an assessment's `set` that
   `infoCourse.json` doesn't define and PrairieLearn has no default for, with a
   quick fix that defines the set as PrairieLearn would (`gray1`, with the name

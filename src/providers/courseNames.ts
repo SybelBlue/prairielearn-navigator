@@ -4,6 +4,13 @@ import * as vscode from "vscode";
 import { courseFiles, courseRelativePath } from "../core/courseFiles";
 import { offsetToPosition } from "../core/diagnostic";
 import { parseJsonDoc } from "../core/json";
+import {
+  AssessmentSetInfo,
+  assessmentSetAt,
+  courseAssessmentSets,
+  implicitAssessmentSet,
+  plDefaultAssessmentSet,
+} from "../core/assessmentSets";
 import { findCourseNameReferences, planCourseNameRename } from "../core/courseNameRenames";
 import { courseNameAt } from "../core/courseNames";
 import {
@@ -34,14 +41,34 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|<>&]/g, (c) => `\\${c}`);
 }
 
-/** The color name drawn as PrairieLearn draws a badge of that color. */
-function badge(color: string): string {
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+/** `label` (by default the color's name) drawn as PrairieLearn draws a badge of `color`. */
+function badge(color: string, label = color): string {
   const colors = plBadgeColors[color];
   if (!colors) {
-    return `\`${color.replace(/`/g, "")}\``;
+    return `\`${label.replace(/`/g, "")}\``;
   }
   // VS Code's hover sanitizer keeps only color and background-color styles
-  return `<span style="color:${colors.text};background-color:${colors.background};">&nbsp;${color}&nbsp;</span>`;
+  return `<span style="color:${colors.text};background-color:${colors.background};">&nbsp;${escapeHtml(label)}&nbsp;</span>`;
+}
+
+/** The range of a definition's name in infoCourse.json, whose text need not be open. */
+function definitionLocation(
+  infoCourse: string,
+  infoText: string,
+  definition: { nameStart: number; nameEnd: number }
+): vscode.Location {
+  const positionOf = (offset: number) => {
+    const { line, column } = offsetToPosition(infoText, offset);
+    return new vscode.Position(line - 1, column - 1);
+  };
+  return new vscode.Location(
+    vscode.Uri.file(infoCourse),
+    new vscode.Range(positionOf(definition.nameStart), positionOf(definition.nameEnd))
+  );
 }
 
 function tagHover(tag: TagInfo, note?: string): vscode.MarkdownString {
@@ -120,16 +147,93 @@ export class TagProvider implements vscode.HoverProvider, vscode.DefinitionProvi
     if (!found?.defined || found.infoText === undefined) {
       return undefined;
     }
-    const { defined, infoCourse, infoText } = found;
-    // Offsets into infoCourse.json's text, which need not be open
-    const positionOf = (offset: number) => {
-      const { line, column } = offsetToPosition(infoText, offset);
-      return new vscode.Position(line - 1, column - 1);
-    };
-    return new vscode.Location(
-      vscode.Uri.file(infoCourse),
-      new vscode.Range(positionOf(defined.nameStart), positionOf(defined.nameEnd))
+    return definitionLocation(found.infoCourse, found.infoText, found.defined);
+  }
+}
+
+/**
+ * Hover as PrairieLearn draws the assessment's badge: its set's
+ * abbreviation and the assessment's number, in the set's color.
+ */
+function assessmentSetHover(set: AssessmentSetInfo, number: string | undefined, note?: string): vscode.MarkdownString {
+  const md = new vscode.MarkdownString();
+  md.supportHtml = true;
+  const label = `${set.abbreviation ?? set.name}${number ?? ""}`;
+  md.appendMarkdown(`${badge(set.color ?? "", label)}&nbsp;**${escapeMarkdown(set.name)}**`);
+  const details = [
+    set.heading === undefined ? undefined : `Heading: ${escapeMarkdown(set.heading)}`,
+    note === undefined ? undefined : `_${note}_`,
+  ].filter((d) => d !== undefined);
+  if (details.length > 0) {
+    md.appendMarkdown(`\n\n---\n\n${details.join("\n\n")}`);
+  }
+  return md;
+}
+
+/**
+ * Hover and go-to-definition for an assessment's `set` in its
+ * infoAssessment.json: the badge PrairieLearn draws for the assessment, the
+ * set's heading, and its entry in infoCourse.json.
+ */
+export class AssessmentSetProvider implements vscode.HoverProvider, vscode.DefinitionProvider {
+  constructor(private courseCache: Pick<CourseCache, "getCourseIdFor">) {}
+
+  /** The set at `position`, and its definition in infoCourse.json if any. */
+  private lookup(document: vscode.TextDocument, position: vscode.Position) {
+    const courseRoot = this.courseCache.getCourseIdFor(document.uri);
+    if (!courseRoot) {
+      return undefined;
+    }
+    const text = document.getText();
+    const set = assessmentSetAt(text, parseJsonDoc(text), document.offsetAt(position));
+    if (!set) {
+      return undefined;
+    }
+    const infoCourse = path.join(courseRoot, courseFiles.course);
+    const infoText = currentText(infoCourse);
+    const defined = infoText === undefined
+      ? undefined
+      : courseAssessmentSets(parseJsonDoc(infoText)).find((s) => s.name === set.name);
+    return { set, infoCourse, infoText, defined };
+  }
+
+  provideHover(
+    document: vscode.TextDocument,
+    position: vscode.Position
+  ): vscode.Hover | undefined {
+    const found = this.lookup(document, position);
+    if (!found) {
+      return undefined;
+    }
+    const { set, defined } = found;
+    const range = new vscode.Range(document.positionAt(set.start), document.positionAt(set.end));
+    if (defined) {
+      return new vscode.Hover(assessmentSetHover(defined, set.number), range);
+    }
+    const plDefault = plDefaultAssessmentSet(set.name);
+    if (plDefault) {
+      return new vscode.Hover(assessmentSetHover(plDefault, set.number, "PrairieLearn default assessment set"), range);
+    }
+    const implicit = implicitAssessmentSet(set.name);
+    return new vscode.Hover(
+      assessmentSetHover(
+        implicit,
+        set.number,
+        `Not defined in infoCourse.json. PrairieLearn creates it as ${implicit.color}.`
+      ),
+      range
     );
+  }
+
+  provideDefinition(
+    document: vscode.TextDocument,
+    position: vscode.Position
+  ): vscode.Location | undefined {
+    const found = this.lookup(document, position);
+    if (!found?.defined || found.infoText === undefined) {
+      return undefined;
+    }
+    return definitionLocation(found.infoCourse, found.infoText, found.defined);
   }
 }
 

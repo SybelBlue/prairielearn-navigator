@@ -29,6 +29,7 @@ import {
   RuleDiagnosticCollection,
   removeUnusedQuestion,
   registerQidRenameParticipant,
+  AssessmentSetProvider,
   CourseNameProvider,
   TagProvider,
   UuidCompletionItemProvider,
@@ -68,6 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
   const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
   const tagProvider = new TagProvider(courseCache);
+  const assessmentSetProvider = new AssessmentSetProvider(courseCache);
   const courseNameProvider = new CourseNameProvider(courseCache, referenceIndex);
   const fileReferenceProvider = new FileReferenceProvider(
     courseCache,
@@ -188,6 +190,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Tag hover and jump to infoCourse.json
     vscode.languages.registerHoverProvider(infoQuestionPatterns, tagProvider),
     vscode.languages.registerDefinitionProvider(infoQuestionPatterns, tagProvider),
+    // Assessment set hover and jump to infoCourse.json
+    vscode.languages.registerHoverProvider(infoAssessmentPatterns, assessmentSetProvider),
+    vscode.languages.registerDefinitionProvider(infoAssessmentPatterns, assessmentSetProvider),
     // Rename and find references of a defined tag or assessment set across the course
     vscode.languages.registerRenameProvider(courseNamePatterns, courseNameProvider),
     vscode.languages.registerReferenceProvider(courseNamePatterns, courseNameProvider),
