@@ -19,6 +19,7 @@ import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
 import { SchemaStore } from "../core/schemas";
+import { courseTags, plBadgeColors, plDefaultTag, tagAt } from "../core/tags";
 import { vscodeRuleSettings } from "../providers/ruleSettings";
 
 const fixtures = path.join(__dirname, "fixtures");
@@ -355,6 +356,63 @@ test("unused tags and assessment sets are flagged on their infoCourse.json name"
     remaining.map((diagnostic) => diagnostic.code),
     ["prairielearn-navigator/unused-assessment-set"]
   );
+});
+
+test("undefined tags are noted on the question, except PrairieLearn defaults", async () => {
+  const course = tmpDir();
+  const infoCourse = path.join(course, "infoCourse.json");
+  fs.writeFileSync(infoCourse, '{ "tags": [{ "name": "used", "color": "blue1" }] }');
+  const file = path.join(course, "questions", "q", "info.json");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const text = '{ "title": "Q", "tags": ["used", "numeric", "nope", 3] }';
+  fs.writeFileSync(file, text);
+  const { config } = loadConfig(course);
+  const schemas = new SchemaStore({ cacheDir: config.schemaCacheDir });
+  const references = indexCourse(course, "2026-01-01");
+  assert.deepEqual([...references.tagsDefined()], ["used"]);
+  assert.deepEqual(references.filesUsingTags(), [file]);
+  const undefinedTags = async (withIndex = true) =>
+    (await runRules(file, text, {
+      courseRoot: course,
+      config,
+      schemas,
+      references: withIndex ? references : undefined,
+    }))
+      .filter((d) => d.code === "prairielearn-navigator/undefined-tag")
+      .map((d) => [text.slice(d.startOffset, d.endOffset), d.severity, d.identifier, d.message]);
+
+  assert.deepEqual(await undefinedTags(), [
+    ['"nope"', "info", "nope", 'tag "nope" is not defined in infoCourse.json (PrairieLearn will create it as gray1)'],
+  ]);
+  assert.deepEqual(await undefinedTags(false), []);
+
+  references.update(infoCourse, '{ "tags": [{ "name": "used" }, { "name": "nope" }] }');
+  assert.deepEqual(await undefinedTags(), []);
+  references.remove(infoCourse);
+  assert.deepEqual([...references.tagsDefined()], []);
+});
+
+test("tag helpers find definitions and the tag under the cursor", () => {
+  const info = '{\n  "tags": [\n    { "name": "hw", "color": "red1", "description": "Homework" },\n    { "color": "red2" }\n  ]\n}';
+  const tags = courseTags(parseJsonDoc(info));
+  assert.equal(tags.length, 1);
+  assert.deepEqual(
+    { ...tags[0], text: info.slice(tags[0].nameStart, tags[0].nameEnd) },
+    { name: "hw", color: "red1", description: "Homework", index: 0, nameStart: tags[0].nameStart, nameEnd: tags[0].nameEnd, text: '"hw"' }
+  );
+  assert.deepEqual(courseTags(parseJsonDoc('{ "tags": {} }')), []);
+
+  const question = '{ "title": "hw", "tags": ["a", "hw"] }';
+  const doc = parseJsonDoc(question);
+  const at = question.lastIndexOf("hw");
+  assert.deepEqual(tagAt(question, doc, at), { name: "hw", index: 1, start: at - 1, end: at + 3 });
+  assert.equal(tagAt(question, doc, question.indexOf("hw")), undefined); // the title
+  assert.equal(tagAt(question, doc, question.indexOf("[")), undefined);
+
+  assert.equal(plDefaultTag("MC")?.color, "green1");
+  assert.equal(plDefaultTag("Fa21")?.color, "gray1");
+  assert.equal(plDefaultTag("Fa22"), undefined);
+  assert.equal(Object.keys(plBadgeColors).length, 30);
 });
 
 test("severity keys are shorthand for their rule's setting", () => {

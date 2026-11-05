@@ -8,6 +8,7 @@ export const vscodeRuleSettings = {
   "unused-question": "diagnostics.unused-question",
   "unused-tag": "diagnostics.unused-tag",
   "unused-assessment-set": "diagnostics.unused-assessment-set",
+  "undefined-tag": "diagnostics.undefined-tag",
   "question-info-missing": "diagnostics.question-info-missing",
   "client-files-course-exist": "diagnostics.client-files-course-exist",
   "client-files-question-exist": "diagnostics.client-files-question-exist",

@@ -7,6 +7,7 @@ import { UsedNames } from "../referenceIndex";
 import { FileRef, findFileRefs } from "../references/extract";
 import { RefSpec, TargetKind } from "../references/specs";
 import { SchemaName } from "../schemas";
+import { implicitTagColor, plDefaultTag } from "../tags";
 import { RuleContext, RuleImpl } from "./types";
 
 /**
@@ -238,6 +239,29 @@ export const unusedTags = unusedCourseNames(
   "tags",
   (name) => `tag "${name}" is not used by any question`
 );
+
+/**
+ * Notes each tag a question uses that infoCourse.json does not define and
+ * PrairieLearn has no default for. PrairieLearn accepts these, creating
+ * them in gray.
+ */
+export const undefinedTags: RuleImpl = ({ references, doc }) => {
+  const tags = (doc.value as { tags?: unknown } | undefined)?.tags;
+  if (!references || doc.errors.length > 0 || !Array.isArray(tags)) {
+    return [];
+  }
+  const defined = references.tagsDefined();
+  return tags.flatMap((name: unknown, i): Diagnostic[] =>
+    typeof name === "string" && !defined.has(name) && !plDefaultTag(name)
+      ? [{
+          ...rangeOf(doc, ["tags", i]),
+          message: `tag "${name}" is not defined in infoCourse.json (PrairieLearn will create it as ${implicitTagColor})`,
+          severity: "info",
+          identifier: name,
+        }]
+      : []
+  );
+};
 
 export const unusedAssessmentSets = unusedCourseNames(
   "assessmentSets",

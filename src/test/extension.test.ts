@@ -964,6 +964,83 @@ suite("PrairieLearn Navigator", () => {
     }
   });
 
+  test("tags hover with their color, jump to infoCourse.json, and undefined ones can be defined", async () => {
+    const infoCourse = vscode.Uri.file(path.join(course, "infoCourse.json"));
+    const undefinedTags = () =>
+      ourDiagnostics(depsInfo)
+        .filter((d) => d.code === "prairielearn-navigator/undefined-tag")
+        .map((d) => d.message);
+    const courseEditor = await vscode.window.showTextDocument(infoCourse);
+    try {
+      const end = courseEditor.document.positionAt(courseEditor.document.getText().lastIndexOf("}"));
+      await courseEditor.edit((e) =>
+        e.insert(end, ', "tags": [{ "name": "t1", "color": "red1", "description": "First *tag*" }] ')
+      );
+      const questionEditor = await vscode.window.showTextDocument(depsInfo);
+      try {
+        await questionEditor.edit((e) =>
+          e.insert(new vscode.Position(0, 1), '\n  "tags": ["t1", "numeric", "nope"],')
+        );
+        const document = questionEditor.document;
+        const at = (tag: string) => document.positionAt(document.getText().indexOf(`"${tag}"`) + 1);
+        const hoverText = async (tag: string) => {
+          const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+            "vscode.executeHoverProvider", document.uri, at(tag)
+          );
+          return hovers
+            .flatMap((hover) => hover.contents)
+            .map((content) => typeof content === "string" ? content : content.value)
+            .find((value) => value.includes(`**${tag}**`)) ?? "";
+        };
+        const definitions = (tag: string) =>
+          vscode.commands.executeCommand<(vscode.Location | vscode.LocationLink)[]>(
+            "vscode.executeDefinitionProvider", document.uri, at(tag)
+          );
+
+        const t1 = await hoverText("t1");
+        assert.ok(t1.includes('<span style="color:#c73000;background-color:#ffebe4;">&nbsp;red1&nbsp;</span>'), t1);
+        assert.ok(t1.includes("First *tag*"), t1);
+        assert.match(await hoverText("numeric"), /brown1[\s\S]*numerical values[\s\S]*PrairieLearn default tag/);
+        assert.match(await hoverText("nope"), /gray1[\s\S]*Not defined in infoCourse\.json/);
+
+        const [definition] = await definitions("t1");
+        assert.ok(definition instanceof vscode.Location);
+        assert.strictEqual(definition.uri.fsPath, infoCourse.fsPath);
+        assert.strictEqual(courseEditor.document.getText(definition.range), '"t1"');
+        assert.deepStrictEqual(await definitions("numeric"), []);
+        assert.deepStrictEqual(await definitions("nope"), []);
+
+        const [diagnostic] = await until(
+          () => ourDiagnostics(depsInfo).filter((d) => d.code === "prairielearn-navigator/undefined-tag"),
+          (ds) => ds.length === 1
+        );
+        assert.strictEqual(diagnostic.severity, vscode.DiagnosticSeverity.Information);
+        assert.strictEqual(document.getText(diagnostic.range), '"nope"');
+        const actions = new DiagnosticQuickFixProvider({ getCourseIdFor: () => course }).provideCodeActions(
+          document,
+          diagnostic.range,
+          { diagnostics: [diagnostic], only: vscode.CodeActionKind.QuickFix, triggerKind: vscode.CodeActionTriggerKind.Invoke }
+        );
+        const define = actions.find((action) => action.title === 'Define tag "nope" in infoCourse.json');
+        assert.ok(define?.command && define.isPreferred);
+        await vscode.commands.executeCommand(define.command.command, ...(define.command.arguments ?? []));
+
+        const defined = JSON.parse(courseEditor.document.getText()) as { tags: unknown[] };
+        assert.deepStrictEqual(defined.tags.at(-1), { name: "nope", color: "gray1", description: "nope" });
+        const active = vscode.window.activeTextEditor;
+        assert.strictEqual(active?.document.uri.fsPath, infoCourse.fsPath);
+        assert.strictEqual(active.document.getText(active.selection), "gray1");
+        assert.deepStrictEqual(await until(undefinedTags, (ds) => ds.length === 0), []);
+      } finally {
+        await vscode.window.showTextDocument(depsInfo);
+        await vscode.commands.executeCommand("workbench.action.files.revert");
+      }
+    } finally {
+      await vscode.window.showTextDocument(infoCourse);
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+    }
+  });
+
   test("the unusedQuestions setting sets the note's severity", async () => {
     const settings = vscode.workspace.getConfiguration("prairielearn-navigator");
     const unused = () =>

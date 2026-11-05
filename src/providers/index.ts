@@ -6,6 +6,7 @@ export {
 } from "./completions";
 export { ConfigProvider } from "./config";
 export {
+  defineTag,
   DiagnosticQuickFixProvider,
   diagnosticRuleId,
   ignoreDiagnostic,
@@ -30,6 +31,7 @@ export {
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
 } from "./lenses";
+export { TagProvider } from "./tags";
 export {
   prepareQidRenameWorkspaceEdit,
   qidRenamesForFileMoves,

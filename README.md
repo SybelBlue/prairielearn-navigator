@@ -9,7 +9,8 @@ This extension is still experimental and may change or break.
 - Diagnostics for course files: PrairieLearn schema validation for a chosen
   PrairieLearn version; missing, incomplete, duplicate, and unused questions;
   question directories PrairieLearn can't load for lack of an `info.json`;
-  unused tags and assessment sets; and every file a course names that doesn't
+  unused tags and assessment sets; tags a question uses that `infoCourse.json`
+  doesn't define; and every file a course names that doesn't
   exist (see the
   [rules](packages/cli/README.md#rules)).
 - For every one of those file references:
@@ -18,6 +19,9 @@ This extension is still experimental and may change or break.
     referenced file, a "N uses" CodeLens at the top of referenced files, and
     **PrairieLearn: Find Uses of File** in the explorer's context menu (works
     for images too).
+- Tags in a question's `info.json` show their color, as PrairieLearn draws the
+  badge, and description on hover, and go-to-definition jumps to the tag in
+  `infoCourse.json`. An undefined tag has a quick fix that adds it there.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.
@@ -56,7 +60,8 @@ file**, which adds a suppression to `.pl-navigator.jsonc`, and **Configure
 severity for …**, which opens that rule's dropdown in VS Code Settings.
 Suppressions use semantic identifiers when available—question ids, tag names,
 and assessment-set names—and fall back to exact message/occurrence matching.
-Unused tags and assessment sets can be removed directly; an unused question
+Unused tags and assessment sets can be removed directly, undefined tags can be
+added to `infoCourse.json`, and an unused question
 can be moved to Trash after confirmation.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going

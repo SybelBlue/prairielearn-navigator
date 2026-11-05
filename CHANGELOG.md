@@ -6,6 +6,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Hovering a tag in a question's `info.json` shows its color, as PrairieLearn's
+  badge, and its description; go-to-definition jumps to the tag in
+  `infoCourse.json`. PrairieLearn's default tags show their built-in color and
+  description.
+- New `undefined-tag` rule (info) for question tags that `infoCourse.json`
+  doesn't define and PrairieLearn has no default for, with a quick fix that
+  defines the tag.
+
 ## [1.2.2] - 2026-10-30
 
 - Added a `rename-qids` CLI command that previews or writes bulk semantic QID

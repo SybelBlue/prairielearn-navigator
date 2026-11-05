@@ -14,6 +14,7 @@ import {
   ConfigProvider,
   CourseHeaderCodeLensProvider,
   CourseInstanceHeaderCodeLensProvider,
+  defineTag,
   DiagnosticQuickFixProvider,
   anyFileSelector,
   FileReferenceProvider,
@@ -27,6 +28,7 @@ import {
   RuleDiagnosticCollection,
   removeUnusedQuestion,
   registerQidRenameParticipant,
+  TagProvider,
   UuidCompletionItemProvider,
 } from "./providers";
 import { DebugView } from "./debugView";
@@ -63,6 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
     debounceMs,
   );
   const assessmentCache = new AssessmentCache(courseCache, referenceIndex);
+  const tagProvider = new TagProvider(courseCache);
   const fileReferenceProvider = new FileReferenceProvider(
     courseCache,
     configProvider,
@@ -139,6 +142,10 @@ export function activate(context: vscode.ExtensionContext) {
       "prairielearn-navigator.removeUnusedQuestion",
       removeUnusedQuestion,
     ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.defineTag",
+      defineTag,
+    ),
 
     // Diagnostics
     ...new RuleDiagnosticCollection(
@@ -165,6 +172,10 @@ export function activate(context: vscode.ExtensionContext) {
       anyFileSelector,
       fileReferenceProvider,
     ),
+
+    // Tag hover and jump to infoCourse.json
+    vscode.languages.registerHoverProvider(infoQuestionPatterns, tagProvider),
+    vscode.languages.registerDefinitionProvider(infoQuestionPatterns, tagProvider),
 
     // IntelliSense Completion Providers
     vscode.languages.registerCompletionItemProvider(

@@ -38,6 +38,7 @@ Each diagnostic ends with its rule id, e.g. `[schema]`.
 | `unused-question` | question `info.json` | Questions no assessment uses, on their `title` (info). Set with `unusedQuestions`. |
 | `unused-tag` | `infoCourse.json` | Tags no question lists in its `tags`, on their `name` (warning). Set with `unusedTags`. |
 | `unused-assessment-set` | `infoCourse.json` | Assessment sets no assessment names as its `set`, on their `name` (warning). Set with `unusedAssessmentSets`. |
+| `undefined-tag` | question `info.json` | Tags in `tags` that `infoCourse.json` does not define and that are not PrairieLearn default tags (`numeric`, `MC`, `code`, …). PrairieLearn creates these in `gray1` (info). |
 | `question-info-missing` | directories in `questions/` | Directories with files but no `info.json` and no question below them, which PrairieLearn fails to load from disk. Shown at the start of the directory's `question.html`, or else its first file. Set with `missingQuestionInfo`. |
 | `question-exists` | `infoAssessment.json`, question `info.json` (`template`) | Question ids with no directory, `info.json`, or `question.html` |
 | `client-files-course-exist` | question, element, and element extension `info.json` | `clientFilesCourseStyles`/`Scripts` missing from `clientFilesCourse/` |

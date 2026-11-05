@@ -7,6 +7,7 @@ import {
   schemaRule,
   unusedAssessmentSets,
   unusedQuestion,
+  undefinedTags,
   unusedTags,
 } from "./impls";
 import { RuleEntry, RuleTable } from "./types";
@@ -49,6 +50,10 @@ const otherRules = {
     ["*", courseFiles.course, unusedAssessmentSets],
   ],
 
+  "undefined-tag": [
+    ["*", courseFiles.question, undefinedTags],
+  ],
+
   // Course-wide rather than per file: see runCourseRules
   "question-info-missing": [],
 } as const satisfies RuleTable;
@@ -80,7 +85,12 @@ export const rules: Record<RuleId, readonly RuleEntry[]> = {
 export type RuleId = keyof typeof otherRules | RefRuleId;
 
 /** Rules that read the reference index; without one they report nothing. */
-export const indexedRules: readonly RuleId[] = ["unused-question", "unused-tag", "unused-assessment-set"];
+export const indexedRules: readonly RuleId[] = [
+  "unused-question",
+  "unused-tag",
+  "unused-assessment-set",
+  "undefined-tag",
+];
 
 export function isRuleId(id: string): id is RuleId {
   return Object.hasOwn(rules, id);

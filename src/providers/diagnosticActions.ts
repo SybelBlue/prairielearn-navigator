@@ -9,8 +9,10 @@ import {
   parseTree,
 } from "jsonc-parser";
 import { configFileName } from "../core/config";
-import { parseJsonc } from "../core/json";
+import { courseFiles } from "../core/courseFiles";
+import { parseJsonc, parseJsonDoc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
+import { courseTags, implicitTagColor } from "../core/tags";
 import { CourseCache } from "../filewatchers";
 import { vscodeRuleSettings } from "./ruleSettings";
 
@@ -30,6 +32,11 @@ export type IgnoreDiagnosticArgs = IgnoreDiagnosticBase & (
 export interface RemoveUnusedQuestionArgs {
   courseRoot: string;
   file: string;
+}
+
+export interface DefineTagArgs {
+  courseRoot: string;
+  name: string;
 }
 
 /** The base rule id from a diagnostic code, including specialized schema codes. */
@@ -191,6 +198,86 @@ export async function removeUnusedQuestion(
   return true;
 }
 
+/**
+ * Adds a tag to infoCourse.json's `tags`, in the color PrairieLearn would give
+ * it, then opens the file with that color selected to change it. The edit is
+ * left unsaved.
+ */
+export async function defineTag(args: DefineTagArgs): Promise<boolean> {
+  const uri = vscode.Uri.file(path.join(args.courseRoot, courseFiles.course));
+  const document = await vscode.workspace.openTextDocument(uri);
+  const existing = courseTags(parseJsonDoc(document.getText())).find((t) => t.name === args.name);
+  if (existing) {
+    const editor = await vscode.window.showTextDocument(document);
+    const start = document.positionAt(existing.nameStart);
+    editor.selection = new vscode.Selection(start, document.positionAt(existing.nameEnd));
+    editor.revealRange(editor.selection);
+    return true;
+  }
+  const text = document.getText();
+  const root = parseJsonc(text);
+  if (typeof root !== "object" || root === null || Array.isArray(root)) {
+    void vscode.window.showErrorMessage(
+      `PrairieLearn Navigator: fix ${courseFiles.course} before defining a tag.`
+    );
+    return false;
+  }
+  const edits = modify(
+    text,
+    ["tags", -1],
+    { name: args.name, color: implicitTagColor, description: args.name },
+    {
+      formattingOptions: formattingOptions(
+        text,
+        document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n"
+      ),
+    }
+  );
+  const workspaceEdit = new vscode.WorkspaceEdit();
+  for (const edit of edits) {
+    workspaceEdit.replace(
+      uri,
+      new vscode.Range(
+        document.positionAt(edit.offset),
+        document.positionAt(edit.offset + edit.length)
+      ),
+      edit.content
+    );
+  }
+  if (!(await vscode.workspace.applyEdit(workspaceEdit))) {
+    return false;
+  }
+  const editor = await vscode.window.showTextDocument(document);
+  const tree = parseTree(document.getText());
+  const tags = tree && findNodeAtLocation(tree, ["tags"]);
+  const added = tags?.children?.at(-1);
+  const color = added && findNodeAtLocation(added, ["color"]);
+  if (color) {
+    // Inside the quotes, so typing replaces the color name
+    editor.selection = new vscode.Selection(
+      document.positionAt(color.offset + 1),
+      document.positionAt(color.offset + color.length - 1)
+    );
+    editor.revealRange(editor.selection);
+  }
+  return true;
+}
+
+/** The tag an undefined-tag diagnostic is on. */
+function undefinedTagName(
+  document: vscode.TextDocument,
+  diagnostic: vscode.Diagnostic
+): string | undefined {
+  const text = document.getText();
+  const jsonPath = getLocation(text, document.offsetAt(diagnostic.range.start) + 1).path;
+  if (jsonPath[0] !== "tags" || typeof jsonPath[1] !== "number") {
+    return undefined;
+  }
+  const tree = parseTree(text);
+  const node = tree && findNodeAtLocation(tree, ["tags", jsonPath[1]]);
+  return typeof node?.value === "string" ? node.value : undefined;
+}
+
 function diagnosticOccurrence(
   document: vscode.TextDocument,
   target: vscode.Diagnostic,
@@ -335,6 +422,24 @@ export class DiagnosticQuickFixProvider implements vscode.CodeActionProvider {
       const removal = unusedItemRemoval(document, diagnostic, rule, courseRoot);
       if (removal) {
         actions.push(removal);
+      }
+
+      const tag = rule === "undefined-tag" && courseRoot
+        ? undefinedTagName(document, diagnostic)
+        : undefined;
+      if (tag !== undefined) {
+        const define = new vscode.CodeAction(
+          `Define tag "${tag}" in ${courseFiles.course}`,
+          vscode.CodeActionKind.QuickFix
+        );
+        define.diagnostics = [diagnostic];
+        define.isPreferred = true;
+        define.command = {
+          command: "prairielearn-navigator.defineTag",
+          title: define.title,
+          arguments: [{ courseRoot, name: tag } satisfies DefineTagArgs],
+        };
+        actions.push(define);
       }
 
       if (courseRoot) {

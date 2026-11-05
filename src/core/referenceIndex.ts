@@ -2,9 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { courseFiles, courseRelativePath, matchesGlob } from "./courseFiles";
 import { offsetToPosition } from "./diagnostic";
+import { parseJsonDoc } from "./json";
 import { IsoDate } from "./plVersion";
 import { FileRef, findFileRefs, holdsReferences, sourceOf } from "./references/extract";
 import { refSpecs } from "./references/specs";
+import { courseTags } from "./tags";
 
 /** One place a course file references a target. */
 export interface Use {
@@ -27,11 +29,12 @@ export interface UsedNames {
 /**
  * Reverse index of every file reference in one course: which files
  * reference a given target. Also records the tags and assessment sets each
- * file uses. Updated one file at a time.
+ * file uses, and the tags infoCourse.json defines. Updated one file at a time.
  */
 export class ReferenceIndex {
   private usesByFile = new Map<string, Use[]>();
   private namesByFile = new Map<string, UsedNames>();
+  private definedTags = new Set<string>();
   private filesByTarget = new Map<string, Set<string>>();
   /** How many targets lie under each directory, to answer directory events quickly. */
   private targetsUnder = new Map<string, number>();
@@ -46,9 +49,22 @@ export class ReferenceIndex {
     return holdsReferences(courseRelativePath(this.courseRoot, file));
   }
 
+  /** Whether the index reads `file`: it holds references or is infoCourse.json. */
+  indexes(file: string): boolean {
+    return this.holdsReferences(file) || this.isCourseInfo(file);
+  }
+
+  private isCourseInfo(file: string): boolean {
+    return courseRelativePath(this.courseRoot, file) === courseFiles.course;
+  }
+
   /** Re-reads the references in `file` from `text`. */
   update(file: string, text: string) {
     this.remove(file);
+    if (this.isCourseInfo(file)) {
+      this.definedTags = new Set(courseTags(parseJsonDoc(text)).map((tag) => tag.name));
+      return;
+    }
     const source = sourceOf(text);
     const relPath = courseRelativePath(this.courseRoot, file);
     const refs = findFileRefs(
@@ -82,6 +98,10 @@ export class ReferenceIndex {
   }
 
   remove(file: string) {
+    if (this.isCourseInfo(file)) {
+      this.definedTags = new Set();
+      return;
+    }
     for (const use of this.usesByFile.get(file) ?? []) {
       const files = this.filesByTarget.get(use.ref.target!);
       files?.delete(file);
@@ -111,6 +131,16 @@ export class ReferenceIndex {
       names[kind].forEach((n) => out.add(n));
     }
     return out;
+  }
+
+  /** Names of the tags infoCourse.json defines. */
+  tagsDefined(): ReadonlySet<string> {
+    return this.definedTags;
+  }
+
+  /** Files that use at least one tag. */
+  filesUsingTags(): string[] {
+    return [...this.namesByFile].filter(([, names]) => names.tags.length > 0).map(([file]) => file);
   }
 
   /** References made by `file`. */
@@ -196,8 +226,9 @@ function usedNames(relPath: string, value: () => unknown): UsedNames | undefined
   };
 }
 
-function referenceFiles(courseRoot: string): string[] {
-  const globs = [...new Set(refSpecs.map((s) => s.files))];
+/** Files the index reads: every file that can hold references, and infoCourse.json. */
+function indexedFiles(courseRoot: string): string[] {
+  const globs = [...new Set([...refSpecs.map((s) => s.files), courseFiles.course])];
   return fs.globSync(globs, { cwd: courseRoot }).map((rel) => path.join(courseRoot, rel));
 }
 
@@ -220,7 +251,7 @@ function covers(use: Use, dir: string, target: string): boolean {
 /** Indexes every reference-holding file in a course from disk. */
 export function indexCourse(courseRoot: string, plDate: IsoDate): ReferenceIndex {
   const index = new ReferenceIndex(courseRoot, plDate);
-  for (const file of referenceFiles(courseRoot)) {
+  for (const file of indexedFiles(courseRoot)) {
     index.update(file, fs.readFileSync(file, "utf-8"));
   }
   return index;
@@ -236,7 +267,7 @@ export async function indexCourseAsync(
   batchSize = 64
 ): Promise<ReferenceIndex> {
   const index = new ReferenceIndex(courseRoot, plDate);
-  const files = referenceFiles(courseRoot); // a directory walk; reading is the slow part
+  const files = indexedFiles(courseRoot); // a directory walk; reading is the slow part
   for (let i = 0; i < files.length; i += batchSize) {
     const batch = files.slice(i, i + batchSize);
     const texts = await Promise.all(

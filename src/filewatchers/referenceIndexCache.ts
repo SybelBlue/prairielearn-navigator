@@ -13,7 +13,8 @@ export interface ReferencesChanged {
   /**
    * Files whose diagnostics may change: those whose references point at or
    * into `changed`, the info.json of questions `changed` started or stopped
-   * using, and infoCourse.json when the tags or sets `changed` uses change.
+   * using, infoCourse.json when the tags or sets `changed` uses change, and
+   * every question using tags when the tags infoCourse.json defines change.
    */
   affected: string[];
 }
@@ -96,7 +97,7 @@ export class ReferenceIndexCache {
       this.indexes.set(courseRoot, index);
       // Unsaved editors win over the disk, then replay changes made meanwhile
       for (const doc of vscode.workspace.textDocuments) {
-        if (doc.isDirty && doc.uri.fsPath.startsWith(courseRoot) && index.holdsReferences(doc.uri.fsPath)) {
+        if (doc.isDirty && doc.uri.fsPath.startsWith(courseRoot) && index.indexes(doc.uri.fsPath)) {
           index.update(doc.uri.fsPath, doc.getText());
         }
       }
@@ -151,9 +152,11 @@ export class ReferenceIndexCache {
     const file = uri.fsPath;
     const usedQuestions = new Set<string>();
     let namesChanged = false;
-    if (index.holdsReferences(file)) {
+    let tagsDefinedChanged = false;
+    if (index.indexes(file)) {
       const before = questionsUsedIn(index, file);
       const namesBefore = JSON.stringify(index.namesIn(file));
+      const tagsBefore = [...index.tagsDefined()].sort().join("\0");
       if (text !== undefined) {
         index.update(file, text);
       } else if (fs.existsSync(file)) {
@@ -165,12 +168,14 @@ export class ReferenceIndexCache {
       before.forEach((q) => after.has(q) || usedQuestions.add(q));
       after.forEach((q) => before.has(q) || usedQuestions.add(q));
       namesChanged = JSON.stringify(index.namesIn(file)) !== namesBefore;
+      tagsDefinedChanged = [...index.tagsDefined()].sort().join("\0") !== tagsBefore;
     }
     const affected = [
       ...new Set([
         ...index.filesAffectedBy(file),
         ...[...usedQuestions].map((q) => path.join(q, "info.json")),
         ...(namesChanged ? [path.join(courseRoot, "infoCourse.json")] : []),
+        ...(tagsDefinedChanged ? index.filesUsingTags() : []),
       ]),
     ];
     if (affected.length > 0) {
