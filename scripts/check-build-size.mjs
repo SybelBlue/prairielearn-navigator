@@ -123,8 +123,13 @@ try {
     "LICENSE",
     "README.md",
     "dist/cli.js",
+    "dist/core/assessmentQuestionRefs.d.ts",
+    "dist/core/course.d.ts",
+    "dist/core/json.d.ts",
     "dist/core/questionFileResolver.d.ts",
+    "dist/core/tags.d.ts",
     "dist/index.js",
+    "dist/library.d.ts",
     "dist/shared.js",
     "package.json",
   ];

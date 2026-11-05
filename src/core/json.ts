@@ -1,18 +1,33 @@
 import {
   findNodeAtLocation,
-  JSONPath,
   Node,
   parse,
   ParseError,
   parseTree,
   printParseErrorCode,
 } from "jsonc-parser";
+import { treeOf } from "./jsonTree";
+
+declare const jsonTreeBrand: unique symbol;
+
+/**
+ * A document's syntax tree. Opaque: pass the `JsonDoc` holding it back to
+ * this package's functions.
+ */
+// Internally a jsonc-parser Node, read with treeOf (./jsonTree.ts).
+interface JsonTree {
+  readonly [jsonTreeBrand]: true;
+}
+
+/** A path of property names and array indices. */
+export type JsonPath = (string | number)[];
 
 /** A parsed JSON-with-comments document that keeps offsets for every node. */
 export interface JsonDoc {
   /** Undefined when the text has no parseable root value. */
   value: unknown;
-  tree: Node | undefined;
+  /** Undefined when the text has no parseable root value. */
+  tree: JsonTree | undefined;
   errors: { offset: number; length: number; message: string }[];
 }
 
@@ -23,7 +38,7 @@ export function parseJsonDoc(text: string): JsonDoc {
   return {
     // Not getNodeValue: its null-prototype objects break ajv's deep equality
     value: tree ? parse(text, [], options) : undefined,
-    tree,
+    tree: tree as JsonTree | undefined,
     errors: errors.map((e) => ({
       offset: e.offset,
       length: e.length,
@@ -58,12 +73,13 @@ export function parseJsonc(text: string): unknown {
  */
 export function rangeOf(
   doc: JsonDoc,
-  path: JSONPath,
+  path: JsonPath,
   options: { key?: boolean } = {}
 ): { startOffset: number; endOffset: number } {
-  if (doc.tree) {
+  const tree = treeOf(doc);
+  if (tree) {
     for (let n = path.length; n >= 0; n--) {
-      let node = findNodeAtLocation(doc.tree, path.slice(0, n));
+      let node = findNodeAtLocation(tree, path.slice(0, n));
       if (node && options.key && n === path.length && node.parent?.type === "property") {
         node = node.parent.children?.[0] ?? node;
       }
@@ -76,7 +92,7 @@ export function rangeOf(
 }
 
 /** Converts a JSON pointer ("/a/0/b") into a path (["a", 0, "b"]). */
-export function pointerToPath(pointer: string): JSONPath {
+export function pointerToPath(pointer: string): JsonPath {
   if (pointer === "") {
     return [];
   }

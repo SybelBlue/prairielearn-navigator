@@ -11,7 +11,7 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/core/questionFileResolver.d.ts",
+      "types": "./dist/library.d.ts",
       "import": "./dist/index.js"
     }
   },
@@ -22,7 +22,12 @@
     "dist/cli.js",
     "dist/index.js",
     "dist/shared.js",
-    "dist/core/questionFileResolver.d.ts"
+    "dist/library.d.ts",
+    "dist/core/assessmentQuestionRefs.d.ts",
+    "dist/core/course.d.ts",
+    "dist/core/json.d.ts",
+    "dist/core/questionFileResolver.d.ts",
+    "dist/core/tags.d.ts"
   ],
   "engines": {
     "node": ">=22"

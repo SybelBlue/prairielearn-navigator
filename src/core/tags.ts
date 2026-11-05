@@ -1,12 +1,22 @@
 import { findNodeAtLocation, getLocation } from "jsonc-parser";
 import { courseFiles, matchesGlob } from "./courseFiles";
-import { JsonDoc, parseJsonDoc } from "./json";
+import { JsonDoc, parseJsonDoc } from "./json.js";
+import { treeOf } from "./jsonTree";
+
+/** A badge color's text and background, as CSS hex colors. */
+type BadgeColor = Readonly<{ text: string; background: string }>;
+
+/** Freezes a table and each of its entries. */
+function freezeTable<T extends object>(table: Record<string, T>): Readonly<Record<string, Readonly<T>>> {
+  Object.values(table).forEach((entry) => Object.freeze(entry));
+  return Object.freeze(table);
+}
 
 /**
  * PrairieLearn's badge colors: text and background of `.badge.color-*` in
- * PrairieLearn's public/stylesheets/colors.css.
+ * PrairieLearn's public/stylesheets/colors.css. Frozen, entries included.
  */
-export const plBadgeColors: Record<string, { text: string; background: string }> = {
+export const plBadgeColors: Readonly<Record<string, BadgeColor>> = freezeTable({
   red1: { text: "#c73000", background: "#ffebe4" },
   red2: { text: "#9c0f00", background: "#ffc4be" },
   red3: { text: "#5a140d", background: "#f2aba3" },
@@ -37,7 +47,7 @@ export const plBadgeColors: Record<string, { text: string; background: string }>
   gray1: { text: "#656565", background: "#f3f3f3" },
   gray2: { text: "#414141", background: "#d3d3d3" },
   gray3: { text: "#242424", background: "#bdbdbd" },
-};
+});
 
 /** The color PrairieLearn gives a tag that infoCourse.json does not define. */
 export const implicitTagColor = "gray1";
@@ -113,6 +123,11 @@ export function plDefaultTag(name: string): TagInfo | undefined {
   return plDefaultTags.find((tag) => tag.name === name);
 }
 
+/** Every PrairieLearn default tag, in PrairieLearn's order. */
+export function plDefaultTagList(): readonly TagInfo[] {
+  return plDefaultTags;
+}
+
 /** A tag defined in infoCourse.json, with the offsets of its name value. */
 export interface CourseTag extends TagInfo {
   index: number;
@@ -122,7 +137,8 @@ export interface CourseTag extends TagInfo {
 
 /** The tags an infoCourse.json defines, in order. */
 export function courseTags(doc: JsonDoc): CourseTag[] {
-  const array = doc.tree && findNodeAtLocation(doc.tree, ["tags"]);
+  const tree = treeOf(doc);
+  const array = tree && findNodeAtLocation(tree, ["tags"]);
   if (array?.type !== "array") {
     return [];
   }
@@ -154,10 +170,11 @@ export function tagAt(
   offset: number
 ): { name: string; index: number; start: number; end: number } | undefined {
   const { path } = getLocation(text, offset);
-  if (path.length !== 2 || path[0] !== "tags" || typeof path[1] !== "number" || !doc.tree) {
+  const tree = treeOf(doc);
+  if (path.length !== 2 || path[0] !== "tags" || typeof path[1] !== "number" || !tree) {
     return undefined;
   }
-  const node = findNodeAtLocation(doc.tree, path);
+  const node = findNodeAtLocation(tree, path);
   if (node?.type !== "string" || offset < node.offset || offset > node.offset + node.length) {
     return undefined;
   }

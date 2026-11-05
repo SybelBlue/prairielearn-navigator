@@ -30,6 +30,9 @@ const typescript = {
 
 const resolve = {
   extensions: ['.ts', '.js'],
+  // The library's published declarations need ".js" relative specifiers, so
+  // some sources import "./x.js" for "./x.ts".
+  extensionAlias: { '.js': ['.ts', '.js'] },
 };
 
 /** @type WebpackConfig */

@@ -1,6 +1,7 @@
 import { findNodeAtLocation, getLocation } from "jsonc-parser";
 import { courseFiles, matchesGlob } from "./courseFiles";
 import { JsonDoc, parseJsonDoc } from "./json";
+import { treeOf } from "./jsonTree";
 
 export interface AssessmentSetInfo {
   name: string;
@@ -56,7 +57,8 @@ export interface CourseAssessmentSet extends AssessmentSetInfo {
 
 /** The assessment sets an infoCourse.json defines, in order. */
 export function courseAssessmentSets(doc: JsonDoc): CourseAssessmentSet[] {
-  const array = doc.tree && findNodeAtLocation(doc.tree, ["assessmentSets"]);
+  const tree = treeOf(doc);
+  const array = tree && findNodeAtLocation(tree, ["assessmentSets"]);
   if (array?.type !== "array") {
     return [];
   }
@@ -91,14 +93,15 @@ export function assessmentSetAt(
   offset: number
 ): { name: string; number?: string; start: number; end: number } | undefined {
   const { path } = getLocation(text, offset);
-  if (path.length !== 1 || path[0] !== "set" || !doc.tree) {
+  const tree = treeOf(doc);
+  if (path.length !== 1 || path[0] !== "set" || !tree) {
     return undefined;
   }
-  const node = findNodeAtLocation(doc.tree, ["set"]);
+  const node = findNodeAtLocation(tree, ["set"]);
   if (node?.type !== "string" || offset < node.offset || offset > node.offset + node.length) {
     return undefined;
   }
-  const number = findNodeAtLocation(doc.tree, ["number"])?.value;
+  const number = findNodeAtLocation(tree, ["number"])?.value;
   return {
     name: node.value as string,
     number: typeof number === "string" ? number : undefined,

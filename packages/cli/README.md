@@ -234,8 +234,63 @@ be. In VS Code, Rename Symbol (F2) on the set does the same.
 
 ## Library API
 
-The package also exposes a typed, headless resolver for tools that need the
-files used by each question without starting VS Code or invoking the CLI:
+The package is also an ES module library (Node 22+, typed, no runtime
+dependencies). It gives tools the same course logic as the CLI and the VS Code
+extension, without starting either.
+
+### Course files
+
+| Export | Returns |
+| --- | --- |
+| `findCourseRoot(filePath: string, cache?: Map<string, string \| null>): string \| null` | The nearest directory at or above `filePath`'s directory that contains `infoCourse.json`, or `null`. To search from a directory `dir`, pass `path.join(dir, "infoCourse.json")`; the file need not exist. Reuse `cache` across calls to look each directory up once. |
+| `parseJsonDoc(text: string): JsonDoc` | The document parsed as JSON with comments and trailing commas, with its `value` (undefined if the text has no root value) and syntax `errors`, each with an `offset`, `length` and `message`. Its `tree` is opaque: pass the `JsonDoc` to `courseTags`. |
+| `strictJsonErrors(text: string): JsonDoc["errors"]` | Syntax errors under strict JSON, as PrairieLearn reads course files: comments and trailing commas are errors. |
+| `assessmentQuestionRefs(text: string): AssessmentQuestionRef[]` | Every `zones[*].questions[*].id` (`kind: "question"`) and `zones[*].questions[*].alternatives[*].id` (`kind: "alternative"`) in an `infoAssessment.json`, in document order, duplicates included. `startOffset` and `endOffset` exclude the quotes. Comments are allowed. On other syntax errors it returns the ids it can recover and does not throw. It reads the same references as the `question-exists` rule and `rename-qids`, and needs no course root or file system. |
+
+### Tags and colors
+
+| Export | Value |
+| --- | --- |
+| `courseTags(doc: JsonDoc): CourseTag[]` | The tags an `infoCourse.json` defines, in order. Each has its `name`, `color` and `description` (`TagInfo`), its `index` in `tags`, and the offsets of its name string, quotes included (`nameStart`, `nameEnd`). |
+| `plDefaultTag(name: string): TagInfo \| undefined` | The tag PrairieLearn defines itself under `name`, if there is one. |
+| `plDefaultTagList(): readonly TagInfo[]` | Every PrairieLearn default tag, in PrairieLearn's order. |
+| `plBadgeColors: Readonly<Record<string, Readonly<{ text: string; background: string }>>>` | PrairieLearn's badge colors (`red1` … `gray3`) as CSS hex colors. Frozen. |
+| `implicitTagColor: string` | The color PrairieLearn gives a tag `infoCourse.json` doesn't define (`"gray1"`). |
+
+```ts
+import * as fs from "node:fs";
+import * as path from "node:path";
+import {
+  assessmentQuestionRefs,
+  courseTags,
+  findCourseRoot,
+  implicitTagColor,
+  parseJsonDoc,
+  plBadgeColors,
+  plDefaultTag,
+  strictJsonErrors,
+} from "@sybelblue/prairielearn-navigator";
+
+const assessment = "/path/to/course/courseInstances/Fa26/assessments/hw1/infoAssessment.json";
+const root = findCourseRoot(assessment);
+if (root) {
+  const infoCourse = fs.readFileSync(path.join(root, "infoCourse.json"), "utf8");
+  const defined = new Map(courseTags(parseJsonDoc(infoCourse)).map((tag) => [tag.name, tag]));
+  const tag = defined.get("numeric") ?? plDefaultTag("numeric");
+  const badge = plBadgeColors[tag?.color ?? implicitTagColor]; // { text, background }
+}
+
+const text = fs.readFileSync(assessment, "utf8");
+for (const { id, kind, startOffset } of assessmentQuestionRefs(text)) {
+  console.log(kind, id, "at", startOffset);
+}
+const syntaxErrors = strictJsonErrors(text); // what PrairieLearn would reject
+```
+
+### Question files
+
+`createQuestionFileResolver` is a typed, headless resolver for tools that need
+the files each question uses:
 
 ```ts
 import { createQuestionFileResolver } from "@sybelblue/prairielearn-navigator";

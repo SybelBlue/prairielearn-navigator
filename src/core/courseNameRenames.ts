@@ -6,6 +6,7 @@ import { NameKind } from "./courseNames";
 import { offsetToPosition } from "./diagnostic";
 import { FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
+import { treeOf } from "./jsonTree";
 import { ReferenceIndex } from "./referenceIndex";
 
 function edit(file: string, text: string, start: number, end: number, replacement: string): FileEdit {
@@ -26,7 +27,7 @@ function edit(file: string, text: string, start: number, end: number, replacemen
  * already lists `newName`; every other `oldName` is removed.
  */
 function useEdits(kind: NameKind, file: string, text: string, oldName: string, newName: string): FileEdit[] {
-  const tree = parseJsonDoc(text).tree;
+  const tree = treeOf(parseJsonDoc(text));
   const items = tree ? kind.useItems(tree) : [];
   const isString = (node: Node, name: string) => node.type === "string" && node.value === name;
   let keep = !items.some((node) => isString(node, newName));
@@ -65,7 +66,7 @@ function useEdits(kind: NameKind, file: string, text: string, oldName: string, n
 
 /** Edits renaming `ignoredDiagnostics` identifiers for `kind`'s rules. */
 function suppressionEdits(kind: NameKind, file: string, text: string, oldName: string, newName: string): FileEdit[] {
-  const tree = parseJsonDoc(text).tree;
+  const tree = treeOf(parseJsonDoc(text));
   const array = tree && findNodeAtLocation(tree, ["ignoredDiagnostics"]);
   if (array?.type !== "array") {
     return [];
@@ -128,7 +129,7 @@ export function findCourseNameReferences(
   const uses: NameOccurrence[] = [];
   for (const file of [...filesUsingName(kind, index, name, extraFiles)].sort()) {
     const text = readText(file);
-    const tree = text === undefined ? undefined : parseJsonDoc(text).tree;
+    const tree = text === undefined ? undefined : treeOf(parseJsonDoc(text));
     if (text === undefined || !tree) {
       continue;
     }

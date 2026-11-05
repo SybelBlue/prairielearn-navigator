@@ -6,6 +6,14 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- The npm library exports the course logic the CLI and extension use: `findCourseRoot`, `parseJsonDoc`,
+  `strictJsonErrors`, `courseTags`, `plDefaultTag`, `plDefaultTagList`,
+  `plBadgeColors` (now frozen), `implicitTagColor`, and the new
+  `assessmentQuestionRefs`, which lists an assessment's question and
+  alternative ids with their offsets. Types `JsonDoc`, `TagInfo`, `CourseTag`
+  and `AssessmentQuestionRef` are exported too, and the package's declarations
+  now cover the whole library entry point.
+
 ## [1.2.5] - 2026-11-05
 
 - Find All References on a tag defined in `infoCourse.json`, either on its

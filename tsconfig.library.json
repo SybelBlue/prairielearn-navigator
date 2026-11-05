@@ -6,6 +6,7 @@
     "outDir": "packages/cli/dist",
     "rootDir": "src"
   },
-  "include": ["src/library.ts", "src/core/**/*.ts"],
-  "exclude": ["src/core/**/*.test.ts"]
+  // Declarations are emitted for everything library.ts reaches; package.json
+  // "files" lists the ones that are published.
+  "include": ["src/library.ts"]
 }
