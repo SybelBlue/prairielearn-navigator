@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-11-04
+
 - Rename Symbol (F2) on a tag defined in `infoCourse.json`, either on its
   definition or in a question's `info.json`, renames it across the course: the
   definition, every question's `tags` entry, and `.pl-navigator.jsonc`
