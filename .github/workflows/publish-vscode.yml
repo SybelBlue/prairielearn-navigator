@@ -1,0 +1,93 @@
+name: Publish VS Code Extension
+
+# Dispatch-only: `make publish` / `make publish-vscode` start this after the
+# staged npm version for the same tag is approved and public. A tag push can't
+# trigger it, because the tag exists before that npm approval.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (vX.Y.Z)
+        required: true
+        type: string
+
+concurrency:
+  group: vscode-marketplace-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Validate and publish ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    # Must match the environment on the Marketplace publisher's trusted publishing policy.
+    environment: vscode-marketplace
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      NPM_PACKAGE: "@sybelblue/prairielearn-navigator"
+      # Pinned rather than taken from the tag's lockfile, so older tags (whose
+      # vsce predates --oidc) can still be published. Needs >= 4.1.0.
+      VSCE: "@vscode/vsce@4.1.0"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify release tag
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::Invalid release tag: $RELEASE_TAG"; exit 1; }
+          version=$(node -p "require('./package.json').version")
+          [[ "$RELEASE_TAG" == "v$version" ]] \
+            || { echo "::error::$RELEASE_TAG does not match package.json version $version"; exit 1; }
+          cli_version=$(node -p "require('./packages/cli/package.json').version")
+          [[ "$cli_version" == "$version" ]] \
+            || { echo "::error::packages/cli/package.json ($cli_version) does not match package.json ($version)"; exit 1; }
+          grep -Fq "## [$version]" CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no [$version] entry"; exit 1; }
+          git fetch --quiet --no-tags origin main
+          git merge-base --is-ancestor "$RELEASE_TAG^{commit}" origin/main \
+            || { echo "::error::$RELEASE_TAG is not reachable from origin/main"; exit 1; }
+
+      # The extension must never ship ahead of the CLI it shares a version with.
+      - name: Verify the npm version is public
+        shell: bash
+        run: |
+          version=${RELEASE_TAG#v}
+          published=$(npm view "$NPM_PACKAGE@$version" version --prefer-online 2>/dev/null || true)
+          [[ "$published" == "$version" ]] \
+            || { echo "::error::$NPM_PACKAGE@$version is not public on npm. Approve the staged version first."; exit 1; }
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run knip
+      - run: npm run test:cli
+
+      # The Electron suite (`npm test`) runs locally in `make publish` before the tag is pushed.
+      - name: Package the VSIX
+        run: npx --yes "$VSCE" package --out "prairielearn-navigator-${RELEASE_TAG#v}.vsix"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prairielearn-navigator-${{ env.RELEASE_TAG }}
+          path: prairielearn-navigator-*.vsix
+
+      - name: Publish the verified VSIX
+        shell: bash
+        run: |
+          artifact="prairielearn-navigator-${RELEASE_TAG#v}.vsix"
+          [[ -f "$artifact" ]] \
+            || { echo "::error::Missing verified artifact: $artifact"; exit 1; }
+          npx --yes "$VSCE" publish --oidc --packagePath "$artifact"

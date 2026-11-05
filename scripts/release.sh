@@ -2,14 +2,17 @@
 # Release the extension and the npm CLI under one shared version.
 #
 #   scripts/release.sh patch|minor|major   full release (see `make publish`)
-#   scripts/release.sh --resume-vscode     finish a release whose npm workflow
-#                                          succeeded: verify npm, then vsce
+#   scripts/release.sh --resume-vscode     finish the current version's release
+#                                          whose npm workflow succeeded: verify
+#                                          npm, then publish the extension
 #
 # Order: preflight -> tests -> bump + commit + tag + push -> GitHub release
 # (triggers .github/workflows/publish-npm.yml, which stages the npm version)
 # -> wait for it -> open npm's staged-packages page -> wait for confirmation
-# that the version is public -> vsce publish.
-# The extension is never published unless the npm version is public.
+# that the version is public -> dispatch .github/workflows/publish-vscode.yml,
+# which publishes to the Marketplace with trusted publishing (OIDC), and watch it.
+# The extension is never published unless the npm version is public; the
+# workflow checks this too.
 #
 # DRY_RUN=1 runs preflight and tests, then prints every command that would
 # change something instead of running it.
@@ -18,6 +21,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 NPM_WORKFLOW=publish-npm.yml
+VSCODE_WORKFLOW=publish-vscode.yml
+VSCODE_RUN_URL=
 NPM_PACKAGE=@sybelblue/prairielearn-navigator
 NPM_OWNER=${NPM_PACKAGE%%/*}
 NPM_OWNER=${NPM_OWNER#@}
@@ -45,11 +50,16 @@ next_version() {
   ' "$1" "$2"
 }
 
-require_vsce_login() {
-  local publisher
-  publisher=$(node -p "require('./package.json').publisher")
-  npx vsce ls-publishers | grep -qx "$publisher" \
-    || die "vsce is not logged in as '$publisher'. Run: npx vsce login $publisher"
+require_vscode_workflow() {
+  # workflow_dispatch only works for workflows on the default branch.
+  gh workflow view "$VSCODE_WORKFLOW" >/dev/null 2>&1 \
+    || die "$VSCODE_WORKFLOW is not on GitHub's main branch. Merge it first."
+}
+
+vscode_dispatch_run() {
+  # Prints "<databaseId> <url>" for the newest dispatched extension publish run.
+  gh run list --workflow "$VSCODE_WORKFLOW" --event workflow_dispatch --limit 1 \
+    --json databaseId,url --jq '.[0] | select(.) | "\(.databaseId) \(.url)"'
 }
 
 npm_run_for() {
@@ -123,9 +133,34 @@ wait_for_npm_publish() {
 }
 
 publish_vscode() {
-  step "Publishing v$1 to the VS Code Marketplace"
-  # No version argument: vsce publishes package.json's version without bumping or tagging.
-  run npx vsce publish
+  local tag="v$1" previous_id='' run_id='' url=''
+  step "Publishing $tag to the VS Code Marketplace via $VSCODE_WORKFLOW"
+  if [[ -n $DRY_RUN ]]; then
+    run gh workflow run "$VSCODE_WORKFLOW" --ref main -f "tag=$tag"
+    run gh run watch "<run for $tag>" --exit-status --interval 10
+    return
+  fi
+
+  read -r previous_id _ <<<"$(vscode_dispatch_run)" || true
+  gh workflow run "$VSCODE_WORKFLOW" --ref main -f "tag=$tag"
+  for _ in $(seq 1 24); do
+    read -r run_id url <<<"$(vscode_dispatch_run)" || true
+    [[ -n $run_id && $run_id != "$previous_id" ]] && break
+    sleep 5
+  done
+  [[ -n $run_id && $run_id != "$previous_id" ]] \
+    || die "No new $VSCODE_WORKFLOW run appeared for $tag after 2 minutes. The extension may not be published.
+  Check: https://github.com/$(gh repo view --json nameWithOwner --jq .nameWithOwner)/actions/workflows/$VSCODE_WORKFLOW
+  Retry: make publish-vscode"
+
+  VSCODE_RUN_URL=$url
+  echo "  $VSCODE_RUN_URL"
+  if ! gh run watch "$run_id" --exit-status --interval 10; then
+    die "Marketplace publishing failed. npm and the $tag tag are unchanged.
+  Inspect: gh run view $run_id --log-failed
+  Rerun:   gh run rerun $run_id
+  New run: make publish-vscode"
+  fi
 }
 
 finish() {
@@ -135,6 +170,7 @@ finish() {
   echo "  npm:         https://www.npmjs.com/package/$NPM_PACKAGE/v/$version"
   echo "  Marketplace: https://marketplace.visualstudio.com/items?itemName=$(node -p "const p = require('./package.json'); p.publisher + '.' + p.name")"
   echo "  GitHub:      $repo_url/releases/tag/v$version"
+  echo "  Actions:     $VSCODE_RUN_URL"
 }
 
 # ── Resume: extension only ──
@@ -142,15 +178,17 @@ finish() {
 if [[ ${1:-} == --resume-vscode ]]; then
   version=$(current_version)
   tag="v$version"
-  sha=$(git rev-parse HEAD)
 
   step "Checking that $tag is ready for the Marketplace"
-  git tag --points-at HEAD | grep -qx "$tag" \
-    || die "HEAD is not tagged $tag. Check out the release commit first."
-  read -r _ status conclusion url <<<"$(npm_run_for "$sha")" || true
+  gh auth status >/dev/null 2>&1 || die "gh is not logged in. Run: gh auth login"
+  require_vscode_workflow
+  git fetch --quiet origin main "refs/tags/$tag:refs/tags/$tag" \
+    || die "Tag $tag does not exist on origin."
+  git merge-base --is-ancestor "$tag^{commit}" origin/main \
+    || die "Tag $tag is not reachable from origin/main."
+  read -r _ status conclusion url <<<"$(npm_run_for "$(git rev-parse "$tag^{commit}")")" || true
   [[ ${status:-} == completed && ${conclusion:-} == success ]] \
     || die "The $NPM_WORKFLOW run for $tag has not succeeded (${status:-no run}/${conclusion:-}). ${url:-}"
-  require_vsce_login
 
   wait_for_npm_publish "$version"
   publish_vscode "$version"
@@ -180,7 +218,7 @@ grep -q '^## \[Unreleased\]' CHANGELOG.md || die "CHANGELOG.md has no '## [Unrel
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && die "Tag $tag already exists locally."
 git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null && die "Tag $tag already exists on origin."
 gh auth status >/dev/null 2>&1 || die "gh is not logged in. Run: gh auth login"
-require_vsce_login
+require_vscode_workflow
 
 step "Running static checks and tests"
 npm run lint

@@ -153,17 +153,20 @@ This:
 4. Opens your npmjs.com Staged Packages page so you can review and approve the
    version with 2FA. The script then waits for `quit` or `check published`;
    the latter verifies the version is public before continuing.
-5. Publishes the extension with `vsce publish`, **only once the npm version is
-   public**.
+5. Dispatches [publish-vscode.yml](.github/workflows/publish-vscode.yml), which
+   packages the tagged commit and publishes it to the Marketplace with trusted
+   publishing (no personal access token), and waits for that run. This happens
+   **only once the npm version is public**, and the workflow checks again.
 
 Use `make publish patch DRY_RUN=1` to run the checks and print the release
 steps without changing anything.
 
 If a step after the push fails, the tag and GitHub release already exist but
 the extension isn't published. Fix the problem (for a failed workflow, rerun it
-with `gh run rerun <id>`), then run `make publish-vscode` from the release
-commit. It opens the staged npm version for approval if needed, then publishes
-the extension after you confirm npm has made the version public. If you chose
+with `gh run rerun <id>`), then run `make publish-vscode` while `package.json`
+is still at the released version. It opens the staged npm version for approval
+if needed, then dispatches the extension workflow after you confirm npm has made
+the version public. If you chose
 `quit` at the npm prompt, use this command when you're ready to resume; it
 reopens the Staged Packages page unless the version is already public.
 
@@ -171,7 +174,11 @@ One-time setup:
 
 - `gh auth login`
 - Sign in to npmjs.com with 2FA enabled, needed to approve staged publishes
-- `npx vsce login sybelblue`, using a Marketplace personal access token
 - On npmjs.com, the package's trusted publisher must be GitHub Actions,
   `SybelBlue/prairielearn-navigator`, workflow `publish-npm.yml`, environment
   `npm`, with stage-publish permission.
+- On the Marketplace, the `sybelblue` publisher needs a trusted publishing
+  policy for GitHub Actions: owner `SybelBlue`, repository
+  `prairielearn-navigator`, workflow `publish-vscode.yml`, environment
+  `vscode-marketplace`. The repository needs a `vscode-marketplace`
+  environment too.

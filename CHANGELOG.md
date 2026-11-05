@@ -6,6 +6,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- Marketplace releases now publish from GitHub Actions with trusted publishing
+  (short-lived OIDC credentials) instead of a locally stored personal access
+  token. `make publish` dispatches the new `publish-vscode.yml` workflow once
+  the npm version is public, and `make publish-vscode` can now resume from
+  `main` instead of only from the release commit.
+
 ## [1.2.3] - 2026-11-04
 
 - Hovering a tag in a question's `info.json` shows its color, as PrairieLearn's
