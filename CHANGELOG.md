@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-05
+
 - The npm library exports the course logic the CLI and extension use: `findCourseRoot`, `parseJsonDoc`,
   `strictJsonErrors`, `courseTags`, `plDefaultTag`, `plDefaultTagList`,
   `plBadgeColors` (now frozen), `implicitTagColor`, and the new
