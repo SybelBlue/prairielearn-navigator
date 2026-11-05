@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-11-05
+
 - Find All References on a tag defined in `infoCourse.json`, either on its
   definition or in a question's `info.json`, lists the definition and every
   question's `tags` entry naming it. On a tag, the question's assessments are
