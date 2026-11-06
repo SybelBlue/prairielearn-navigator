@@ -7,6 +7,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [Unreleased]
 
 - New CLI flag `--version` (`-v`), which prints the installed version.
+- New **PrairieLearn: Clear Schema Cache** command removes downloaded schemas
+  and reloads them as diagnostics need them.
 
 ## [1.3.2] - 2026-11-06
 

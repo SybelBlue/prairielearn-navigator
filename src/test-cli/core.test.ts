@@ -25,7 +25,7 @@ import { RefSpec, refSpecs } from "../core/references/specs";
 import { isRuleId, rules } from "../core/rules/registry";
 import { isCheckable, runCourseRules, runRules, selectRules } from "../core/rules/run";
 import { RuleImpl } from "../core/rules/types";
-import { SchemaStore } from "../core/schemas";
+import { clearSchemaCache, SchemaStore } from "../core/schemas";
 import { findCourseNameReferences, planCourseNameRename } from "../core/courseNameRenames";
 import { assessmentSetKind, courseNameAt, tagKind } from "../core/courseNames";
 import { courseTags, plBadgeColors, plDefaultTag, tagAt, tagNameAt } from "../core/tags";
@@ -1168,6 +1168,25 @@ test("a pinned sha is served from the cache without fetching", async () => {
   assert.equal(schema?.label, "151aabd");
   assert.equal(schema?.validate({ uuid: "00000000-0000-0000-0000-000000000002", type: "v3", title: "Q", topic: "T" }), true);
   assert.equal(schema?.validate({ type: "v3" }), false);
+});
+
+test("clearing the schema cache preserves files Navigator does not own", () => {
+  const cacheDir = tmpDir();
+  const sha = "a".repeat(40);
+  fs.mkdirSync(path.join(cacheDir, sha));
+  fs.mkdirSync(path.join(cacheDir, "master-2026-11-06"));
+  fs.mkdirSync(path.join(cacheDir, "other"));
+  fs.writeFileSync(path.join(cacheDir, "refs.json"), "{}");
+  fs.writeFileSync(path.join(cacheDir, "notes.txt"), "keep me");
+
+  clearSchemaCache(cacheDir);
+
+  assert.deepEqual(fs.readdirSync(cacheDir).sort(), ["notes.txt", "other"]);
+});
+
+test("clearing a schema cache that does not exist is a no-op", () => {
+  const parent = tmpDir();
+  assert.doesNotThrow(() => clearSchemaCache(path.join(parent, "missing")));
 });
 
 test("dates resolve via the GitHub API and old shas fall back to the old schema path", async () => {

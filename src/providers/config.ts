@@ -8,7 +8,7 @@ import {
   NavigatorConfig,
 } from "../core/config";
 import { RuleId } from "../core/rules/registry";
-import { SchemaStore } from "../core/schemas";
+import { clearSchemaCache, SchemaStore } from "../core/schemas";
 import { legacyVscodeRuleSettings, vscodeRuleSettings } from "./ruleSettings";
 
 const section = "prairielearn-navigator";
@@ -93,6 +93,22 @@ export class ConfigProvider {
       this.reportedProblems.clear();
     }
     this.onChangedEmitter.fire();
+  }
+
+  /** Clears every schema cache used by the workspace, then reloads schemas. */
+  clearSchemaCaches(courseRoots: readonly string[]) {
+    const cacheDirs = new Set([
+      path.join(this.context.globalStorageUri.fsPath, "schemas"),
+      ...this.stores.keys(),
+    ]);
+    for (const courseRoot of courseRoots) {
+      cacheDirs.add(this.configFor(courseRoot).schemaCacheDir);
+    }
+    try {
+      cacheDirs.forEach(clearSchemaCache);
+    } finally {
+      this.reset(true);
+    }
   }
 
   configFor(courseRoot: string): NavigatorConfig {

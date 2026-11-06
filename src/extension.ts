@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { commands } from "./commands";
 import {
@@ -136,6 +137,26 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "prairielearn-navigator.reloadSchemas",
       () => configProvider.reset(true),
+    ),
+    vscode.commands.registerCommand(
+      "prairielearn-navigator.clearCache",
+      async () => {
+        try {
+          const courseFiles = await vscode.workspace.findFiles(
+            "**/infoCourse.json",
+          );
+          configProvider.clearSchemaCaches(
+            courseFiles.map((uri) => path.dirname(uri.fsPath)),
+          );
+          void vscode.window.showInformationMessage(
+            "PrairieLearn Navigator: Schema cache cleared. Schemas will be downloaded again as needed.",
+          );
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            `PrairieLearn Navigator: Could not clear schema cache: ${error}`,
+          );
+        }
+      },
     ),
     vscode.commands.registerCommand(
       "prairielearn-navigator.findUses",

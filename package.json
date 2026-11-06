@@ -33,6 +33,10 @@
         "title": "PrairieLearn: Reload Schemas and Config"
       },
       {
+        "command": "prairielearn-navigator.clearCache",
+        "title": "PrairieLearn: Clear Schema Cache"
+      },
+      {
         "command": "prairielearn-navigator.findUses",
         "title": "PrairieLearn: Find Uses of File"
       },

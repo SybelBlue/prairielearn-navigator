@@ -82,7 +82,8 @@ assessment sets can be added to `infoCourse.json`, and an unused question
 can be moved to Trash after confirmation.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
-back online.
+back online. Run **PrairieLearn: Clear Schema Cache** to remove downloaded
+schemas and fetch fresh copies as diagnostics need them.
 
 ## CLI
 

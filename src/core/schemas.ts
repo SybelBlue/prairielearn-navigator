@@ -17,6 +17,25 @@ const schemaDirs = [
   "apps/prairielearn/src/schemas/schemas", // since 2023-05-01
   "schemas/schemas",
 ];
+const schemaCacheDirectory = /^(?:[0-9a-f]{40}|master-\d{4}-\d{2}-\d{2})$/;
+
+/** Removes the files Navigator owns without disturbing other cache contents. */
+export function clearSchemaCache(cacheDir: string) {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(cacheDir);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw e;
+  }
+  for (const entry of entries) {
+    if (entry === "refs.json" || schemaCacheDirectory.test(entry)) {
+      fs.rmSync(path.join(cacheDir, entry), { recursive: true, force: true });
+    }
+  }
+}
 
 /** A PL version pinned to something fetchable and cacheable. */
 interface ResolvedVersion {
