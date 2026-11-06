@@ -1,9 +1,16 @@
 import { findNodeAtLocation, Node } from "jsonc-parser";
-import { assessmentSetNameAt, courseAssessmentSets, implicitAssessmentSet } from "./assessmentSets";
+import {
+  assessmentSetNameAt,
+  courseAssessmentSets,
+  implicitAssessmentSet,
+  plDefaultAssessmentSet,
+} from "./assessmentSets";
 import { courseFiles } from "./courseFiles";
+import { FileEdit } from "./fileEdits";
 import { JsonDoc } from "./json";
+import { appendJsonEdits, JsonFocus } from "./jsonEdits";
 import { UsedNames } from "./referenceIndex";
-import { courseTags, implicitTagColor, tagNameAt } from "./tags";
+import { courseTags, implicitTagColor, plDefaultTag, tagNameAt } from "./tags";
 
 /** A name infoCourse.json defines, with the offsets of its `name` value. */
 interface CourseNameDefinition {
@@ -26,6 +33,10 @@ export interface NameKind {
   definitions(doc: JsonDoc): CourseNameDefinition[];
   /** The infoCourse.json entry PrairieLearn creates for a name used but not defined. */
   implicitDefinition(name: string): Record<string, string>;
+  /** PrairieLearn's own definition of a name, if it has one. */
+  plDefault(name: string): Record<string, string | undefined> | undefined;
+  /** The entry field a user most wants to change after defining a name. */
+  focusKey: string;
   /** Glob, relative to the course root, of the files that use these names. */
   useFiles: string;
   /**
@@ -43,6 +54,12 @@ export const tagKind: NameKind = {
   noun: "tag",
   definitions: courseTags,
   implicitDefinition: (name) => ({ name, color: implicitTagColor, description: name }),
+  plDefault: (name) => {
+    const tag = plDefaultTag(name);
+    return tag && { ...tag };
+  },
+  // The color PrairieLearn would give a tag
+  focusKey: "color",
   useFiles: courseFiles.question,
   useItems: (tree) => {
     const array = findNodeAtLocation(tree, ["tags"]);
@@ -59,6 +76,12 @@ export const assessmentSetKind: NameKind = {
     const { abbreviation, heading, color } = implicitAssessmentSet(name);
     return { abbreviation, name, heading, color };
   },
+  plDefault: (name) => {
+    const set = plDefaultAssessmentSet(name);
+    return set && { ...set };
+  },
+  // PrairieLearn would make the abbreviation the whole name
+  focusKey: "abbreviation",
   useFiles: courseFiles.assessment,
   useItems: (tree) => {
     const set = findNodeAtLocation(tree, ["set"]);
@@ -66,6 +89,40 @@ export const assessmentSetKind: NameKind = {
   },
   rules: new Set(["unused-assessment-set", "undefined-assessment-set"]),
 };
+
+/** "Tag" or "Assessment set". */
+export function nounTitle(kind: NameKind): string {
+  return kind.noun[0].toUpperCase() + kind.noun.slice(1);
+}
+
+/** A problem with `name` as a new definition, given the names already defined. */
+export function courseNameProblem(kind: NameKind, name: string, defined: readonly string[]): string | undefined {
+  if (name.trim() === "") {
+    return `${nounTitle(kind)} names must not be empty`;
+  }
+  if (defined.includes(name)) {
+    return `${nounTitle(kind)} "${name}" is already defined in ${courseFiles.course}`;
+  }
+  return undefined;
+}
+
+export interface NameDefinition {
+  edits: FileEdit[];
+  focus: JsonFocus;
+}
+
+/** Plans appending `entry` to `kind`'s array in `infoCourse`, whose contents are `text`. */
+export function planNameDefinition(
+  kind: NameKind,
+  infoCourse: string,
+  text: string,
+  entry: object
+): NameDefinition {
+  return {
+    edits: appendJsonEdits(infoCourse, text, kind.collection, entry),
+    focus: { file: infoCourse, path: [kind.collection, -1, kind.focusKey] },
+  };
+}
 
 /**
  * The tag or assessment set name at `offset` in a course file: a

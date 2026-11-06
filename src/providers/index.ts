@@ -5,6 +5,7 @@ export {
   QuestionCompletionItemProvider,
   UuidCompletionItemProvider,
 } from "./completions";
+export { addCommand, addCommands } from "./addWizard";
 export { ConfigProvider } from "./config";
 export {
   defineAssessmentSet,

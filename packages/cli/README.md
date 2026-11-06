@@ -1,8 +1,8 @@
 # @sybelblue/prairielearn-navigator
 
 Checks a [PrairieLearn](https://www.prairielearn.com) course for problems that
-should fail CI, lists and locates what a course contains, and bulk-updates
-semantic QID references. The diagnostics are
+should fail CI, lists and locates what a course contains, adds to it, and
+bulk-updates semantic QID references. The diagnostics are
 the same ones the
 [PrairieLearn Navigator](https://github.com/SybelBlue/prairielearn-navigator)
 VS Code extension shows. `check` looks at every course JSON file
@@ -273,6 +273,52 @@ and span ends are exclusive. A QID can be missing from `questions/`; its
 references are still listed so broken courses can be inspected. Tags and
 assessment sets must be defined in `infoCourse.json`. A valid target with no
 uses succeeds with no text output, or `[]` with `--json`.
+
+## Add
+
+`qid add`, `tag add`, `assessment-set add`, and `assessment add` create a new
+question, tag, assessment set, or assessment. Only the name is required: every
+other value has a default, and the preview prints what it resolved to. Change
+placeholders such as `New Question` before publishing.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator <noun> add [options] <name>
+```
+
+| Command | Creates | Options |
+| --- | --- | --- |
+| `qid add <qid>` | `questions/<qid>/info.json` and `question.html` | `--title`, `--topic` |
+| `tag add <name>` | An entry in `infoCourse.json`'s `tags` | `--color`, `--description` |
+| `assessment-set add <name>` | An entry in `infoCourse.json`'s `assessmentSets` | `--abbreviation`, `--heading`, `--color` |
+| `assessment add <instance>/<assessment>` | `infoAssessment.json` in the instance's `assessments/` | `--title`, `--set`, `--number`, `--type` |
+
+All four also take:
+
+| Option | |
+| --- | --- |
+| `--course <path>` | Course directory or a path inside one (default: `.`) |
+| `--write` | Apply the planned changes. Without this flag, the command only previews them. |
+
+Defaults come from the course where they can. `--topic` defaults to the
+course's first topic, `--set` to its first assessment set, and `--number` to
+the next number in that set. A tag or assessment set PrairieLearn already
+knows, such as `Homework`, starts from PrairieLearn's definition.
+
+A topic `infoCourse.json` doesn't define prints a warning, and PrairieLearn
+creates it. An assessment set must be defined or a PrairieLearn default, so
+add a new one first with `assessment-set add`.
+
+```sh
+# Preview, then create, a question
+npx -y @sybelblue/prairielearn-navigator qid add unit1/quadratic
+npx -y @sybelblue/prairielearn-navigator qid add --write \
+  --title "Quadratics" --topic Algebra unit1/quadratic
+
+# Add a set, then an exam in it
+npx -y @sybelblue/prairielearn-navigator assessment-set add --write Midterm
+npx -y @sybelblue/prairielearn-navigator assessment add --write \
+  --title "Midterm 1" --set Midterm --type Exam Fa26/midterm1
+```
 
 ## Rename QIDs
 

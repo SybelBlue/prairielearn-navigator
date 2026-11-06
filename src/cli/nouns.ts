@@ -1,4 +1,6 @@
 import { styleText } from "node:util";
+import { addNouns } from "../core/additions";
+import { addCommand } from "./add";
 import {
   runListAssessments,
   runListAssessmentSets,
@@ -63,6 +65,7 @@ export const NOUN_COMMANDS: ReadonlyMap<
   [
     "qid",
     nounCommand("qid", {
+      add: { summary: "Preview or write a new question", run: addCommand("qid", addNouns.qid) },
       list: { summary: "List question IDs", run: runListQids },
       locate: { summary: "Print the path of a question's info.json", run: runLocateQid },
       rename: { summary: "Preview or write semantic QID reference updates", run: runRenameQids },
@@ -72,6 +75,7 @@ export const NOUN_COMMANDS: ReadonlyMap<
   [
     "tag",
     nounCommand("tag", {
+      add: { summary: "Preview or write a new tag in infoCourse.json", run: addCommand("tag", addNouns.tag) },
       list: { summary: "List tags defined in infoCourse.json", run: runListTags },
       locate: { summary: "Print where infoCourse.json defines a tag", run: runLocateTag },
       rename: {
@@ -84,6 +88,10 @@ export const NOUN_COMMANDS: ReadonlyMap<
   [
     "assessment-set",
     nounCommand("assessment-set", {
+      add: {
+        summary: "Preview or write a new assessment set in infoCourse.json",
+        run: addCommand("assessment-set", addNouns["assessment-set"]),
+      },
       list: {
         summary: "List assessment sets defined in infoCourse.json",
         run: runListAssessmentSets,
@@ -102,6 +110,7 @@ export const NOUN_COMMANDS: ReadonlyMap<
   [
     "assessment",
     nounCommand("assessment", {
+      add: { summary: "Preview or write a new assessment", run: addCommand("assessment", addNouns.assessment) },
       list: { summary: "List assessments", run: runListAssessments },
       locate: {
         summary: "Print the path of an assessment's infoAssessment.json",

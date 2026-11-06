@@ -7,15 +7,15 @@ const defaultUuidCommand = "uuidgen";
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Generates and validates a UUID using the command configured for a document. */
-export function generateUuid(document: vscode.TextDocument): Promise<string> {
+/** Generates and validates a UUID using the command configured for `uri`, an existing file. */
+export function generateUuid(uri: vscode.Uri): Promise<string> {
   const settings = vscode.workspace.getConfiguration(
     configurationSection,
-    document.uri,
+    uri,
   );
   const command = settings.get<string>("uuidCommand", defaultUuidCommand);
-  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-  const cwd = workspaceFolder?.uri.fsPath ?? path.dirname(document.uri.fsPath);
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+  const cwd = workspaceFolder?.uri.fsPath ?? path.dirname(uri.fsPath);
 
   return new Promise((resolve, reject) => {
     exec(command, { cwd, timeout: 10_000 }, (error, stdout) => {

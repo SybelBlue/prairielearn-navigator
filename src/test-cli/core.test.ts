@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import Ajv from "ajv";
 import { test } from "vitest";
 import {
   assessmentSetAt,
@@ -10,9 +11,26 @@ import {
   implicitAssessmentSet,
   plDefaultAssessmentSet,
 } from "../core/assessmentSets";
-import { assessmentId, courseAssessments, planAssessmentRename } from "../core/assessments";
+import {
+  assessmentId,
+  assessmentPrefixFor,
+  assessmentTarget,
+  courseAssessments,
+  courseInstances,
+  nextAssessmentNumber,
+  planAssessmentRename,
+} from "../core/assessments";
 import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from "../core/config";
 import { isWithinDir } from "../core/courseFiles";
+import {
+  AddContext,
+  addNouns,
+  AddPrompt,
+  collectAddValues,
+  resolveAddValues,
+  stepBack,
+} from "../core/additions";
+import { appendJsonEdits, jsonValueRange } from "../core/jsonEdits";
 import { parentsEmptiedBy, removeEmptyParents } from "../core/emptyDirs";
 import { findElements } from "../core/html";
 import { parseJsonc, parseJsonDoc, rangeOf } from "../core/json";
@@ -1368,4 +1386,327 @@ test("isWithinDir matches whole path segments", () => {
   assert.ok(isWithinDir("/x/course", "/x/course"));
   assert.ok(isWithinDir("/x/course", "/x/course/questions/q"));
   assert.equal(isWithinDir("/x/course", "/x/course2/questions/q"), false);
+});
+
+/** `text` as appendJsonEdits leaves it, after appending `value` to `tags`. */
+function appended(text: string, value: object = { name: "new", color: "red1" }): string {
+  const root = tmpDir();
+  const file = path.join(root, "infoCourse.json");
+  fs.writeFileSync(file, text);
+  return prepareFileChanges(appendJsonEdits(file, text, "tags", value))[0].updated;
+}
+
+test("appendJsonEdits copies the style of the last entry", () => {
+  assert.equal(
+    appended('{\n  "tags": [\n    { "name": "a", "color": "blue1" }\n  ]\n}\n'),
+    '{\n  "tags": [\n    { "name": "a", "color": "blue1" },\n    { "name": "new", "color": "red1" }\n  ]\n}\n'
+  );
+  assert.equal(
+    appended('{\n  "tags": [\n    {\n      "name": "a"\n    }\n  ]\n}\n'),
+    '{\n  "tags": [\n    {\n      "name": "a"\n    },\n    {\n      "name": "new",\n      "color": "red1"\n    }\n  ]\n}\n'
+  );
+  assert.equal(
+    appended('{ "tags": [{ "name": "a" }] }\n'),
+    '{ "tags": [{ "name": "a" }, { "name": "new", "color": "red1" }] }\n'
+  );
+});
+
+test("appendJsonEdits keeps comments with their entry and tolerates trailing commas", () => {
+  assert.equal(
+    appended('{\n  "tags": [\n    { "name": "a" } // keep\n  ]\n}\n'),
+    '{\n  "tags": [\n    { "name": "a" }, // keep\n    { "name": "new", "color": "red1" }\n  ]\n}\n'
+  );
+  assert.equal(
+    appended('{\n  "tags": [\n    { "name": "a" }, // keep\n  ]\n}\n'),
+    '{\n  "tags": [\n    { "name": "a" }, // keep\n    { "name": "new", "color": "red1" }\n  ]\n}\n'
+  );
+});
+
+test("appendJsonEdits keeps CRLF line endings", () => {
+  assert.equal(
+    appended('{\r\n  "tags": [\r\n    { "name": "a" }\r\n  ]\r\n}\r\n'),
+    '{\r\n  "tags": [\r\n    { "name": "a" },\r\n    { "name": "new", "color": "red1" }\r\n  ]\r\n}\r\n'
+  );
+});
+
+test("appendJsonEdits creates a missing or empty array", () => {
+  for (const text of ['{\n  "title": "T"\n}\n', '{\n  "title": "T",\n  "tags": []\n}\n']) {
+    assert.deepEqual(JSON.parse(appended(text)), {
+      title: "T",
+      tags: [{ name: "new", color: "red1" }],
+    });
+  }
+});
+
+test("appendJsonEdits refuses files it can't safely change", () => {
+  for (const text of ["{ bad", "[]", ""]) {
+    assert.throws(() => appended(text), /^Error: Fix infoCourse\.json before adding to its "tags"/);
+  }
+  assert.throws(() => appended('{ "tags": "oops" }'), /^Error: "tags" in infoCourse\.json must be an array/);
+});
+
+test("jsonValueRange finds a value, inside the quotes of a string", () => {
+  const text = '{ "tags": [{ "color": "red1" }, { "color": "blue1" }], "n": 3 }';
+  const range = jsonValueRange(text, ["tags", -1, "color"]);
+  assert.ok(range);
+  assert.equal(text.slice(range.start, range.end), "blue1");
+  const number = jsonValueRange(text, ["n"]);
+  assert.ok(number);
+  assert.equal(text.slice(number.start, number.end), "3");
+  assert.equal(jsonValueRange(text, ["nope"]), undefined);
+});
+
+/** A course with an instance, a set, a topic and one homework, for add tests. */
+function addCourse(infoCourse: object = {}): { root: string; ctx: () => AddContext } {
+  const root = tmpDir();
+  const write = (rel: string, value: object) => {
+    const file = path.join(root, rel);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(value, undefined, 2));
+  };
+  write("infoCourse.json", {
+    name: "C",
+    title: "Course",
+    topics: [{ name: "Algebra", color: "red1" }, { name: "Calculus", color: "blue1" }],
+    assessmentSets: [{ abbreviation: "L", name: "Lab", heading: "Labs", color: "blue1" }],
+    ...infoCourse,
+  });
+  write("courseInstances/Fa26/infoCourseInstance.json", { uuid: "x", longName: "Fall" });
+  write("courseInstances/Fa26/assessments/lab2/infoAssessment.json", { set: "Lab", number: "2R" });
+  write("questions/unit1/q1/info.json", { title: "Q" });
+  const ctx = () => ({
+    index: indexCourse(root, "2026-01-01"),
+    readText: (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : undefined),
+  });
+  return { root, ctx };
+}
+
+test("add fills placeholders for everything but the id", () => {
+  const { ctx } = addCourse();
+  assert.deepEqual(resolveAddValues(addNouns.qid, ctx(), { qid: "unit1/q2" }), {
+    qid: "unit1/q2",
+    title: "New Question",
+    topic: "Algebra",
+  });
+  assert.deepEqual(resolveAddValues(addNouns.assessment, ctx(), { assessment: "Fa26/lab3" }), {
+    assessment: "Fa26/lab3",
+    title: "New Assessment",
+    set: "Lab",
+    number: "3",
+    type: "Homework",
+  });
+  assert.deepEqual(resolveAddValues(addNouns.tag, ctx(), { name: "mine" }), {
+    name: "mine",
+    color: "gray1",
+    description: "mine",
+  });
+  assert.deepEqual(resolveAddValues(addNouns["assessment-set"], ctx(), { name: "Project" }), {
+    name: "Project",
+    abbreviation: "Project",
+    heading: "Project",
+    color: "gray1",
+  });
+});
+
+test("add seeds names PrairieLearn knows from its defaults", () => {
+  const { ctx } = addCourse();
+  assert.deepEqual(resolveAddValues(addNouns["assessment-set"], ctx(), { name: "Homework" }), {
+    name: "Homework",
+    abbreviation: "HW",
+    heading: "Homeworks",
+    color: "green1",
+  });
+  assert.equal(resolveAddValues(addNouns.tag, ctx(), { name: "concept" }).color, "pink1");
+});
+
+test("add falls back when the course defines no topics or sets", () => {
+  const { ctx } = addCourse({ topics: [], assessmentSets: [] });
+  const question = addNouns.qid.plan(ctx(), resolveAddValues(addNouns.qid, ctx(), { qid: "q" }), "u");
+  assert.deepEqual(question.warnings, [
+    'Topic "Unknown" is not defined in infoCourse.json; PrairieLearn will create it',
+  ]);
+  assert.equal(resolveAddValues(addNouns.assessment, ctx(), { assessment: "Fa26/a" }).set, "Homework");
+});
+
+test("add rejects bad ids and values", () => {
+  const { ctx } = addCourse();
+  const cases: [keyof typeof addNouns, Record<string, string>, RegExp][] = [
+    ["qid", { qid: "unit1/q1" }, /^QID "unit1\/q1" already exists$/],
+    ["qid", { qid: "unit1" }, /^QID "unit1" already exists$/],
+    ["qid", { qid: "unit1/q1/sub" }, /^QID "unit1\/q1\/sub" must not be inside "unit1\/q1"$/],
+    ["qid", { qid: "a/../b" }, /must not contain empty, "\.", or "\.\." path segments/],
+    ["qid", { qid: "/abs" }, /must be a relative path/],
+    ["qid", { qid: "a/.hidden" }, /must not have path segments starting with "\."/],
+    ["qid", { qid: "q", title: " " }, /^Title must not be empty$/],
+    ["tag", { name: "  " }, /^Tag names must not be empty$/],
+    ["tag", { name: "t", color: "plaid" }, /^Color must be one of: red1, /],
+    ["assessment-set", { name: "Lab" }, /^Assessment set "Lab" is already defined in infoCourse\.json$/],
+    ["assessment", { assessment: "Fa26" }, /"Fa26" is a course instance/],
+    ["assessment", { assessment: "Sp27/hw" }, /must start with a course instance: Fa26$/],
+    ["assessment", { assessment: "Fa26/lab2" }, /^Assessment "Fa26\/lab2" already exists$/],
+    ["assessment", { assessment: "Fa26/lab2/x" }, /must not be inside "Fa26\/lab2"$/],
+    ["assessment", { assessment: "Fa26/a", set: "Nope" }, /add it first with "assessment-set add"$/],
+    ["assessment", { assessment: "Fa26/a", type: "Quiz" }, /^Type must be one of: Homework, Exam$/],
+  ];
+  for (const [noun, given, message] of cases) {
+    assert.throws(() => resolveAddValues(addNouns[noun], ctx(), given), (error: Error) => {
+      assert.match(error.message, message);
+      return true;
+    });
+  }
+});
+
+test("add warns about an undefined topic but accepts a PrairieLearn default set", () => {
+  const { ctx } = addCourse();
+  const values = resolveAddValues(addNouns.qid, ctx(), { qid: "q", topic: "Geometry" });
+  assert.deepEqual(addNouns.qid.plan(ctx(), values, "u").warnings, [
+    'Topic "Geometry" is not defined in infoCourse.json; PrairieLearn will create it',
+  ]);
+  assert.equal(resolveAddValues(addNouns.assessment, ctx(), { assessment: "Fa26/a", set: "Exam" }).set, "Exam");
+});
+
+test("courseInstances keeps outermost instances, and targets resolve against them", () => {
+  const root = tmpDir();
+  for (const dir of ["Fa26", "Fa26/nested", "2027/Sp", ".hidden"]) {
+    fs.mkdirSync(path.join(root, "courseInstances", dir), { recursive: true });
+    fs.writeFileSync(path.join(root, "courseInstances", dir, "infoCourseInstance.json"), "{}");
+  }
+  fs.writeFileSync(path.join(root, "courseInstances", "infoCourseInstance.json"), "{}");
+  assert.deepEqual(courseInstances(root), ["2027/Sp", "Fa26"]);
+
+  const target = assessmentTarget(root, "2027/Sp/unit1/hw");
+  assert.ok(typeof target !== "string");
+  assert.equal(target.instance, "2027/Sp");
+  assert.equal(target.dir, path.join(root, "courseInstances/2027/Sp/assessments/unit1/hw"));
+});
+
+test("nextAssessmentNumber follows the set within its instance", () => {
+  const { ctx } = addCourse();
+  const { index, readText } = ctx();
+  assert.equal(nextAssessmentNumber(index, readText, "Fa26", "Lab"), "3");
+  assert.equal(nextAssessmentNumber(index, readText, "Fa26", "Exam"), "1");
+  assert.equal(nextAssessmentNumber(index, readText, "Sp27", "Lab"), "1");
+});
+
+test("id prefixes come from the folder an add starts in", () => {
+  const { root, ctx } = addCourse();
+  const prefix = addNouns.qid.idPrefix!;
+  assert.equal(prefix(ctx(), root), "");
+  assert.equal(prefix(ctx(), path.join(root, "questions")), "");
+  assert.equal(prefix(ctx(), path.join(root, "questions/unit1")), "unit1/");
+  assert.equal(prefix(ctx(), path.join(root, "questions/unit1/q1")), "unit1/");
+  assert.equal(prefix(ctx(), path.join(root, "questions/unit1/q1/tests")), "unit1/");
+
+  assert.equal(assessmentPrefixFor(root, root), "Fa26/");
+  assert.equal(assessmentPrefixFor(root, path.join(root, "courseInstances/Fa26/assessments")), "Fa26/");
+  assert.equal(assessmentPrefixFor(root, path.join(root, "courseInstances/Fa26/assessments/lab2")), "Fa26/");
+  fs.mkdirSync(path.join(root, "courseInstances/Sp27"));
+  fs.writeFileSync(path.join(root, "courseInstances/Sp27/infoCourseInstance.json"), "{}");
+  assert.equal(assessmentPrefixFor(root, root), "");
+  assert.equal(assessmentPrefixFor(root, path.join(root, "courseInstances/Sp27")), "Sp27/");
+});
+
+/** Answers steps from a script, recording what each step offered. */
+function scripted(answers: (string | typeof stepBack | undefined)[]) {
+  const offered: (string | undefined)[] = [];
+  const prompt: AddPrompt = async (step) => {
+    offered.push(step.value);
+    return answers.shift();
+  };
+  return { prompt, offered };
+}
+
+test("collectAddValues walks the fields in order", async () => {
+  const { ctx } = addCourse();
+  const { prompt, offered } = scripted(["Fa26/lab3", "Lab Three", "Lab", "3", "Exam"]);
+  assert.deepEqual(await collectAddValues(addNouns.assessment, ctx(), prompt, { assessment: "Fa26/" }), {
+    assessment: "Fa26/lab3",
+    title: "Lab Three",
+    set: "Lab",
+    number: "3",
+    type: "Exam",
+  });
+  assert.deepEqual(offered, ["Fa26/", "New Assessment", "Lab", "3", "Homework"]);
+});
+
+test("collectAddValues going back recomputes defaults but keeps changed answers", async () => {
+  const { ctx } = addCourse();
+  const { prompt, offered } = scripted([
+    "Fa26/lab3",
+    "Mine",
+    "Lab",
+    "3",
+    stepBack, // from type to number
+    stepBack, // from number to set
+    "Exam",
+    "1",
+    "Homework",
+  ]);
+  const values = await collectAddValues(addNouns.assessment, ctx(), prompt);
+  assert.equal(values?.number, "1");
+  assert.equal(values?.set, "Exam");
+  assert.equal(values?.title, "Mine");
+  // Number's default followed the set, because the user had left it alone
+  assert.deepEqual(offered, [undefined, "New Assessment", "Lab", "3", "Homework", "3", "Lab", "1", "Homework"]);
+});
+
+test("collectAddValues keeps a changed answer when returning to a step", async () => {
+  const { ctx } = addCourse();
+  const { prompt, offered } = scripted(["q", "Mine", stepBack, stepBack, "q2", "Mine", "Algebra"]);
+  await collectAddValues(addNouns.qid, ctx(), prompt);
+  assert.deepEqual(offered, [undefined, "New Question", "Algebra", "Mine", "q", "Mine", "Algebra"]);
+});
+
+test("collectAddValues stops on cancel, and back from the first step stays there", async () => {
+  const { ctx } = addCourse();
+  assert.equal(await collectAddValues(addNouns.tag, ctx(), scripted([undefined]).prompt), undefined);
+  const { prompt, offered } = scripted([stepBack, undefined]);
+  assert.equal(await collectAddValues(addNouns.tag, ctx(), prompt, { name: "x" }), undefined);
+  assert.deepEqual(offered, ["x", "x"]);
+});
+
+test("add steps validate with what came before them", async () => {
+  const { ctx } = addCourse();
+  const problems: (string | undefined)[] = [];
+  const prompt: AddPrompt = async (step) => {
+    problems.push(step.problem("plaid"));
+    return step.field.key === "name" ? "t" : step.value;
+  };
+  await collectAddValues(addNouns.tag, ctx(), prompt);
+  assert.equal(problems[0], undefined);
+  assert.match(problems[1] ?? "", /^Color must be one of/);
+});
+
+test("planned additions pass PrairieLearn's schemas", () => {
+  const { root, ctx } = addCourse();
+  const schemas = path.join(fixtures, "schema-cache/151aabd1167dbdc170c50f71295a74de9f31db05");
+  const validate = (name: string, text: string) => {
+    const check = new Ajv({ strict: false, allErrors: true }).compile(
+      JSON.parse(fs.readFileSync(path.join(schemas, `${name}.json`), "utf-8"))
+    );
+    assert.ok(check(JSON.parse(text)), JSON.stringify(check.errors));
+  };
+  const uuid = "9f1f3f4e-2b1c-4a57-9d0e-8c3e7a1b2c3d";
+
+  const question = addNouns.qid.plan(ctx(), resolveAddValues(addNouns.qid, ctx(), { qid: "q" }), uuid);
+  assert.ok(question.kind === "files");
+  assert.deepEqual(
+    question.created.map(({ file }) => path.relative(root, file)),
+    [path.join("questions/q/info.json"), path.join("questions/q/question.html")]
+  );
+  validate("infoQuestion", question.created[0].contents);
+
+  const assessment = addNouns.assessment.plan(
+    ctx(),
+    resolveAddValues(addNouns.assessment, ctx(), { assessment: "Fa26/a" }),
+    uuid
+  );
+  assert.ok(assessment.kind === "files");
+  validate("infoAssessment", assessment.created[0].contents);
+
+  for (const [noun, name] of [["tag", "t"], ["assessment-set", "S"]] as const) {
+    const plan = addNouns[noun].plan(ctx(), resolveAddValues(addNouns[noun], ctx(), { name }), uuid);
+    assert.ok(plan.kind === "edits");
+    validate("infoCourse", prepareFileChanges(plan.edits)[0].updated);
+  }
 });

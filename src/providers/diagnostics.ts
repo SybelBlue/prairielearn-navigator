@@ -4,13 +4,16 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { findNodeAtLocation, modify, type Node, parseTree } from "jsonc-parser";
 import { isExcluded } from "../core/config";
-import { courseRelativePath } from "../core/courseFiles";
+import { findCourseRoot } from "../core/course";
+import { courseFiles, courseRelativePath } from "../core/courseFiles";
 import type * as core from "../core/diagnostic";
 import { refSpecs } from "../core/references/specs";
 import { ruleDiagnosticCode } from "../core/rules/registry";
 import { checkableGlobs, isCheckable, runCourseRules, runRules } from "../core/rules/run";
+import { defaultTopic, newQuestionTitle, questionInfo } from "../core/templates";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { ConfigProvider } from "./config";
+import { currentText } from "./fileEdits";
 import { generateUuid, reportUuidGenerationError } from "./uuid";
 
 const batchSize = 32;
@@ -359,11 +362,18 @@ export async function addGeneratedUuid(
     return;
   }
   try {
-    const uuid = await generateUuid(document);
+    const uuid = await generateUuid(document.uri);
     await vscode.workspace.applyEdit(addUuidEdit(document, uuid));
   } catch (error) {
     reportUuidGenerationError(error);
   }
+}
+
+/** The info.json for a question that doesn't have one yet, in the course around `file`. */
+function newQuestionInfo(file: string): string {
+  const courseRoot = findCourseRoot(file);
+  const infoCourse = courseRoot === null ? undefined : currentText(path.join(courseRoot, courseFiles.course));
+  return questionInfo(crypto.randomUUID(), newQuestionTitle, defaultTopic(infoCourse));
 }
 
 export class MissingFileQuickFixProvider
@@ -434,19 +444,10 @@ export class MissingFileQuickFixProvider
       fix.isPreferred = true;
 
       fix.edit = new vscode.WorkspaceEdit();
-      let contents;
-      if (fileName.endsWith(".json")) {
-        const fileContents = JSON.stringify(
-          {
-            uuid: crypto.randomUUID(),
-            title: "New Question",
-            type: "v3",
-          },
-          undefined,
-          2
-        );
-        contents = new TextEncoder().encode(fileContents);
-      }
+      // Other .json references are client files, whose contents can't be guessed
+      const contents = fileName === "info.json"
+        ? new TextEncoder().encode(newQuestionInfo(diagInfo.location.uri.fsPath))
+        : undefined;
       fix.edit.createFile(diagInfo.location.uri, {
         ignoreIfExists: true,
         overwrite: false,

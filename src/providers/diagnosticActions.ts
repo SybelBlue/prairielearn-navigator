@@ -1,23 +1,30 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-  applyEdits,
-  findNodeAtLocation,
-  getLocation,
-  modify,
-  parseTree,
-} from "jsonc-parser";
+import { findNodeAtLocation, getLocation, parseTree } from "jsonc-parser";
 import { configFileName } from "../core/config";
 import { courseFiles } from "../core/courseFiles";
 import { removeEmptyParents } from "../core/emptyDirs";
 import { parseJsonc, parseJsonDoc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
-import { assessmentSetKind, NameKind, tagKind } from "../core/courseNames";
+import {
+  assessmentSetKind,
+  NameDefinition,
+  NameKind,
+  planNameDefinition,
+  tagKind,
+} from "../core/courseNames";
+import { FileEdit, prepareFileChanges } from "../core/fileEdits";
+import { appendJsonEdits } from "../core/jsonEdits";
 import { CourseCache } from "../filewatchers";
+import { addFileEdits, applyToDocument, revealFocus } from "./fileEdits";
 import { vscodeRuleSettings } from "./ruleSettings";
 
 const diagnosticPrefix = "prairielearn-navigator/";
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 interface IgnoreDiagnosticBase {
   courseRoot: string;
@@ -55,15 +62,6 @@ export function diagnosticRuleId(
 
 function relativeFile(courseRoot: string, file: string): string {
   return path.relative(courseRoot, file).split(path.sep).join("/");
-}
-
-function formattingOptions(text: string, eol: "\n" | "\r\n") {
-  const indentation = text.match(/^[ \t]+(?=")/m)?.[0] ?? "  ";
-  return {
-    insertSpaces: !indentation.includes("\t"),
-    tabSize: indentation.includes("\t") ? 1 : indentation.length,
-    eol,
-  };
 }
 
 /** Adds one exact suppression to the course config. */
@@ -117,46 +115,22 @@ export async function ignoreDiagnostic(args: IgnoreDiagnosticArgs): Promise<bool
     return true;
   }
 
-  const edits = modify(
-    text,
-    ["ignoredDiagnostics", -1],
-    entry,
-    {
-      formattingOptions: formattingOptions(
-        text,
-        document?.eol === vscode.EndOfLine.CRLF || (!document && text.includes("\r\n"))
-          ? "\r\n"
-          : "\n"
-      ),
-    }
-  );
+  let edits: FileEdit[];
+  try {
+    edits = appendJsonEdits(configUri.fsPath, text, "ignoredDiagnostics", entry);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`PrairieLearn Navigator: ${errorMessage(error)}.`);
+    return false;
+  }
   if (!document) {
-    await vscode.workspace.fs.writeFile(
-      configUri,
-      new TextEncoder().encode(applyEdits(text, edits))
-    );
+    const [change] = prepareFileChanges(edits);
+    await vscode.workspace.fs.writeFile(configUri, new TextEncoder().encode(change.updated));
     return true;
   }
 
-  const wasDirty = document.isDirty;
   const workspaceEdit = new vscode.WorkspaceEdit();
-  for (const edit of edits) {
-    workspaceEdit.replace(
-      configUri,
-      new vscode.Range(
-        document.positionAt(edit.offset),
-        document.positionAt(edit.offset + edit.length)
-      ),
-      edit.content
-    );
-  }
-  const applied = await vscode.workspace.applyEdit(workspaceEdit);
-  if (applied && !wasDirty) {
-    await document.save();
-  } else if (applied) {
-    await vscode.window.showTextDocument(document);
-  }
-  return applied;
+  addFileEdits(workspaceEdit, edits);
+  return applyToDocument(workspaceEdit, document);
 }
 
 /** Moves an unused question directory to Trash after rechecking and confirming. */
@@ -201,22 +175,16 @@ export async function removeUnusedQuestion(
 }
 
 /**
- * The key of the entry `defineCourseName` selects for the user to change
- * first: the color PrairieLearn would give a tag, or the abbreviation of a
- * set, which PrairieLearn would make the whole name.
- */
-const focusKey = { tags: "color", assessmentSets: "abbreviation" } as const;
-
-/**
  * Adds a name to infoCourse.json as PrairieLearn would create it, then opens
- * the file with one field selected to change it (see focusKey). If the name
- * is already defined, selects that definition instead. The edit is left
- * unsaved.
+ * the file with one field selected to change it (see NameKind.focusKey). If
+ * the name is already defined, selects that definition instead. The edit is
+ * left unsaved.
  */
 async function defineCourseName(kind: NameKind, args: DefineCourseNameArgs): Promise<boolean> {
   const uri = vscode.Uri.file(path.join(args.courseRoot, courseFiles.course));
   const document = await vscode.workspace.openTextDocument(uri);
-  const existing = kind.definitions(parseJsonDoc(document.getText())).find((d) => d.name === args.name);
+  const text = document.getText();
+  const existing = kind.definitions(parseJsonDoc(text)).find((d) => d.name === args.name);
   if (existing) {
     const editor = await vscode.window.showTextDocument(document);
     const start = document.positionAt(existing.nameStart);
@@ -224,52 +192,19 @@ async function defineCourseName(kind: NameKind, args: DefineCourseNameArgs): Pro
     editor.revealRange(editor.selection);
     return true;
   }
-  const text = document.getText();
-  const root = parseJsonc(text);
-  if (typeof root !== "object" || root === null || Array.isArray(root)) {
-    void vscode.window.showErrorMessage(
-      `PrairieLearn Navigator: fix ${courseFiles.course} before defining this ${kind.noun}.`
-    );
+  let plan: NameDefinition;
+  try {
+    plan = planNameDefinition(kind, uri.fsPath, text, kind.implicitDefinition(args.name));
+  } catch (error) {
+    void vscode.window.showErrorMessage(`PrairieLearn Navigator: ${errorMessage(error)}.`);
     return false;
   }
-  const edits = modify(
-    text,
-    [kind.collection, -1],
-    kind.implicitDefinition(args.name),
-    {
-      formattingOptions: formattingOptions(
-        text,
-        document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n"
-      ),
-    }
-  );
   const workspaceEdit = new vscode.WorkspaceEdit();
-  for (const edit of edits) {
-    workspaceEdit.replace(
-      uri,
-      new vscode.Range(
-        document.positionAt(edit.offset),
-        document.positionAt(edit.offset + edit.length)
-      ),
-      edit.content
-    );
-  }
+  addFileEdits(workspaceEdit, plan.edits);
   if (!(await vscode.workspace.applyEdit(workspaceEdit))) {
     return false;
   }
-  const editor = await vscode.window.showTextDocument(document);
-  const tree = parseTree(document.getText());
-  const array = tree && findNodeAtLocation(tree, [kind.collection]);
-  const added = array?.children?.at(-1);
-  const focus = added && findNodeAtLocation(added, [focusKey[kind.collection]]);
-  if (focus) {
-    // Inside the quotes, so typing replaces the value
-    editor.selection = new vscode.Selection(
-      document.positionAt(focus.offset + 1),
-      document.positionAt(focus.offset + focus.length - 1)
-    );
-    editor.revealRange(editor.selection);
-  }
+  await revealFocus(plan.focus);
   return true;
 }
 

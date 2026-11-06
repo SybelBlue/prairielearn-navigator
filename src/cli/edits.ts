@@ -2,10 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { findCourseRoot } from "../core/course";
 import { FileChange, FileEdit } from "../core/fileEdits";
+import { NewFile } from "../core/templates";
 import { CliRuntime } from "./runtime";
 
 /** The course containing `value` (a course or a path inside one), relative to `cwd`. */
-function resolveCourseRoot(value: string, cwd: string): string | null {
+export function resolveCourseRoot(value: string, cwd: string): string | null {
   const resolved = path.resolve(cwd, value);
   const stat = fs.statSync(resolved, { throwIfNoEntry: false });
   if (!stat) {
@@ -62,6 +63,39 @@ export function writeChanges(changes: readonly FileChange[]): void {
     if (rollbackErrors.length > 0) {
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}; failed to roll back ${rollbackErrors.length} file(s)`
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Creates every file, never replacing one, and removes what it made,
+ * including new directories, if one fails.
+ */
+export function createFiles(files: readonly NewFile[]): void {
+  const made: string[] = [];
+  try {
+    for (const { file, contents } of files) {
+      const firstDir = fs.mkdirSync(path.dirname(file), { recursive: true });
+      if (firstDir) {
+        made.push(firstDir);
+      }
+      fs.writeFileSync(file, contents, { flag: "wx" });
+      made.push(file);
+    }
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    for (const item of made.reverse()) {
+      try {
+        fs.rmSync(item, { recursive: true, force: true });
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; failed to roll back ${rollbackErrors.length} path(s)`
       );
     }
     throw error;

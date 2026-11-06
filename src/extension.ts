@@ -22,6 +22,7 @@ import {
   anyFileSelector,
   FileReferenceProvider,
   fileReferenceSelector,
+  addCommands,
   findUsesCommand,
   isEmptyUuidValue,
   ignoreDiagnostic,
@@ -134,6 +135,16 @@ export function activate(context: vscode.ExtensionContext) {
     configProvider,
     referenceIndex,
     registerQidRenameParticipant(courseCache, referenceIndex),
+    ...Object.entries(addCommands(courseCache, referenceIndex)).map(([name, command]) =>
+      vscode.commands.registerCommand(`prairielearn-navigator.${name}`, command),
+    ),
+    courseCache.onUpdated((courses) => {
+      void vscode.commands.executeCommand(
+        "setContext",
+        "prairielearn-navigator.hasCourse",
+        courses.length > 0,
+      );
+    }),
     vscode.commands.registerCommand(
       "prairielearn-navigator.reloadSchemas",
       () => configProvider.reset(true),

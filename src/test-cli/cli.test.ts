@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "vitest";
+import { createFiles } from "../cli/edits";
 import { run } from "../cli/runner";
 
 const fixtures = path.join(__dirname, "fixtures");
@@ -1143,4 +1144,122 @@ test("top-level usage and invalid commands return the expected status", async ()
   assert.match(unknown.stderr, /^Unknown command: bogus/);
   assert.equal((await runCli("check", "--format", "xml")).code, 1);
   assert.equal((await runCli("check", "--help")).code, 0);
+});
+
+test("add previews, then writes files and edits for every noun", async () => {
+  await withAssessmentCourse(async (course) => {
+    const infoCourse = path.join(course, "infoCourse.json");
+    const before = fs.readFileSync(infoCourse, "utf-8");
+    const cases: [string[], RegExp, string?][] = [
+      [["qid", "add", "unit1/new"], /Create questions\/unit1\/new\/info\.json/, "questions/unit1/new/question.html"],
+      [["assessment", "add", "Fa26/hw9"], /Create courseInstances\/Fa26\/assessments\/hw9\/infoAssessment\.json/, `courseInstances/Fa26/assessments/hw9/infoAssessment.json`],
+      [["tag", "add", "brand-new"], /infoCourse\.json:\d+:\d+/],
+      [["assessment-set", "add", "Lab"], /infoCourse\.json:\d+:\d+/],
+    ];
+    for (const [args, shown, file] of cases) {
+      const preview = await runCliAt(course, ...args);
+      assert.equal(preview.code, 0, preview.stderr);
+      assert.match(preview.stdout, shown);
+      assert.match(preview.stdout, /Would add 1 .*\. Rerun with --write/);
+      assert.equal(fs.readFileSync(infoCourse, "utf-8"), before);
+      if (file) {
+        assert.equal(fs.existsSync(path.join(course, file)), false);
+      }
+    }
+    for (const [args, , file] of cases) {
+      const written = await runCliAt(course, ...args, "--write");
+      assert.equal(written.code, 0, written.stderr);
+      assert.match(written.stdout, /Added 1 /);
+      if (file) {
+        assert.ok(fs.existsSync(path.join(course, file)));
+      }
+    }
+
+    const { code, stdout } = await runCliAt(course, "qid", "list");
+    assert.equal(code, 0);
+    assert.match(stdout, /unit1\/new/);
+    assert.match((await runCliAt(course, "assessment", "list")).stdout, /Fa26\/hw9/);
+    assert.match((await runCliAt(course, "tag", "list")).stdout, /brand-new/);
+    assert.match((await runCliAt(course, "assessment-set", "list")).stdout, /Lab/);
+  });
+});
+
+test("add passes flags to the fields, and prints what it resolved", async () => {
+  await withAssessmentCourse(async (course) => {
+    const { code, stdout } = await runCliAt(
+      course, "assessment", "add", "--write", "--title=Midterm", "--set", "Exam", "--type", "Exam", "Fa26/mid"
+    );
+    assert.equal(code, 0);
+    assert.match(stdout, /title: Midterm/);
+    assert.match(stdout, /number: 1/);
+    const info = JSON.parse(fs.readFileSync(
+      path.join(course, "courseInstances/Fa26/assessments/mid/infoAssessment.json"), "utf-8"
+    ));
+    assert.deepEqual(
+      { ...info, uuid: undefined },
+      { uuid: undefined, type: "Exam", title: "Midterm", set: "Exam", number: "1", zones: [] }
+    );
+    assert.match(info.uuid, /^[0-9a-f-]{36}$/);
+  });
+});
+
+test("add warns about an undefined topic on stderr", async () => {
+  await withAssessmentCourse(async (course) => {
+    const { code, stderr } = await runCliAt(course, "qid", "add", "--topic", "Nope", "fresh");
+    assert.equal(code, 0);
+    assert.match(stderr, /^Warning: Topic "Nope" is not defined/);
+  });
+});
+
+test("add validates its arguments and leaves the course alone", async () => {
+  await withAssessmentCourse(async (course) => {
+    const cases: [string[], RegExp][] = [
+      [["qid", "add"], /^Exactly one QID is required/],
+      [["qid", "add", "a", "b"], /^Exactly one QID is required/],
+      [["qid", "add", "--bogus", "a"], /^Unknown option: --bogus/],
+      [["qid", "add", "a", "--title"], /^Missing value for --title/],
+      [["qid", "add", "--topic", "--write", "a"], /^Missing value for --topic/],
+      [["tag", "add", "used"], /^Tag "used" is already defined/],
+      [["assessment", "add", "Nope/hw"], /must start with a course instance: Fa26/],
+    ];
+    for (const [args, message] of cases) {
+      const { code, stderr } = await runCliAt(course, ...args, "--write");
+      assert.equal(code, 1);
+      assert.match(stderr, message);
+    }
+    assert.equal(fs.existsSync(path.join(course, "questions/a")), false);
+  });
+});
+
+test("tag add leaves infoCourse.json as it was if the write fails", async () => {
+  await withAssessmentCourse(async (course) => {
+    const infoCourse = path.join(course, "infoCourse.json");
+    const before = fs.readFileSync(infoCourse, "utf-8");
+    fs.chmodSync(infoCourse, 0o444);
+    try {
+      const { code } = await runCliAt(course, "tag", "add", "--write", "nope");
+      assert.equal(code, 1);
+      assert.equal(fs.readFileSync(infoCourse, "utf-8"), before);
+    } finally {
+      fs.chmodSync(infoCourse, 0o644);
+    }
+  });
+});
+
+test("createFiles removes what it made, and only that, when a file fails", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-create-"));
+  try {
+    const taken = path.join(root, "taken.txt");
+    fs.writeFileSync(taken, "keep");
+    const madeHere = path.join(root, "a/b/first.txt");
+    assert.throws(() => createFiles([
+      { file: madeHere, contents: "new" },
+      { file: path.join(root, "second.txt"), contents: "new" },
+      { file: taken, contents: "new" },
+    ]), /EEXIST/);
+    assert.deepEqual(fs.readdirSync(root), ["taken.txt"]);
+    assert.equal(fs.readFileSync(taken, "utf-8"), "keep");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

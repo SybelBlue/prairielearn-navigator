@@ -3,7 +3,9 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
+import { addNouns, AddPrompt, stepBack } from "../core/additions";
 import {
+  addCommand,
   DiagnosticQuickFixProvider,
   diagnosticRuleId,
   ignoreDiagnostic,
@@ -17,6 +19,7 @@ import {
   UuidCompletionItemProvider,
 } from "../providers";
 import { indexCourse } from "../core/referenceIndex";
+import { ruleDiagnosticCode } from "../core/rules/registry";
 import {
   debounceMsForExtensionMode,
   productionDebounceMs,
@@ -1619,5 +1622,219 @@ suite("PrairieLearn Navigator", () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  /** A copy of the `names` fixture, removed when `body` finishes. */
+  async function withAddCourse(body: (root: string) => Promise<void>) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-add-"));
+    const root = path.join(dir, "course");
+    fs.cpSync(path.join(fixtures, "names"), root, { recursive: true });
+    try {
+      await body(root);
+    } finally {
+      await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  /** Caches that know only `root`. */
+  function addCaches(root: string) {
+    return [
+      { getCourseIdFor: () => root, getCourseIds: () => [root] },
+      { whenIndexed: async () => indexCourse(root, "2026-01-01") },
+    ] as const;
+  }
+
+  function scriptedPrompt(answers: (string | typeof stepBack | undefined)[]): {
+    prompt: AddPrompt;
+    offered: (string | undefined)[];
+  } {
+    const offered: (string | undefined)[] = [];
+    return {
+      offered,
+      prompt: async (step) => {
+        offered.push(step.value);
+        return answers.shift();
+      },
+    };
+  }
+
+  function selectedText(): string | undefined {
+    const editor = vscode.window.activeTextEditor;
+    return editor?.document.getText(editor.selection);
+  }
+
+  test("adding a question creates its files and selects the title", async () => {
+    await withAddCourse(async (root) => {
+      const { prompt } = scriptedPrompt(["unit1/new", "Quadratics", "T"]);
+      const [courses, references] = addCaches(root);
+      assert.strictEqual(await addCommand(addNouns.qid, courses, references, { prompt })(), true);
+
+      const info = path.join(root, "questions/unit1/new/info.json");
+      const created = JSON.parse(fs.readFileSync(info, "utf-8"));
+      assert.strictEqual(created.title, "Quadratics");
+      assert.strictEqual(created.topic, "T");
+      assert.match(created.uuid, /^[0-9a-f-]{36}$/i);
+      assert.ok(fs.existsSync(path.join(root, "questions/unit1/new/question.html")));
+      assert.strictEqual(vscode.window.activeTextEditor?.document.uri.fsPath, info);
+      assert.strictEqual(selectedText(), "Quadratics");
+    });
+  });
+
+  test("adding an assessment starts from the clicked folder", async () => {
+    await withAddCourse(async (root) => {
+      const { prompt, offered } = scriptedPrompt(["Fa26/unit1/hw9", "Nine", "Quiz", "4", "Exam"]);
+      const [courses, references] = addCaches(root);
+      const target = vscode.Uri.file(path.join(root, "courseInstances/Fa26"));
+      assert.strictEqual(await addCommand(addNouns.assessment, courses, references, { prompt })(target), true);
+
+      assert.strictEqual(offered[0], "Fa26/");
+      const created = JSON.parse(fs.readFileSync(
+        path.join(root, "courseInstances/Fa26/assessments/unit1/hw9/infoAssessment.json"),
+        "utf-8"
+      ));
+      assert.strictEqual(created.set, "Quiz");
+      assert.strictEqual(created.number, "4");
+      assert.strictEqual(created.type, "Exam");
+    });
+  });
+
+  test("adding a tag saves infoCourse.json and selects the color", async () => {
+    await withAddCourse(async (root) => {
+      const { prompt } = scriptedPrompt(["fresh", "blue2", "Fresh"]);
+      const [courses, references] = addCaches(root);
+      assert.strictEqual(await addCommand(addNouns.tag, courses, references, { prompt })(), true);
+
+      const info = JSON.parse(fs.readFileSync(path.join(root, "infoCourse.json"), "utf-8"));
+      assert.deepStrictEqual(info.tags.at(-1), { name: "fresh", color: "blue2", description: "Fresh" });
+      assert.strictEqual(vscode.window.activeTextEditor?.document.isDirty, false);
+      assert.strictEqual(selectedText(), "blue2");
+    });
+  });
+
+  test("adding to an infoCourse.json with unsaved changes leaves them unsaved", async () => {
+    await withAddCourse(async (root) => {
+      const file = path.join(root, "infoCourse.json");
+      const onDisk = fs.readFileSync(file, "utf-8");
+      const document = await vscode.workspace.openTextDocument(file);
+      const editor = await vscode.window.showTextDocument(document);
+      await editor.edit((edit) => edit.insert(new vscode.Position(0, 0), " "));
+
+      const { prompt } = scriptedPrompt(["Lab", "L", "Labs", "blue1"]);
+      const [courses, references] = addCaches(root);
+      assert.strictEqual(await addCommand(addNouns["assessment-set"], courses, references, { prompt })(), true);
+
+      assert.strictEqual(document.isDirty, true);
+      assert.match(document.getText(), /"name": "Lab"/);
+      assert.strictEqual(fs.readFileSync(file, "utf-8"), onDisk);
+    });
+  });
+
+  test("cancelling an add changes nothing", async () => {
+    await withAddCourse(async (root) => {
+      const { prompt } = scriptedPrompt(["cancelled", undefined]);
+      const [courses, references] = addCaches(root);
+      assert.strictEqual(await addCommand(addNouns.qid, courses, references, { prompt })(), false);
+      assert.strictEqual(fs.existsSync(path.join(root, "questions/cancelled")), false);
+    });
+  });
+
+  test("the add dialogue runs through real quick inputs, including back", async () => {
+    await withAddCourse(async (root) => {
+      const window = vscode.window as { createInputBox: typeof vscode.window.createInputBox };
+      const original = window.createInputBox;
+      let box: vscode.InputBox | undefined;
+      window.createInputBox = () => (box = original());
+      const accept = () => vscode.commands.executeCommand("workbench.action.acceptSelectedQuickOpenItem");
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
+      try {
+        const [courses, references] = addCaches(root);
+        const adding = addCommand(addNouns.tag, courses, references)();
+
+        await until(() => box, (current) => current !== undefined, "name step");
+        await settle();
+        box!.value = "from-dialogue";
+        await accept(); // to the color pick
+        await settle();
+        await vscode.commands.executeCommand("workbench.action.quickInputBack"); // to the name again
+        await settle();
+        assert.strictEqual(box!.value, "from-dialogue");
+        await accept(); // to the color pick
+        await settle();
+        await accept(); // to the description
+        await settle();
+        await accept(); // the default description
+
+        assert.strictEqual(await adding, true);
+      } finally {
+        window.createInputBox = original;
+      }
+      const info = JSON.parse(fs.readFileSync(path.join(root, "infoCourse.json"), "utf-8"));
+      assert.deepStrictEqual(info.tags.at(-1), {
+        name: "from-dialogue",
+        color: "gray1",
+        description: "from-dialogue",
+      });
+    });
+  });
+
+  test("the missing file quick fix gives a question's info.json its required fields", async () => {
+    await withAddCourse(async (root) => {
+      const createdBy = async (rel: string) => {
+        const uri = vscode.Uri.file(path.join(root, rel));
+        const range = new vscode.Range(0, 0, 0, 1);
+        const diagnostic = new vscode.Diagnostic(range, "missing");
+        diagnostic.code = ruleDiagnosticCode("question-exists");
+        diagnostic.relatedInformation = [
+          new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), "here"),
+        ];
+        const document = await vscode.workspace.openTextDocument(path.join(root, "infoCourse.json"));
+        const [fix] = new MissingFileQuickFixProvider().provideCodeActions(
+          document,
+          range,
+          {
+            diagnostics: [diagnostic],
+            only: vscode.CodeActionKind.QuickFix,
+            triggerKind: vscode.CodeActionTriggerKind.Invoke,
+          },
+          new vscode.CancellationTokenSource().token
+        );
+        assert.ok(fix?.edit);
+        assert.strictEqual(await vscode.workspace.applyEdit(fix.edit), true);
+        return fs.readFileSync(uri.fsPath, "utf-8");
+      };
+
+      const info = JSON.parse(await createdBy("questions/nope/info.json"));
+      assert.strictEqual(info.topic, "T");
+      assert.strictEqual(info.title, "New Question");
+      assert.strictEqual(info.type, "v3");
+      assert.strictEqual(await createdBy("clientFilesCourse/data.json"), "");
+    });
+  });
+
+  test("the manifest offers the add commands only in a course", () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf-8"),
+    ) as {
+      contributes: {
+        commands: { command: string; enablement?: string }[];
+        menus: Record<string, { command?: string; submenu?: string; when?: string }[]>;
+      };
+    };
+    const hasCourse = "prairielearn-navigator.hasCourse";
+    const names = ["addQuestion", "addTag", "addAssessmentSet", "addAssessment"]
+      .map((name) => `prairielearn-navigator.${name}`);
+    for (const name of names) {
+      assert.strictEqual(
+        manifest.contributes.commands.find((c) => c.command === name)?.enablement,
+        hasCourse
+      );
+    }
+    const { menus } = manifest.contributes;
+    assert.deepStrictEqual(menus["prairielearn-navigator.add"].map((item) => item.command), names);
+    assert.strictEqual(
+      menus["explorer/context"].find((item) => item.submenu === "prairielearn-navigator.add")?.when,
+      hasCourse
+    );
   });
 });

@@ -2,11 +2,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { findNodeAtLocation } from "jsonc-parser";
 import { configFileName } from "./config";
-import { courseFiles, courseRelativePath, matchesGlob, relativeIdProblem } from "./courseFiles";
+import { courseFiles, courseRelativePath, isWithinDir, matchesGlob, relativeIdProblem } from "./courseFiles";
 import { parentsEmptiedBy } from "./emptyDirs";
 import { edit, FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
 import { treeOf } from "./jsonTree";
+import { folderOutside, placementProblem } from "./placement";
 import { ReferenceIndex } from "./referenceIndex";
 
 /** An assessment in a course, named by the directories that locate it. */
@@ -43,6 +44,87 @@ export function courseAssessments(index: ReferenceIndex): CourseAssessment[] {
       assessment: parts.slice(split + 1).join("/"),
     }];
   });
+}
+
+/**
+ * Every course instance, as a posix path under courseInstances/, sorted.
+ * PrairieLearn stops at the first infoCourseInstance.json on its way down, so
+ * one nested in another isn't an instance.
+ */
+export function courseInstances(courseRoot: string): string[] {
+  const prefix = "courseInstances/";
+  const all = fs
+    .globSync(courseFiles.courseInstance, { cwd: courseRoot })
+    .map((rel) => path.posix.dirname(rel.split(path.sep).join("/")))
+    .filter((dir) => dir.startsWith(prefix))
+    .map((dir) => dir.slice(prefix.length));
+  return all.filter((instance) => !all.some((other) => instance.startsWith(`${other}/`))).sort();
+}
+
+/** Where an assessment that doesn't exist yet goes. */
+export interface AssessmentTarget {
+  instance: string;
+  /** Absolute. The instance's assessments/ directory. */
+  assessmentsDir: string;
+  /** Absolute. */
+  dir: string;
+}
+
+function assessmentsDirOf(courseRoot: string, instance: string): string {
+  return path.join(courseRoot, "courseInstances", ...instance.split("/"), "assessments");
+}
+
+/** Finds the instance a new assessment's id starts with, or returns what's wrong with the id. */
+export function assessmentTarget(courseRoot: string, id: string): AssessmentTarget | string {
+  const instances = courseInstances(courseRoot);
+  if (instances.includes(id)) {
+    return `"${id}" is a course instance; name an assessment in it, as "${id}/hw1"`;
+  }
+  const instance = instances.find((candidate) => id.startsWith(`${candidate}/`));
+  if (!instance) {
+    return `Assessment "${id}" must start with a course instance: ${instances.join(", ") || "none found"}`;
+  }
+  const assessmentsDir = assessmentsDirOf(courseRoot, instance);
+  return {
+    instance,
+    assessmentsDir,
+    dir: path.join(assessmentsDir, ...id.slice(instance.length + 1).split("/")),
+  };
+}
+
+/** The start of the id of an assessment added at `dir`, an absolute directory. */
+export function assessmentPrefixFor(courseRoot: string, dir: string): string {
+  const instances = courseInstances(courseRoot);
+  const root = (instance: string) => path.join(courseRoot, "courseInstances", ...instance.split("/"));
+  const instance = instances.find((candidate) => isWithinDir(root(candidate), dir)) ??
+    (instances.length === 1 ? instances[0] : undefined);
+  if (!instance) {
+    return "";
+  }
+  const assessmentsDir = assessmentsDirOf(courseRoot, instance);
+  if (!isWithinDir(assessmentsDir, dir) || dir === assessmentsDir) {
+    return `${instance}/`;
+  }
+  const base = folderOutside(dir, assessmentsDir, path.basename(courseFiles.assessment));
+  const rel = courseRelativePath(assessmentsDir, base);
+  return rel ? `${instance}/${rel}/` : `${instance}/`;
+}
+
+/** One more than the highest number `set` uses in `instance`. "2R" counts as 2. */
+export function nextAssessmentNumber(
+  index: ReferenceIndex,
+  readText: (file: string) => string | undefined,
+  instance: string,
+  set: string
+): string {
+  const used = courseAssessments(index)
+    .filter((a) => a.instance === instance && index.namesIn(a.file)?.assessmentSets[0] === set)
+    .map((a) => {
+      const number = (parseJsonDoc(readText(a.file) ?? "").value as { number?: unknown } | undefined)?.number;
+      return typeof number === "string" ? Number.parseInt(number, 10) : Number.NaN;
+    })
+    .filter((number) => Number.isFinite(number));
+  return String(Math.max(0, ...used) + 1);
 }
 
 /** Moving an assessment's directory, with the edits that keep up with it. */
@@ -136,13 +218,16 @@ export function planAssessmentRename(
     "assessments"
   );
   const newDir = path.join(assessmentsDir, ...newId.slice(instance.length + 1).split("/"));
-  if (fs.existsSync(newDir)) {
-    throw new Error(`Assessment "${newId}" already exists`);
-  }
-  // PrairieLearn stops at the first infoAssessment.json, so it would never find this one
-  const container = assessments.find((a) => isInside(path.dirname(a.file), newDir));
-  if (container) {
-    throw new Error(`Assessment "${newId}" must not be inside "${assessmentId(container)}"`);
+  const placement = placementProblem(
+    "Assessment",
+    newId,
+    newDir,
+    assessmentsDir,
+    path.basename(courseFiles.assessment),
+    (dir) => `${instance}/${courseRelativePath(assessmentsDir, dir)}`
+  );
+  if (placement) {
+    throw new Error(placement);
   }
 
   const config = path.join(courseRoot, configFileName);

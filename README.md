@@ -38,6 +38,9 @@ This extension is still experimental and may change or break.
   the CLI's `assessment-set rename` does the same.
   An assessment's `set` completes the course's sets and PrairieLearn's
   defaults.
+- Add a question, tag, assessment set, or assessment with the **PrairieLearn:
+  Add** commands, from the Command Palette or the Explorer's context menu, or
+  with `prairielearn-navigator <noun> add`.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.

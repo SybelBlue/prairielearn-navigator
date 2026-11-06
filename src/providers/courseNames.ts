@@ -23,19 +23,7 @@ import {
   TagInfo,
 } from "../core/tags";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
-
-/** A file's text, from its editor if open, else from disk. */
-export function currentText(file: string): string | undefined {
-  const open = vscode.workspace.textDocuments.find((doc) => doc.uri.fsPath === file);
-  if (open) {
-    return open.getText();
-  }
-  try {
-    return fs.readFileSync(file, "utf-8");
-  } catch {
-    return undefined;
-  }
-}
+import { addFileEdits, currentText, fileRange } from "./fileEdits";
 
 function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|<>&]/g, (c) => `\\${c}`);
@@ -313,13 +301,7 @@ export class CourseNameProvider implements vscode.RenameProvider, vscode.Referen
       throw new Error(`Could not index the course at ${found.courseRoot}`);
     }
     const workspaceEdit = new vscode.WorkspaceEdit();
-    for (const edit of planCourseNameRename(found.kind, index, found.name, newName, currentText, dirty)) {
-      workspaceEdit.replace(
-        vscode.Uri.file(edit.file),
-        new vscode.Range(edit.start.line - 1, edit.start.column - 1, edit.end.line - 1, edit.end.column - 1),
-        edit.replacement
-      );
-    }
+    addFileEdits(workspaceEdit, planCourseNameRename(found.kind, index, found.name, newName, currentText, dirty));
     return workspaceEdit;
   }
 
@@ -338,10 +320,7 @@ export class CourseNameProvider implements vscode.RenameProvider, vscode.Referen
     }
     const { definitions, uses } = findCourseNameReferences(found.kind, index, found.name, currentText, dirty);
     return [...(context.includeDeclaration ? definitions : []), ...uses].map(
-      (o) => new vscode.Location(
-        vscode.Uri.file(o.file),
-        new vscode.Range(o.start.line - 1, o.start.column - 1, o.end.line - 1, o.end.column - 1)
-      )
+      (o) => new vscode.Location(vscode.Uri.file(o.file), fileRange(o))
     );
   }
 }

@@ -36,6 +36,15 @@ export function plDefaultAssessmentSetList(): readonly AssessmentSetInfo[] {
   return plDefaultAssessmentSets;
 }
 
+/**
+ * The set names an assessment can use without PrairieLearn inventing one:
+ * those an infoCourse.json defines, then PrairieLearn's defaults.
+ */
+export function knownAssessmentSetNames(infoCourseText: string): string[] {
+  const defined = courseAssessmentSets(parseJsonDoc(infoCourseText)).map((set) => set.name);
+  return [...new Set([...defined, ...plDefaultAssessmentSets.map((set) => set.name)])];
+}
+
 /** The color PrairieLearn gives an assessment set that infoCourse.json does not define. */
 export const implicitAssessmentSetColor = "gray1";
 

@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { findNodeAtLocation, Node } from "jsonc-parser";
 import { configFileName } from "./config";
 import { courseFiles, courseRelativePath, matchesGlob } from "./courseFiles";
-import { NameKind } from "./courseNames";
+import { courseNameProblem, NameKind, nounTitle } from "./courseNames";
 import { offsetToPosition } from "./diagnostic";
 import { edit, FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
@@ -147,10 +147,7 @@ export function planCourseNameRename(
   readText: (file: string) => string | undefined,
   extraFiles: readonly string[] = []
 ): FileEdit[] {
-  const Noun = kind.noun[0].toUpperCase() + kind.noun.slice(1);
-  if (newName.trim() === "") {
-    throw new Error(`${Noun} names must not be empty`);
-  }
+  const Noun = nounTitle(kind);
   if (newName === oldName) {
     throw new Error(`${Noun} "${oldName}" cannot be renamed to itself`);
   }
@@ -164,8 +161,9 @@ export function planCourseNameRename(
   if (!defined.some((d) => d.name === oldName)) {
     throw new Error(`${Noun} "${oldName}" is not defined in ${courseFiles.course}`);
   }
-  if (defined.some((d) => d.name === newName)) {
-    throw new Error(`${Noun} "${newName}" is already defined in ${courseFiles.course}`);
+  const problem = courseNameProblem(kind, newName, defined.map((d) => d.name));
+  if (problem) {
+    throw new Error(problem);
   }
 
   const edits = defined

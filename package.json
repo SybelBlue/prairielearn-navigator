@@ -41,6 +41,30 @@
         "title": "PrairieLearn: Find Uses of File"
       },
       {
+        "command": "prairielearn-navigator.addQuestion",
+        "title": "Add Question...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
+        "command": "prairielearn-navigator.addTag",
+        "title": "Add Tag...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
+        "command": "prairielearn-navigator.addAssessmentSet",
+        "title": "Add Assessment Set...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
+        "command": "prairielearn-navigator.addAssessment",
+        "title": "Add Assessment...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
         "command": "prairielearn-navigator.openQuestionHtml",
         "title": "Open question.html",
         "icon": "$(code)",
@@ -653,7 +677,31 @@
         "url": "./schemas/pl-navigator.schema.json"
       }
     ],
+    "submenus": [
+      {
+        "id": "prairielearn-navigator.add",
+        "label": "PrairieLearn: Add"
+      }
+    ],
     "menus": {
+      "prairielearn-navigator.add": [
+        {
+          "command": "prairielearn-navigator.addQuestion",
+          "group": "add@1"
+        },
+        {
+          "command": "prairielearn-navigator.addTag",
+          "group": "add@2"
+        },
+        {
+          "command": "prairielearn-navigator.addAssessmentSet",
+          "group": "add@3"
+        },
+        {
+          "command": "prairielearn-navigator.addAssessment",
+          "group": "add@4"
+        }
+      ],
       "editor/title": [
         {
           "command": "prairielearn-navigator.openQuestionHtml",
@@ -672,6 +720,11 @@
         }
       ],
       "explorer/context": [
+        {
+          "submenu": "prairielearn-navigator.add",
+          "when": "prairielearn-navigator.hasCourse",
+          "group": "navigation@98"
+        },
         {
           "command": "prairielearn-navigator.findUses",
           "when": "!explorerResourceIsFolder",

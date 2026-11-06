@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { implicitAssessmentSetColor, plDefaultAssessmentSet } from "../assessmentSets";
+import { implicitAssessmentSetColor } from "../assessmentSets";
+import { assessmentSetKind, tagKind } from "../courseNames";
 import { Diagnostic } from "../diagnostic";
 import { parseJsonc, pointerToPath, rangeOf, strictJsonErrors } from "../json";
 import { questionFilePathsFromId } from "../questionPaths";
@@ -8,7 +9,7 @@ import { UsedNames } from "../referenceIndex";
 import { FileRef, findFileRefs } from "../references/extract";
 import { RefSpec, TargetKind } from "../references/specs";
 import { SchemaName } from "../schemas";
-import { implicitTagColor, plDefaultTag } from "../tags";
+import { implicitTagColor } from "../tags";
 import { RuleContext, RuleImpl } from "./types";
 
 /**
@@ -253,7 +254,7 @@ export const undefinedTags: RuleImpl = ({ references, doc }) => {
   }
   const defined = references.namesDefined("tags");
   return tags.flatMap((name: unknown, i): Diagnostic[] =>
-    typeof name === "string" && !defined.has(name) && !plDefaultTag(name)
+    typeof name === "string" && !defined.has(name) && !tagKind.plDefault(name)
       ? [{
           ...rangeOf(doc, ["tags", i]),
           message: `tag "${name}" is not defined in infoCourse.json (PrairieLearn will create it as ${implicitTagColor})`,
@@ -281,7 +282,7 @@ export const undefinedAssessmentSets: RuleImpl = ({ references, doc }) => {
     doc.errors.length > 0 ||
     typeof set !== "string" ||
     references.namesDefined("assessmentSets").has(set) ||
-    plDefaultAssessmentSet(set)
+    assessmentSetKind.plDefault(set)
   ) {
     return [];
   }

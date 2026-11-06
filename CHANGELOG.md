@@ -8,6 +8,20 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - New CLI commands `qid uses`, `tag uses`, and `assessment-set uses` list
   semantic references as source locations, with structured `--json` output.
+- New CLI commands `qid add`, `tag add`, `assessment-set add`, and
+  `assessment add`. Only the name is required: the rest defaults, and is
+  printed in the preview. Like `rename`, they only preview without `--write`.
+- New **PrairieLearn: Add Question**, **Add Tag**, **Add Assessment Set**, and
+  **Add Assessment** commands, in the Command Palette and under
+  **PrairieLearn: Add** in the Explorer's context menu, which ask for each
+  value in turn and start from the folder you clicked.
+- The quick fix for a missing `info.json` now includes the required `topic`,
+  and no longer writes a question's fields into other missing `.json` files.
+- Adding a tag, assessment set, or diagnostic suppression no longer reformats
+  the last entry of its array, and refuses a file with syntax errors instead
+  of corrupting it.
+- Files in `/x/course2` are no longer mistaken for part of a course in
+  `/x/course`.
 
 ## [1.3.3] - 2026-11-06
 

@@ -8,6 +8,7 @@ import {
   QidReferenceEdit,
 } from "../core/qidRenames";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
+import { addFileEdits } from "./fileEdits";
 
 const updateReferences: vscode.MessageItem = { title: "Update References" };
 // `onWillRenameFiles` cannot veto a move, so a modal's default Cancel button
@@ -218,18 +219,7 @@ export async function prepareQidRenameWorkspaceEdit(
       return workspaceEdit;
     }
 
-    for (const edit of edits) {
-      workspaceEdit.replace(
-        vscode.Uri.file(edit.file),
-        new vscode.Range(
-          edit.start.line - 1,
-          edit.start.column - 1,
-          edit.end.line - 1,
-          edit.end.column - 1
-        ),
-        edit.replacement
-      );
-    }
+    addFileEdits(workspaceEdit, edits);
     return workspaceEdit;
   } catch (error) {
     if (!token.isCancellationRequested) {
