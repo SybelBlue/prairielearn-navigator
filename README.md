@@ -24,7 +24,7 @@ This extension is still experimental and may change or break.
   badge, and description on hover, and go-to-definition jumps to the tag in
   `infoCourse.json`. An undefined tag has a quick fix that adds it there.
   Rename Symbol (F2) on a defined tag renames it in `infoCourse.json`, every
-  question, and `.pl-navigator.jsonc` suppressions; the CLI's `rename-tags`
+  question, and `.pl-navigator.jsonc` suppressions; the CLI's `rename tag`
   does the same.
   Find All References on a defined tag, from its definition or a question,
   lists its definition and every question that uses it.
@@ -35,14 +35,14 @@ This extension is still experimental and may change or break.
   a quick fix that adds it there. Rename Symbol (F2) and Find All References
   on a defined set, from its definition or an assessment, cover its
   definition and every assessment; renaming also updates suppressions, and
-  the CLI's `rename-assessment-sets` does the same.
+  the CLI's `rename assessment-set` does the same.
   An assessment's `set` completes the course's sets and PrairieLearn's
   defaults.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.
 - Preview or apply the same semantic QID reference updates from the CLI with
-  `prairielearn-navigator rename-qids`.
+  `prairielearn-navigator rename qid`.
 - Completions, code lenses, and quick fixes that create missing files, ignore
   one diagnostic occurrence in a file, or open that rule's severity setting.
 - UUID completions in PrairieLearn info files, generated with `uuidgen` by
@@ -97,8 +97,8 @@ To update references after explicitly renaming one or more QIDs, preview the
 changes first and then apply them with `--write`:
 
 ```sh
-npx -y @sybelblue/prairielearn-navigator rename-qids old new topic/one unit/one
-npx -y @sybelblue/prairielearn-navigator rename-qids --write old new topic/one unit/one
+npx -y @sybelblue/prairielearn-navigator rename qid old new topic/one unit/one
+npx -y @sybelblue/prairielearn-navigator rename qid --write old new topic/one unit/one
 ```
 
 This command changes semantic QID references only; it never moves question

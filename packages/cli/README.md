@@ -160,12 +160,12 @@ Requires Node.js 22 or newer.
 
 ## Rename QIDs
 
-`rename-qids` bulk-updates semantic references to one or more question IDs:
+`rename qid` bulk-updates semantic references to one or more question IDs:
 assessment question IDs, assessment alternative IDs, and question `template`
 values. It does not replace matching prose or comments.
 
 ```sh
-npx -y @sybelblue/prairielearn-navigator rename-qids [options] \
+npx -y @sybelblue/prairielearn-navigator rename qid [options] \
   <old-qid> <new-qid> [<old-qid> <new-qid> ...]
 ```
 
@@ -178,12 +178,12 @@ For example:
 
 ```sh
 # Preview four QID changes made necessary by a folder reorganization
-npx -y @sybelblue/prairielearn-navigator rename-qids \
+npx -y @sybelblue/prairielearn-navigator rename qid \
   algebra/add algebra/basics/add \
   algebra/subtract algebra/basics/subtract
 
 # Apply the same reference edits
-npx -y @sybelblue/prairielearn-navigator rename-qids --write \
+npx -y @sybelblue/prairielearn-navigator rename qid --write \
   algebra/add algebra/basics/add \
   algebra/subtract algebra/basics/subtract
 ```
@@ -195,13 +195,13 @@ through the PrairieLearn Navigator VS Code extension.
 
 ## Rename tags
 
-`rename-tags` renames a tag defined in `infoCourse.json`: its definition, every
+`rename tag` renames a tag defined in `infoCourse.json`: its definition, every
 question's `tags` entry, and `ignoredDiagnostics` entries in
 `.pl-navigator.jsonc` that name it. A question that already lists the new name
 drops the old one instead of listing the tag twice.
 
 ```sh
-npx -y @sybelblue/prairielearn-navigator rename-tags [options] <old-tag> <new-tag>
+npx -y @sybelblue/prairielearn-navigator rename tag [options] <old-tag> <new-tag>
 ```
 
 | Option | |
@@ -214,13 +214,13 @@ be. In VS Code, Rename Symbol (F2) on the tag does the same.
 
 ## Rename assessment sets
 
-`rename-assessment-sets` renames an assessment set defined in
+`rename assessment-set` renames an assessment set defined in
 `infoCourse.json`: its definition, every assessment's `set`, and
 `ignoredDiagnostics` entries in `.pl-navigator.jsonc` that name it. The set's
 `abbreviation` and `heading` are left as they are.
 
 ```sh
-npx -y @sybelblue/prairielearn-navigator rename-assessment-sets [options] <old-set> <new-set>
+npx -y @sybelblue/prairielearn-navigator rename assessment-set [options] <old-set> <new-set>
 ```
 
 | Option | |
@@ -228,9 +228,15 @@ npx -y @sybelblue/prairielearn-navigator rename-assessment-sets [options] <old-s
 | `--course <path>` | Course directory or a path inside one (default: `.`) |
 | `--write` | Apply the planned edits. Without this flag, the command only previews them. |
 
-Quote names with spaces, e.g. `rename-assessment-sets "Quiz" "Practice Quiz"`.
+Quote names with spaces, e.g. `rename assessment-set "Quiz" "Practice Quiz"`.
 The old set must be defined in `infoCourse.json`, and the new name must not
 be. In VS Code, Rename Symbol (F2) on the set does the same.
+
+## Deprecated commands
+
+`rename-qids`, `rename-tags`, and `rename-assessment-sets` still run
+`rename qid`, `rename tag`, and `rename assessment-set`, with a warning on
+stderr. They will be removed in 1.4.0.
 
 ## Library API
 
@@ -245,7 +251,7 @@ extension, without starting either.
 | `findCourseRoot(filePath: string, cache?: Map<string, string \| null>): string \| null` | The nearest directory at or above `filePath`'s directory that contains `infoCourse.json`, or `null`. To search from a directory `dir`, pass `path.join(dir, "infoCourse.json")`; the file need not exist. Reuse `cache` across calls to look each directory up once. |
 | `parseJsonDoc(text: string): JsonDoc` | The document parsed as JSON with comments and trailing commas, with its `value` (undefined if the text has no root value) and syntax `errors`, each with an `offset`, `length` and `message`. Its `tree` is opaque: pass the `JsonDoc` to `courseTags`. |
 | `strictJsonErrors(text: string): JsonDoc["errors"]` | Syntax errors under strict JSON, as PrairieLearn reads course files: comments and trailing commas are errors. |
-| `assessmentQuestionRefs(text: string): AssessmentQuestionRef[]` | Every `zones[*].questions[*].id` (`kind: "question"`) and `zones[*].questions[*].alternatives[*].id` (`kind: "alternative"`) in an `infoAssessment.json`, in document order, duplicates included. `startOffset` and `endOffset` exclude the quotes. Comments are allowed. On other syntax errors it returns the ids it can recover and does not throw. It reads the same references as the `question-exists` rule and `rename-qids`, and needs no course root or file system. |
+| `assessmentQuestionRefs(text: string): AssessmentQuestionRef[]` | Every `zones[*].questions[*].id` (`kind: "question"`) and `zones[*].questions[*].alternatives[*].id` (`kind: "alternative"`) in an `infoAssessment.json`, in document order, duplicates included. `startOffset` and `endOffset` exclude the quotes. Comments are allowed. On other syntax errors it returns the ids it can recover and does not throw. It reads the same references as the `question-exists` rule and `rename qid`, and needs no course root or file system. |
 
 ### Tags and colors
 

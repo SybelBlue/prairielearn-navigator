@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- The CLI's rename commands are now subcommands of `rename`: `rename-qids` is
+  `rename qid`, `rename-tags` is `rename tag`, and `rename-assessment-sets` is
+  `rename assessment-set`. The old names still work but print a deprecation
+  warning to stderr, and will be removed in 1.4.0.
+
 ## [1.3.1] - 2026-11-06
 
 - The prompt to update QID references after moving a question folder no longer

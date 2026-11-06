@@ -1,20 +1,22 @@
 import { styleText } from "node:util";
 import { run as runCheck } from "./check";
-import { run as runRenameQids } from "./renameQids";
-import { runRenameAssessmentSets, runRenameTags } from "./renameCourseNames";
+import { run as runRename } from "./rename";
 import { CliRuntime, processRuntime } from "./runtime";
 
 const USAGE = `Usage: prairielearn-navigator <command> [options]
 
 Commands:
   check         Check a course's JSON files against PrairieLearn's schemas and rules
-  rename-qids   Preview or write semantic QID reference updates
-  rename-tags   Preview or write a rename of a tag defined in infoCourse.json
-  rename-assessment-sets
-                Preview or write a rename of an assessment set defined in
-                infoCourse.json
+  rename        Preview or write a rename of a QID, tag, or assessment set
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
+
+// Remove in 1.4.0, along with the note in packages/cli/README.md.
+const DEPRECATED_RENAME_COMMANDS = new Map([
+  ["rename-qids", "qid"],
+  ["rename-tags", "tag"],
+  ["rename-assessment-sets", "assessment-set"],
+]);
 
 /** Runs one CLI invocation without terminating the process. */
 export async function run(
@@ -23,15 +25,22 @@ export async function run(
 ): Promise<number> {
   const command = args[0];
 
+  const renameSubcommand = DEPRECATED_RENAME_COMMANDS.get(command);
+  if (renameSubcommand) {
+    runtime.stderr(
+      styleText(
+        "yellow",
+        `Warning: "${command}" is deprecated and will be removed in 1.4.0. Use "rename ${renameSubcommand}" instead.`
+      )
+    );
+    return runRename([renameSubcommand, ...args.slice(1)], runtime);
+  }
+
   switch (command) {
     case "check":
       return runCheck(args.slice(1), runtime);
-    case "rename-qids":
-      return runRenameQids(args.slice(1), runtime);
-    case "rename-tags":
-      return runRenameTags(args.slice(1), runtime);
-    case "rename-assessment-sets":
-      return runRenameAssessmentSets(args.slice(1), runtime);
+    case "rename":
+      return runRename(args.slice(1), runtime);
     case "--help":
     case "-h":
       runtime.stdout(USAGE);

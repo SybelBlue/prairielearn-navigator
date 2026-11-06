@@ -23,7 +23,44 @@ async function runCliAt(cwd: string, ...args: string[]) {
   return { code, stdout: output(stdout), stderr: output(stderr) };
 }
 
-test("rename-qids previews and writes multiple semantic QID mappings", async () => {
+test("rename shows usage and rejects unknown subcommands", async () => {
+  const help = await runCli("rename", "--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /Usage: prairielearn-navigator rename <subcommand>/);
+
+  const missing = await runCli("rename");
+  assert.equal(missing.code, 1);
+  assert.match(missing.stdout, /Usage: prairielearn-navigator rename <subcommand>/);
+
+  const unknown = await runCli("rename", "bogus");
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.stderr, /^Unknown rename subcommand: bogus/);
+});
+
+test("deprecated rename commands warn and behave like their replacements", async () => {
+  const cases = [
+    { old: "rename-qids", subcommand: "qid", args: ["--course", "clean", "old", "new"] },
+    { old: "rename-tags", subcommand: "tag", args: ["--course", "names", "used", "homework"] },
+    {
+      old: "rename-assessment-sets",
+      subcommand: "assessment-set",
+      args: ["--course", "names", "Homework", "Problem Set"],
+    },
+  ];
+  for (const { old, subcommand, args } of cases) {
+    const deprecated = await runCli(old, ...args);
+    const current = await runCli("rename", subcommand, ...args);
+    assert.equal(deprecated.code, 0);
+    assert.equal(deprecated.stdout, current.stdout);
+    assert.equal(
+      deprecated.stderr,
+      `Warning: "${old}" is deprecated and will be removed in 1.4.0. Use "rename ${subcommand}" instead.\n`
+    );
+    assert.equal(current.stderr, "");
+  }
+});
+
+test("rename qid previews and writes multiple semantic QID mappings", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-cli-"));
   const course = path.join(root, "course");
   fs.cpSync(path.join(fixtures, "broken"), course, { recursive: true });
@@ -37,7 +74,7 @@ test("rename-qids previews and writes multiple semantic QID mappings", async () 
   try {
     const preview = await runCliAt(
       course,
-      "rename-qids",
+      "rename", "qid",
       "good",
       "better",
       "topic/nested",
@@ -52,7 +89,7 @@ test("rename-qids previews and writes multiple semantic QID mappings", async () 
 
     const written = await runCliAt(
       course,
-      "rename-qids",
+      "rename", "qid",
       "--write",
       "good",
       "better",
@@ -82,13 +119,13 @@ test("rename-qids previews and writes multiple semantic QID mappings", async () 
   }
 });
 
-test("rename-qids validates mappings and treats no matches as success", async () => {
-  const odd = await runCli("rename-qids", "--course", "clean", "old");
+test("rename qid validates mappings and treats no matches as success", async () => {
+  const odd = await runCli("rename", "qid", "--course", "clean", "old");
   assert.equal(odd.code, 1);
   assert.match(odd.stderr, /old\/new pairs/);
 
   const escaping = await runCli(
-    "rename-qids",
+    "rename", "qid",
     "--course",
     "clean",
     "../old",
@@ -98,7 +135,7 @@ test("rename-qids validates mappings and treats no matches as success", async ()
   assert.match(escaping.stderr, /must not contain/);
 
   const conflict = await runCli(
-    "rename-qids",
+    "rename", "qid",
     "--course",
     "clean",
     "old",
@@ -110,7 +147,7 @@ test("rename-qids validates mappings and treats no matches as success", async ()
   assert.match(conflict.stderr, /Conflicting QID renames/);
 
   const none = await runCli(
-    "rename-qids",
+    "rename", "qid",
     "--course",
     "clean",
     "unused",
@@ -120,7 +157,7 @@ test("rename-qids validates mappings and treats no matches as success", async ()
   assert.match(none.stdout, /No semantic QID references matched/);
 });
 
-test("rename-tags previews and writes a tag rename", async () => {
+test("rename tag previews and writes a tag rename", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-tags-"));
   const course = path.join(root, "course");
   fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
@@ -128,13 +165,13 @@ test("rename-tags previews and writes a tag rename", async () => {
   const question = path.join(course, "questions/q/info.json");
   const before = fs.readFileSync(question, "utf-8");
   try {
-    const preview = await runCliAt(course, "rename-tags", "used", "homework");
+    const preview = await runCliAt(course, "rename", "tag", "used", "homework");
     assert.equal(preview.code, 0, preview.stderr);
     assert.match(preview.stdout, /"\\"used\\"" -> "\\"homework\\""/);
     assert.match(preview.stdout, /Would make 2 edits in 2 files/);
     assert.equal(fs.readFileSync(question, "utf-8"), before);
 
-    const written = await runCliAt(course, "rename-tags", "--write", "used", "homework");
+    const written = await runCliAt(course, "rename", "tag", "--write", "used", "homework");
     assert.equal(written.code, 0, written.stderr);
     assert.match(written.stdout, /Made 2 edits in 2 files/);
     assert.deepEqual(JSON.parse(fs.readFileSync(question, "utf-8")).tags, ["homework"]);
@@ -147,21 +184,21 @@ test("rename-tags previews and writes a tag rename", async () => {
   }
 });
 
-test("rename-tags validates its arguments and the tags", async () => {
-  const one = await runCli("rename-tags", "--course", "names", "used");
+test("rename tag validates its arguments and the tags", async () => {
+  const one = await runCli("rename", "tag", "--course", "names", "used");
   assert.equal(one.code, 1);
   assert.match(one.stderr, /Exactly one old tag and one new tag/);
 
-  const undefinedTag = await runCli("rename-tags", "--course", "names", "nope", "new");
+  const undefinedTag = await runCli("rename", "tag", "--course", "names", "nope", "new");
   assert.equal(undefinedTag.code, 1);
   assert.match(undefinedTag.stderr, /Tag "nope" is not defined in infoCourse.json/);
 
-  const taken = await runCli("rename-tags", "--course", "names", "used", "unused");
+  const taken = await runCli("rename", "tag", "--course", "names", "used", "unused");
   assert.equal(taken.code, 1);
   assert.match(taken.stderr, /Tag "unused" is already defined/);
 });
 
-test("rename-assessment-sets previews and writes an assessment set rename", async () => {
+test("rename assessment-set previews and writes an assessment set rename", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-sets-"));
   const course = path.join(root, "course");
   fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
@@ -169,13 +206,13 @@ test("rename-assessment-sets previews and writes an assessment set rename", asyn
   const assessment = path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json");
   const before = fs.readFileSync(assessment, "utf-8");
   try {
-    const preview = await runCliAt(course, "rename-assessment-sets", "Homework", "Problem Set");
+    const preview = await runCliAt(course, "rename", "assessment-set", "Homework", "Problem Set");
     assert.equal(preview.code, 0, preview.stderr);
     assert.match(preview.stdout, /"\\"Homework\\"" -> "\\"Problem Set\\""/);
     assert.match(preview.stdout, /Would make 2 edits in 2 files/);
     assert.equal(fs.readFileSync(assessment, "utf-8"), before);
 
-    const written = await runCliAt(course, "rename-assessment-sets", "--write", "Homework", "Problem Set");
+    const written = await runCliAt(course, "rename", "assessment-set", "--write", "Homework", "Problem Set");
     assert.equal(written.code, 0, written.stderr);
     assert.match(written.stdout, /Made 2 edits in 2 files/);
     const json = JSON.parse(fs.readFileSync(assessment, "utf-8"));
@@ -189,20 +226,20 @@ test("rename-assessment-sets previews and writes an assessment set rename", asyn
   }
 });
 
-test("rename-assessment-sets validates its arguments and the sets", async () => {
-  const help = await runCli("rename-assessment-sets", "--help");
+test("rename assessment-set validates its arguments and the sets", async () => {
+  const help = await runCli("rename", "assessment-set", "--help");
   assert.equal(help.code, 0);
-  assert.match(help.stdout, /Usage: prairielearn-navigator rename-assessment-sets/);
+  assert.match(help.stdout, /Usage: prairielearn-navigator rename assessment-set/);
 
-  const one = await runCli("rename-assessment-sets", "--course", "names", "Homework");
+  const one = await runCli("rename", "assessment-set", "--course", "names", "Homework");
   assert.equal(one.code, 1);
   assert.match(one.stderr, /Exactly one old assessment set and one new assessment set/);
 
-  const undefinedSet = await runCli("rename-assessment-sets", "--course", "names", "Exam", "Final");
+  const undefinedSet = await runCli("rename", "assessment-set", "--course", "names", "Exam", "Final");
   assert.equal(undefinedSet.code, 1);
   assert.match(undefinedSet.stderr, /Assessment set "Exam" is not defined in infoCourse.json/);
 
-  const taken = await runCli("rename-assessment-sets", "--course", "names", "Homework", "Quiz");
+  const taken = await runCli("rename", "assessment-set", "--course", "names", "Homework", "Quiz");
   assert.equal(taken.code, 1);
   assert.match(taken.stderr, /Assessment set "Quiz" is already defined/);
 });

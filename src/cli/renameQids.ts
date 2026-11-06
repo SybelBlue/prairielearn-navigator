@@ -6,7 +6,7 @@ import { indexCourse } from "../core/referenceIndex";
 import { displayEdit, resolveCourseRoot, writeChanges } from "./edits";
 import { CliRuntime, processRuntime } from "./runtime";
 
-const USAGE = `Usage: prairielearn-navigator rename-qids [options] <old-qid> <new-qid> [<old-qid> <new-qid> ...]
+const USAGE = `Usage: prairielearn-navigator rename qid [options] <old-qid> <new-qid> [<old-qid> <new-qid> ...]
 
 Update every semantic reference to one or more PrairieLearn question IDs.
 This command changes references only; it never moves question directories.
@@ -21,10 +21,10 @@ Options:
   --help            Show this help message
 
 Examples:
-  prairielearn-navigator rename-qids old new
-  prairielearn-navigator rename-qids --course path/to/course old new
-  prairielearn-navigator rename-qids a b topic/one unit/one
-  prairielearn-navigator rename-qids --write old new`;
+  prairielearn-navigator rename qid old new
+  prairielearn-navigator rename qid --course path/to/course old new
+  prairielearn-navigator rename qid a b topic/one unit/one
+  prairielearn-navigator rename qid --write old new`;
 
 interface RenameQidsArgs {
   course: string;
