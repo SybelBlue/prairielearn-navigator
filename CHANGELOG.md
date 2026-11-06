@@ -6,6 +6,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- New CLI commands `qid uses`, `tag uses`, and `assessment-set uses` list
+  semantic references as source locations, with structured `--json` output.
+
 ## [1.3.3] - 2026-11-06
 
 - New CLI flag `--version` (`-v`), which prints the installed version.

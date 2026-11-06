@@ -15,6 +15,7 @@ import { run as runRenameAssessment } from "./renameAssessments";
 import { runRenameAssessmentSets, runRenameTags } from "./renameCourseNames";
 import { run as runRenameQids } from "./renameQids";
 import { CliRuntime } from "./runtime";
+import { runUsesAssessmentSet, runUsesQid, runUsesTag } from "./uses";
 
 type Runner = (args: string[], runtime?: CliRuntime) => Promise<number>;
 
@@ -65,6 +66,7 @@ export const NOUN_COMMANDS: ReadonlyMap<
       list: { summary: "List question IDs", run: runListQids },
       locate: { summary: "Print the path of a question's info.json", run: runLocateQid },
       rename: { summary: "Preview or write semantic QID reference updates", run: runRenameQids },
+      uses: { summary: "List semantic references to a question ID", run: runUsesQid },
     }),
   ],
   [
@@ -76,6 +78,7 @@ export const NOUN_COMMANDS: ReadonlyMap<
         summary: "Preview or write a rename of a tag defined in infoCourse.json",
         run: runRenameTags,
       },
+      uses: { summary: "List references to a tag", run: runUsesTag },
     }),
   ],
   [
@@ -93,6 +96,7 @@ export const NOUN_COMMANDS: ReadonlyMap<
         summary: "Preview or write a rename of an assessment set defined in infoCourse.json",
         run: runRenameAssessmentSets,
       },
+      uses: { summary: "List references to an assessment set", run: runUsesAssessmentSet },
     }),
   ],
   [
