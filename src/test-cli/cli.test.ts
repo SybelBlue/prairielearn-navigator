@@ -1274,6 +1274,19 @@ test("remove previews and writes every noun with structural reference cleanup", 
   });
 
   await withAssessmentCourse(async (course) => {
+    const replaced = await runCliAt(
+      course,
+      "assessment-set", "remove", "--write", "--replacement", "Practice Quiz", "Homework"
+    );
+    assert.equal(replaced.code, 0, replaced.stderr);
+    const assessment = JSON.parse(fs.readFileSync(
+      path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
+      "utf-8"
+    ));
+    assert.equal(assessment.set, "Practice Quiz");
+  });
+
+  await withAssessmentCourse(async (course) => {
     const removed = await runCliAt(course, "assessment", "remove", "--write", "Fa26/hw1");
     assert.equal(removed.code, 0, removed.stderr);
     assert.equal(

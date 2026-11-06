@@ -257,7 +257,10 @@ export function planCourseNameRemoval(
     if (replacement === oldName) {
       throw new Error(`${Noun} "${oldName}" cannot replace itself`);
     }
-    if (!defined.some((definition) => definition.name === replacement)) {
+    if (
+      !defined.some((definition) => definition.name === replacement) &&
+      !kind.plDefault(replacement)
+    ) {
       throw new Error(`${Noun} "${replacement}" is not defined in ${courseFiles.course}`);
     }
   }

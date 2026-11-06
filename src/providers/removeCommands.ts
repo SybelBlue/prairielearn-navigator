@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { knownAssessmentSetNames } from "../core/assessmentSets";
 import { courseFiles } from "../core/courseFiles";
 import { removeEmptyParents } from "../core/emptyDirs";
 import {
@@ -172,7 +173,8 @@ export function removeCommand(
       }
 
       if (shouldUpdate && usedSet) {
-        const replacements = removeNouns["assessment-set"].targets(ctx).filter((name) => name !== id);
+        const replacements = knownAssessmentSetNames(currentText(infoCourse.fsPath) ?? "")
+          .filter((name) => name !== id);
         replacement = options.pickReplacement
           ? await options.pickReplacement(replacements)
           : await vscode.window.showQuickPick(replacements, {

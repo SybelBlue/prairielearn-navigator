@@ -1883,8 +1883,8 @@ suite("PrairieLearn Navigator", () => {
       const removedSet = removeCommand(removeNouns["assessment-set"], courses, references, {
         mode: () => "always",
         pickReplacement: async (sets) => {
-          assert.deepStrictEqual(sets, ["Quiz"]);
-          return "Quiz";
+          assert.deepStrictEqual(sets.slice(0, 3), ["Quiz", "Practice Quiz", "Exam"]);
+          return "Practice Quiz";
         },
         confirmRemoval: async () => true,
       });
@@ -1894,7 +1894,7 @@ suite("PrairieLearn Navigator", () => {
         path.join(root, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
         "utf-8"
       ));
-      assert.strictEqual(assessment.set, "Quiz");
+      assert.strictEqual(assessment.set, "Practice Quiz");
     });
 
     await withAddCourse(async (root) => {
