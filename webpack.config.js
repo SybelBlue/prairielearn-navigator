@@ -4,6 +4,7 @@
 
 const path = require('path');
 const webpack = require('webpack');
+const { version: cliVersion } = require('./packages/cli/package.json');
 
 /** @typedef {import('webpack').Configuration} WebpackConfig */
 
@@ -100,6 +101,7 @@ const npmConfig = {
   resolve,
   module: typescript,
   plugins: [
+    new webpack.DefinePlugin({ __CLI_VERSION__: JSON.stringify(cliVersion) }),
     new webpack.BannerPlugin({
       banner: '#!/usr/bin/env node',
       raw: true,

@@ -948,6 +948,18 @@ test("assessment rename validates its arguments and the move", async () => {
   assert.match(help.stdout, /^Usage: prairielearn-navigator assessment rename \[options\]/);
 });
 
+test("--version and -v print the package version", async () => {
+  const { version } = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "../../packages/cli/package.json"), "utf8")
+  );
+  for (const flag of ["--version", "-v"]) {
+    const result = await runCli(flag);
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, `${version}\n`);
+    assert.equal(result.stderr, "");
+  }
+});
+
 test("top-level usage and invalid commands return the expected status", async () => {
   const help = await runCli("--help");
   assert.equal(help.code, 0);

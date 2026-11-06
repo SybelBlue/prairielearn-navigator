@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- New CLI flag `--version` (`-v`), which prints the installed version.
+
 ## [1.3.2] - 2026-11-06
 
 - CLI commands are now grouped by what they act on: `rename-qids` is

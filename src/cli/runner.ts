@@ -3,6 +3,9 @@ import { run as runCheck } from "./check";
 import { NOUN_COMMANDS } from "./nouns";
 import { CliRuntime, processRuntime } from "./runtime";
 
+/** The published package's version, from webpack.config.js or vitest.config.mts. */
+declare const __CLI_VERSION__: string;
+
 const USAGE = `Usage: prairielearn-navigator <command> [options]
 
 Commands:
@@ -11,6 +14,10 @@ Commands:
   tag             List, locate, or rename tags
   assessment-set  List, locate, or rename assessment sets
   assessment      List, locate, or rename assessments
+
+Options:
+  -h, --help      Show this help message
+  -v, --version   Print the version number
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
 
@@ -50,6 +57,10 @@ export async function run(
     case "--help":
     case "-h":
       runtime.stdout(USAGE);
+      return 0;
+    case "--version":
+    case "-v":
+      runtime.stdout(__CLI_VERSION__);
       return 0;
     case undefined:
       runtime.stdout(USAGE);

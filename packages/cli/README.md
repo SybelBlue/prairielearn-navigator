@@ -27,6 +27,8 @@ npx -y @sybelblue/prairielearn-navigator check [options] [paths...]
 | `--unused-assessment-sets <level>` | Severity for `infoCourse.json` assessment sets no assessment uses: `ignored`, `info`, `warning` (default), or `error` (overrides the config) |
 | `--missing-question-info <level>` | Severity for directories in `questions/` with files but no `info.json`: `ignored`, `info`, `warning`, or `error` (default) (overrides the config) |
 
+`prairielearn-navigator --version` (or `-v`) prints the installed version.
+
 ## Rules
 
 Each diagnostic ends with its rule id, e.g. `[schema]`.

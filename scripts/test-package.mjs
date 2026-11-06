@@ -90,6 +90,12 @@ try {
   if (manifest.bin?.["prairielearn-navigator"] !== "dist/cli.js") {
     throw new Error("packed CLI bin mapping is incorrect");
   }
+  const cliVersion = execFileSync(cli, ["--version"], {
+    encoding: "utf8",
+  }).trim();
+  if (cliVersion !== manifest.version) {
+    throw new Error(`unexpected CLI version output: ${cliVersion}`);
+  }
 
   // Declarations must resolve on their own: no undeclared packages, no
   // unpublished files, and ".js" on relative specifiers for NodeNext.
