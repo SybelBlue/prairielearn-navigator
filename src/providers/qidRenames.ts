@@ -8,8 +8,14 @@ import {
 } from "../core/qidRenames";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 
-const updateReferences = "Update References";
-const dontUpdate = "Don't Update";
+const updateReferences: vscode.MessageItem = { title: "Update References" };
+// `onWillRenameFiles` cannot veto a move, so a modal's default Cancel button
+// would promise something we can't do. Making this the close affordance
+// replaces that button, and Escape means the same thing.
+const dontUpdate: vscode.MessageItem = {
+  title: "Don't Update",
+  isCloseAffordance: true,
+};
 
 export interface QidRenameCoursePlan {
   courseRoot: string;

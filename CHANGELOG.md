@@ -6,6 +6,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- The prompt to update QID references after moving a question folder no longer
+  offers Cancel. VS Code doesn't let extensions stop a move, so Cancel only
+  skipped the reference updates; the choices are now Update References and
+  Don't Update (also Escape). Use Undo to reverse a move.
+
 ## [1.3.0] - 2026-11-05
 
 - The npm library exports the course logic the CLI and extension use: `findCourseRoot`, `parseJsonDoc`,

@@ -672,6 +672,43 @@ suite("PrairieLearn Navigator", () => {
     );
   });
 
+  test("question folder move prompt never offers a Cancel it can't honor", async () => {
+    const oldUri = vscode.Uri.file(path.join(course, "questions/good"));
+    const newUri = vscode.Uri.file(path.join(course, "questions/better"));
+    const realShow = vscode.window.showInformationMessage;
+    let shownItems: vscode.MessageItem[] = [];
+    const window = vscode.window as unknown as {
+      showInformationMessage(
+        message: string,
+        options: vscode.MessageOptions,
+        ...items: vscode.MessageItem[]
+      ): Thenable<vscode.MessageItem | undefined>;
+    };
+    window.showInformationMessage = async (_message, options, ...items) => {
+      assert.strictEqual(options.modal, true);
+      shownItems = items;
+      return items.find((item) => item.isCloseAffordance);
+    };
+    try {
+      const edit = await prepareQidRenameWorkspaceEdit(
+        [{ oldUri, newUri }],
+        new vscode.CancellationTokenSource().token,
+        { getCourseIdFor: () => course },
+        { whenIndexed: async () => indexCourse(course, "2026-01-01") }
+      );
+      assert.strictEqual(edit.size, 0);
+    } finally {
+      window.showInformationMessage = realShow as never;
+    }
+    assert.deepStrictEqual(
+      shownItems.map((item) => [item.title, item.isCloseAffordance === true]),
+      [
+        ["Update References", false],
+        ["Don't Update", true],
+      ]
+    );
+  });
+
   test("ancestor question-folder moves batch nested QID changes", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-move-"));
     const write = (relative: string, contents = "{}") => {
