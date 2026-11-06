@@ -70,11 +70,11 @@ function suppressionEdits(
   text: string,
   oldName: string,
   newName: string | undefined
-): FileEdit[] {
+): { edits: FileEdit[]; useCount: number } {
   const tree = treeOf(parseJsonDoc(text));
   const array = tree && findNodeAtLocation(tree, ["ignoredDiagnostics"]);
   if (array?.type !== "array") {
-    return [];
+    return { edits: [], useCount: 0 };
   }
   const matched = (array.children ?? []).filter((entry) => {
     const rule = findNodeAtLocation(entry, ["rule"])?.value;
@@ -82,12 +82,21 @@ function suppressionEdits(
     return typeof rule === "string" && kind.rules.has(rule) && identifier?.value === oldName;
   });
   if (newName === undefined) {
-    return removeJsonValues(file, text, matched);
+    return { edits: removeJsonValues(file, text, matched), useCount: matched.length };
   }
-  return matched.map((entry) => {
-    const identifier = findNodeAtLocation(entry, ["identifier"])!;
-    return edit(file, text, identifier.offset, identifier.offset + identifier.length, JSON.stringify(newName));
-  });
+  return {
+    edits: matched.map((entry) => {
+      const identifier = findNodeAtLocation(entry, ["identifier"])!;
+      return edit(
+        file,
+        text,
+        identifier.offset,
+        identifier.offset + identifier.length,
+        JSON.stringify(newName)
+      );
+    }),
+    useCount: matched.length,
+  };
 }
 
 /**
@@ -202,7 +211,7 @@ export function planCourseNameRename(
   const config = path.join(courseRoot, configFileName);
   const configText = readText(config);
   if (configText !== undefined) {
-    edits.push(...suppressionEdits(kind, config, configText, oldName, newName));
+    edits.push(...suppressionEdits(kind, config, configText, oldName, newName).edits);
   }
 
   return edits.sort(
@@ -216,6 +225,7 @@ export interface CourseNameRemoval {
   /** Removes or replaces uses, and removes suppressions naming the old name. */
   referenceEdits: FileEdit[];
   useCount: number;
+  referenceCount: number;
 }
 
 /**
@@ -275,11 +285,14 @@ export function planCourseNameRemoval(
   }
   const config = path.join(index.courseRoot, configFileName);
   const configText = readText(config);
+  let suppressionCount = 0;
   if (configText !== undefined) {
-    referenceEdits.push(...suppressionEdits(kind, config, configText, oldName, undefined));
+    const suppressions = suppressionEdits(kind, config, configText, oldName, undefined);
+    referenceEdits.push(...suppressions.edits);
+    suppressionCount = suppressions.useCount;
   }
   referenceEdits.sort(
     (a, b) => a.file.localeCompare(b.file) || a.startOffset - b.startOffset
   );
-  return { primaryEdits, referenceEdits, useCount };
+  return { primaryEdits, referenceEdits, useCount, referenceCount: useCount + suppressionCount };
 }

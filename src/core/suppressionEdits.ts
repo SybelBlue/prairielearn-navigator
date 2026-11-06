@@ -55,15 +55,15 @@ export function moveFileSuppressionEdits(
   });
 }
 
-/** Edits deleting file-scoped suppressions inside removed directories. */
-export function removeFileSuppressionEdits(
+/** Edits and logical-entry count for suppressions inside removed directories. */
+export function planRemoveFileSuppressions(
   courseRoot: string,
   config: string,
   text: string,
   removedDirs: readonly string[]
-): FileEdit[] {
+): { edits: FileEdit[]; useCount: number } {
   const entries = fileSuppressions(courseRoot, text)
     .filter(({ absoluteFile }) => removedDirs.some((dir) => isWithinDir(dir, absoluteFile)))
     .map(({ entry }) => entry);
-  return removeJsonValues(config, text, entries);
+  return { edits: removeJsonValues(config, text, entries), useCount: entries.length };
 }

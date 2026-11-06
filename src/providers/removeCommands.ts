@@ -162,7 +162,7 @@ export function removeCommand(
 
       if (mode === "prompt") {
         const impact = usedSet ||
-          noun.plan(ctx, id, { updateReferences: true }).referenceEdits.length;
+          noun.plan(ctx, id, { updateReferences: true }).referenceCount;
         if (impact > 0) {
           shouldUpdate = await (
             options.confirmReferences?.(noun, id, impact) ??

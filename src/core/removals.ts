@@ -6,9 +6,9 @@ import { assessmentSetKind, NameKind, tagKind } from "./courseNames";
 import { courseFiles, courseRelativePath, isWithinDir, matchesGlob } from "./courseFiles";
 import { FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
-import { planQidReferenceRemovals } from "./qidRenames";
+import { planQidReferenceRemovals, qidReferenceUseCount } from "./qidRenames";
 import { ReferenceIndex } from "./referenceIndex";
-import { removeFileSuppressionEdits } from "./suppressionEdits";
+import { planRemoveFileSuppressions } from "./suppressionEdits";
 
 export interface RemoveContext {
   index: ReferenceIndex;
@@ -33,6 +33,8 @@ export interface CourseRemoval {
   primaryEdits: FileEdit[];
   /** Optional edits to uses and suppressions. */
   referenceEdits: FileEdit[];
+  /** Logical references represented by `referenceEdits`. */
+  referenceCount: number;
   /** A resource backed by a directory instead of primary text edits. */
   directory?: {
     path: string;
@@ -83,15 +85,15 @@ function nameTargets(kind: NameKind, ctx: RemoveContext): string[] {
 }
 
 /** Removes config suppressions whose file lies in one of `removedDirs`. */
-export function removedFileSuppressionEdits(
+export function removedFileSuppressionPlan(
   ctx: RemoveContext,
   removedDirs: readonly string[]
-): FileEdit[] {
+): { edits: FileEdit[]; useCount: number } {
   const file = path.join(ctx.index.courseRoot, configFileName);
   const text = ctx.readText(file);
   return text === undefined
-    ? []
-    : removeFileSuppressionEdits(ctx.index.courseRoot, file, text, removedDirs);
+    ? { edits: [], useCount: 0 }
+    : planRemoveFileSuppressions(ctx.index.courseRoot, file, text, removedDirs);
 }
 
 const questionNoun: RemoveNoun = {
@@ -107,10 +109,13 @@ const questionNoun: RemoveNoun = {
       throw new Error(`Question "${qid}" is not defined`);
     }
     const deletedRoots = [...(options.deletedRoots ?? []), target.dir];
+    const suppressions = options.updateReferences
+      ? removedFileSuppressionPlan(ctx, [target.dir])
+      : { edits: [], useCount: 0 };
     const referenceEdits = options.updateReferences
       ? [
           ...planQidReferenceRemovals(ctx.index, [qid], ctx.readText, deletedRoots),
-          ...removedFileSuppressionEdits(ctx, [target.dir]),
+          ...suppressions.edits,
         ]
       : [];
     return {
@@ -118,6 +123,9 @@ const questionNoun: RemoveNoun = {
       id: qid,
       primaryEdits: [],
       referenceEdits,
+      referenceCount: options.updateReferences
+        ? qidReferenceUseCount(ctx.index, [qid], deletedRoots) + suppressions.useCount
+        : 0,
       directory: { path: target.dir, root: path.join(ctx.index.courseRoot, "questions") },
     };
   },
@@ -155,6 +163,7 @@ function nameNoun(kind: NameKind): RemoveNoun {
         id: name,
         primaryEdits: planned.primaryEdits,
         referenceEdits: options.updateReferences ? planned.referenceEdits : [],
+        referenceCount: options.updateReferences ? planned.referenceCount : 0,
       };
     },
   };
@@ -180,6 +189,7 @@ const assessmentNoun: RemoveNoun = {
       id,
       primaryEdits: [],
       referenceEdits: options.updateReferences ? planned.referenceEdits : [],
+      referenceCount: options.updateReferences ? planned.referenceCount : 0,
       directory: { path: planned.dir, root: planned.assessmentsDir },
     };
   },

@@ -13,6 +13,7 @@ export interface QidRename {
 }
 
 export type QidReferenceEdit = QidRename & FileEdit;
+type QidUsesByFile = Map<string, ReturnType<ReferenceIndex["usesOf"]>>;
 
 /** The absolute directory named by a validated QID. */
 function qidDirectory(courseRoot: string, qid: string): string {
@@ -44,6 +45,49 @@ function questionCapacity(question: Node, targets: ReadonlySet<Node>): number {
       : remaining;
   }
   return findNodeAtLocation(question, ["id"]) ? 1 : 0;
+}
+
+function qidUsesByFile(
+  index: ReferenceIndex,
+  qids: readonly string[],
+  deletedRoots: readonly string[]
+): QidUsesByFile {
+  const unique = new Set<string>();
+  for (const qid of qids) {
+    const problem = relativeIdProblem("QID", qid);
+    if (problem) {
+      throw new Error(problem);
+    }
+    unique.add(qid);
+  }
+
+  const usesByFile: QidUsesByFile = new Map();
+  for (const qid of unique) {
+    const dir = qidDirectory(index.courseRoot, qid);
+    for (const use of index.usesOf(dir)) {
+      if (
+        use.ref.spec.target !== "question" ||
+        use.ref.target !== dir ||
+        deletedRoots.some((root) => isWithinDir(root, use.file))
+      ) {
+        continue;
+      }
+      const uses = usesByFile.get(use.file) ?? [];
+      uses.push(use);
+      usesByFile.set(use.file, uses);
+    }
+  }
+  return usesByFile;
+}
+
+/** Number of semantic QID uses that a removal plan will update. */
+export function qidReferenceUseCount(
+  index: ReferenceIndex,
+  qids: readonly string[],
+  deletedRoots: readonly string[] = []
+): number {
+  return [...qidUsesByFile(index, qids, deletedRoots).values()]
+    .reduce((count, uses) => count + uses.length, 0);
 }
 
 /**
@@ -124,31 +168,7 @@ export function planQidReferenceRemovals(
   readText: (file: string) => string | undefined,
   deletedRoots: readonly string[] = []
 ): FileEdit[] {
-  const unique = new Set<string>();
-  for (const qid of qids) {
-    const problem = relativeIdProblem("QID", qid);
-    if (problem) {
-      throw new Error(problem);
-    }
-    unique.add(qid);
-  }
-
-  const usesByFile = new Map<string, ReturnType<ReferenceIndex["usesOf"]>>();
-  for (const qid of unique) {
-    const dir = qidDirectory(index.courseRoot, qid);
-    for (const use of index.usesOf(dir)) {
-      if (
-        use.ref.spec.target !== "question" ||
-        use.ref.target !== dir ||
-        deletedRoots.some((root) => isWithinDir(root, use.file))
-      ) {
-        continue;
-      }
-      const uses = usesByFile.get(use.file) ?? [];
-      uses.push(use);
-      usesByFile.set(use.file, uses);
-    }
-  }
+  const usesByFile = qidUsesByFile(index, qids, deletedRoots);
 
   const edits: FileEdit[] = [];
   for (const [file, uses] of usesByFile) {

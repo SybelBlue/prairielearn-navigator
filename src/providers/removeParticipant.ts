@@ -4,8 +4,8 @@ import * as vscode from "vscode";
 import { courseRelativePath, isWithinDir } from "../core/courseFiles";
 import { removeEmptyParents } from "../core/emptyDirs";
 import { FileEdit } from "../core/fileEdits";
-import { planQidReferenceRemovals } from "../core/qidRenames";
-import { RemoveContext, removedFileSuppressionEdits } from "../core/removals";
+import { planQidReferenceRemovals, qidReferenceUseCount } from "../core/qidRenames";
+import { RemoveContext, removedFileSuppressionPlan } from "../core/removals";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { addFileEdits, currentText } from "./fileEdits";
 import { isCommandDeletion } from "./removeCommands";
@@ -23,6 +23,7 @@ interface RemovedResources {
 
 interface RemoveReferencePrompt {
   edits: readonly FileEdit[];
+  referenceCount: number;
   qids: readonly string[];
   assessments: readonly string[];
 }
@@ -39,8 +40,8 @@ const dontUpdate: vscode.MessageItem = { title: "Don't Update", isCloseAffordanc
 async function defaultConfirmation(prompt: RemoveReferencePrompt): Promise<boolean> {
   const resources = prompt.qids.length + prompt.assessments.length;
   const choice = await vscode.window.showInformationMessage(
-    `Update ${prompt.edits.length} additional ` +
-      `${prompt.edits.length === 1 ? "reference" : "references"} for ` +
+    `Update ${prompt.referenceCount} additional ` +
+      `${prompt.referenceCount === 1 ? "reference" : "references"} for ` +
       `${resources} removed ${resources === 1 ? "resource" : "resources"}?`,
     { modal: true },
     updateReferences,
@@ -148,6 +149,7 @@ export async function prepareRemoveWorkspaceEdit(
     const groups = await removedResources(files, courseCache);
     const automatic: FileEdit[] = [];
     const prompted: FileEdit[] = [];
+    let promptReferenceCount = 0;
     const promptQids: string[] = [];
     const promptAssessments: string[] = [];
     for (const group of groups) {
@@ -176,14 +178,21 @@ export async function prepareRemoveWorkspaceEdit(
         throw new Error(`could not index course ${group.courseRoot}`);
       }
       const ctx: RemoveContext = { index, readText: currentText };
+      const suppressions = removedFileSuppressionPlan(
+        ctx,
+        [...group.questionDirs, ...group.assessmentDirs]
+      );
       const edits = [
         ...planQidReferenceRemovals(index, group.qids, currentText, group.deletedRoots),
-        ...removedFileSuppressionEdits(ctx, [...group.questionDirs, ...group.assessmentDirs]),
+        ...suppressions.edits,
       ];
+      const referenceCount = qidReferenceUseCount(index, group.qids, group.deletedRoots) +
+        suppressions.useCount;
       if (mode === "always") {
         automatic.push(...edits);
       } else {
         prompted.push(...edits);
+        promptReferenceCount += referenceCount;
         promptQids.push(...group.qids);
         promptAssessments.push(...group.assessments);
       }
@@ -192,9 +201,14 @@ export async function prepareRemoveWorkspaceEdit(
       return workspaceEdit;
     }
     let accepted = prompted;
-    if (prompted.length > 0) {
+    if (promptReferenceCount > 0) {
       const confirm = options.confirm ?? defaultConfirmation;
-      if (!(await confirm({ edits: prompted, qids: promptQids, assessments: promptAssessments }))) {
+      if (!(await confirm({
+        edits: prompted,
+        referenceCount: promptReferenceCount,
+        qids: promptQids,
+        assessments: promptAssessments,
+      }))) {
         accepted = [];
       }
     }

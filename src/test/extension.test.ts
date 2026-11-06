@@ -741,6 +741,7 @@ suite("PrairieLearn Navigator", () => {
             prompts++;
             assert.deepStrictEqual(prompt.qids, ["q"]);
             assert.strictEqual(prompt.edits.length, 3);
+            assert.strictEqual(prompt.referenceCount, 3);
             return true;
           },
         }
@@ -1935,6 +1936,43 @@ suite("PrairieLearn Navigator", () => {
         "utf-8"
       ));
       assert.strictEqual(assessment.zones[0].questions[0].id, "q");
+    });
+  });
+
+  test("remove commands prompt with logical reference counts", async () => {
+    await withAddCourse(async (root) => {
+      fs.writeFileSync(path.join(root, "questions/q/info.json"), `{
+        "title": "Q",
+        "tags": [
+          "unused", // keep this tag
+          "used"
+        ]
+      }`);
+      const [courses, references] = addCaches(root);
+      const tagNoun = {
+        ...removeNouns.tag,
+        plan(...args: Parameters<typeof removeNouns.tag.plan>) {
+          const removal = removeNouns.tag.plan(...args);
+          if (args[2].updateReferences) {
+            assert.strictEqual(removal.referenceEdits.length, 2);
+            assert.strictEqual(removal.referenceCount, 1);
+          }
+          return removal;
+        },
+      };
+      let prompted = 0;
+      const removedTag = removeCommand(tagNoun, courses, references, {
+        mode: () => "prompt",
+        confirmReferences: async (_noun, _id, count) => {
+          prompted++;
+          assert.strictEqual(count, 1);
+          return false;
+        },
+        confirmRemoval: async () => false,
+      });
+
+      assert.strictEqual(await removedTag({ courseRoot: root, id: "used" }), false);
+      assert.strictEqual(prompted, 1);
     });
   });
 

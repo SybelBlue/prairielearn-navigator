@@ -7,7 +7,7 @@ import { FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
 import { folderOutside, placementProblem } from "./placement";
 import { ReferenceIndex } from "./referenceIndex";
-import { moveFileSuppressionEdits, removeFileSuppressionEdits } from "./suppressionEdits";
+import { moveFileSuppressionEdits, planRemoveFileSuppressions } from "./suppressionEdits";
 
 /** An assessment in a course, named by the directories that locate it. */
 export interface CourseAssessment {
@@ -216,6 +216,7 @@ export interface AssessmentRemoval {
   /** Absolute assessments/ directory that must remain. */
   assessmentsDir: string;
   referenceEdits: FileEdit[];
+  referenceCount: number;
 }
 
 /** Plans removing an assessment directory and suppressions for files inside it. */
@@ -229,8 +230,13 @@ export function planAssessmentRemoval(
   const assessmentsDir = assessmentsDirOf(index.courseRoot, instance);
   const config = path.join(index.courseRoot, configFileName);
   const configText = readText(config);
-  const referenceEdits = configText === undefined
-    ? []
-    : removeFileSuppressionEdits(index.courseRoot, config, configText, [dir]);
-  return { dir, assessmentsDir, referenceEdits };
+  const suppressions = configText === undefined
+    ? { edits: [], useCount: 0 }
+    : planRemoveFileSuppressions(index.courseRoot, config, configText, [dir]);
+  return {
+    dir,
+    assessmentsDir,
+    referenceEdits: suppressions.edits,
+    referenceCount: suppressions.useCount,
+  };
 }
