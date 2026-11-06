@@ -8,6 +8,15 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - New CLI commands `qid uses`, `tag uses`, and `assessment-set uses` list
   semantic references as source locations, with structured `--json` output.
+- New CLI commands `qid remove`, `tag remove`, `assessment-set remove`, and
+  `assessment remove` preview or apply removal with semantic reference and
+  suppression cleanup. `--no-update-references` deliberately leaves those
+  additional references alone; used assessment sets require `--replacement`.
+- New **PrairieLearn: Remove** commands and Explorer menu provide the same
+  operations in VS Code. Native question-folder deletion also offers
+  reference cleanup.
+- New `updateReferencesOnRename` and `updateReferencesOnRemove` settings use
+  `prompt`, `always`, or `never` to control automatic additional edits.
 - New CLI commands `qid add`, `tag add`, `assessment-set add`, and
   `assessment add`. Only the name is required: the rest defaults, and is
   printed in the preview. Like `rename`, they only preview without `--write`.

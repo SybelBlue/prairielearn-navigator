@@ -320,6 +320,29 @@ npx -y @sybelblue/prairielearn-navigator assessment add --write \
   --title "Midterm 1" --set Midterm --type Exam Fa26/midterm1
 ```
 
+## Remove
+
+`qid remove`, `tag remove`, `assessment-set remove`, and `assessment remove`
+remove one existing course resource. They preview by default and apply only
+with `--write`, just like `add` and `rename`.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator <noun> remove [options] <name>
+```
+
+Unless `--no-update-references` is present, removal also updates semantic
+references and deletes obsolete diagnostic suppressions:
+
+- QID removal deletes the question directory, assessment question or
+  alternative entries that use it, and legacy question `template` properties.
+- Tag removal deletes its definition and matching question `tags` entries.
+- Assessment removal deletes its directory and suppressions for files in it.
+- A used assessment set requires `--replacement <defined-set>`; assessments
+  are changed to that already-defined set before the old definition is removed.
+
+`--no-update-references` cannot be combined with `--replacement`. Directory
+removals are staged so a failed reference write can restore the directory.
+
 ## Rename QIDs
 
 `qid rename` bulk-updates semantic references to one or more question IDs:

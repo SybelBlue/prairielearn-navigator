@@ -23,6 +23,7 @@ import {
   FileReferenceProvider,
   fileReferenceSelector,
   addCommands,
+  removeCommands,
   findUsesCommand,
   isEmptyUuidValue,
   ignoreDiagnostic,
@@ -32,6 +33,7 @@ import {
   RuleDiagnosticCollection,
   removeUnusedQuestion,
   registerQidRenameParticipant,
+  registerRemoveParticipant,
   AssessmentSetProvider,
   CourseNameProvider,
   TagProvider,
@@ -135,7 +137,11 @@ export function activate(context: vscode.ExtensionContext) {
     configProvider,
     referenceIndex,
     registerQidRenameParticipant(courseCache, referenceIndex),
+    registerRemoveParticipant(courseCache, referenceIndex),
     ...Object.entries(addCommands(courseCache, referenceIndex)).map(([name, command]) =>
+      vscode.commands.registerCommand(`prairielearn-navigator.${name}`, command),
+    ),
+    ...Object.entries(removeCommands(courseCache, referenceIndex)).map(([name, command]) =>
       vscode.commands.registerCommand(`prairielearn-navigator.${name}`, command),
     ),
     courseCache.onUpdated((courses) => {

@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { addNouns, AddPrompt, stepBack } from "../core/additions";
+import { removeNouns } from "../core/removals";
 import {
   addCommand,
   DiagnosticQuickFixProvider,
@@ -14,7 +15,9 @@ import {
   missingRootUuidDiagnosticCode,
   MissingFileQuickFixProvider,
   prepareQidRenameWorkspaceEdit,
+  prepareRemoveWorkspaceEdit,
   qidRenamesForFileMoves,
+  removeCommand,
   removeQuestionMoveResidue,
   UuidCompletionItemProvider,
 } from "../providers";
@@ -281,18 +284,18 @@ suite("PrairieLearn Navigator", () => {
     assert.equal(diagnosticRuleId(missingRootUuidDiagnosticCode), "schema");
   });
 
-  test("unused tags and assessment sets offer removal edits", async () => {
+  test("unused tags and assessment sets use the shared removal commands", async () => {
     const cases = [
       {
         rule: "unused-tag",
-        title: "Remove unused tag",
-        key: "tags",
+        title: "Remove unused tag…",
+        command: "prairielearn-navigator.removeTag",
         content: '{\n  "tags": [{ "name": "used" }, { "name": "unused" }]\n}',
       },
       {
         rule: "unused-assessment-set",
-        title: "Remove unused assessment set",
-        key: "assessmentSets",
+        title: "Remove unused assessment set…",
+        command: "prairielearn-navigator.removeAssessmentSet",
         content:
           '{\n  "assessmentSets": [{ "name": "Homework" }, { "name": "unused" }]\n}',
       },
@@ -321,7 +324,11 @@ suite("PrairieLearn Navigator", () => {
         }
       );
       const remove = actions.find((action) => action.title === testCase.title);
-      assert.ok(remove?.edit);
+      assert.deepStrictEqual(remove?.command, {
+        command: testCase.command,
+        title: testCase.title,
+        arguments: [{ courseRoot: "/course", id: "unused" }],
+      });
       const ignore = actions.find((action) => action.title === "Ignore this violation in this file");
       assert.deepStrictEqual(ignore?.command?.arguments?.[0], {
         courseRoot: "/course",
@@ -329,13 +336,10 @@ suite("PrairieLearn Navigator", () => {
         rule: testCase.rule,
         identifier: "unused",
       });
-      assert.equal(await vscode.workspace.applyEdit(remove.edit), true);
-      const value = JSON.parse(document.getText()) as Record<string, unknown[]>;
-      assert.deepStrictEqual(value[testCase.key], [{ name: testCase.key === "tags" ? "used" : "Homework" }]);
     }
   });
 
-  test("an unused question offers to move its directory to Trash", async () => {
+  test("an unused question uses the shared removal command", async () => {
     const unused = await until(
       () => ourDiagnostics(depsInfo, { unused: true }).find((d) => d.code === unusedQuestionCode),
       (diagnostic) => diagnostic !== undefined
@@ -348,12 +352,12 @@ suite("PrairieLearn Navigator", () => {
       vscode.CodeActionKind.QuickFix.value
     );
     const remove = actions.find(
-      (action) => action.title === "Move unused question directory to Trash…"
+      (action) => action.title === "Remove unused question…"
     );
     assert.deepStrictEqual(remove?.command, {
-      command: "prairielearn-navigator.removeUnusedQuestion",
-      title: "Move unused question directory to Trash…",
-      arguments: [{ courseRoot: course, file: depsInfo.fsPath }],
+      command: "prairielearn-navigator.removeQuestion",
+      title: "Remove unused question…",
+      arguments: [{ courseRoot: course, id: "deps" }],
     });
     const ignore = actions.find((action) => action.title === "Ignore this violation in this file");
     assert.deepStrictEqual(ignore?.command?.arguments?.[0], {
@@ -674,6 +678,152 @@ suite("PrairieLearn Navigator", () => {
         ["questions/jsonRefs/info.json", "better"],
       ]
     );
+  });
+
+  test("question folder move settings can always or never update references", async () => {
+    const files = [{
+      oldUri: vscode.Uri.file(path.join(course, "questions/good")),
+      newUri: vscode.Uri.file(path.join(course, "questions/better")),
+    }];
+    const courseCache = { getCourseIdFor: () => course };
+    const references = { whenIndexed: async () => indexCourse(course, "2026-01-01") };
+    let prompts = 0;
+    const confirm = async () => {
+      prompts++;
+      return true;
+    };
+    const never = await prepareQidRenameWorkspaceEdit(
+      files,
+      new vscode.CancellationTokenSource().token,
+      courseCache,
+      references,
+      { mode: () => "never", confirm }
+    );
+    const always = await prepareQidRenameWorkspaceEdit(
+      files,
+      new vscode.CancellationTokenSource().token,
+      courseCache,
+      references,
+      { mode: () => "always", confirm }
+    );
+    assert.strictEqual(never.size, 0);
+    assert.strictEqual(always.size, 2);
+    assert.strictEqual(prompts, 0);
+  });
+
+  test("native question removal plans structural reference cleanup", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-remove-event-"));
+    const write = (relative: string, contents = "{}") => {
+      const file = path.join(root, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, contents);
+    };
+    try {
+      write("infoCourse.json");
+      write("questions/q/info.json");
+      write("questions/template-user/info.json", '{ "template": "q", "title": "T" }');
+      write(
+        "courseInstances/Fa26/assessments/hw/infoAssessment.json",
+        '{ "zones": [{ "questions": [' +
+          '{ "id": "q" }, ' +
+          '{ "id": "keep", "alternatives": [{ "id": "q" }, { "id": "other" }] }' +
+        '] }] }'
+      );
+      let prompts = 0;
+      const edit = await prepareRemoveWorkspaceEdit(
+        [vscode.Uri.file(path.join(root, "questions/q"))],
+        new vscode.CancellationTokenSource().token,
+        { getCourseIdFor: () => root },
+        { whenIndexed: async () => indexCourse(root, "2026-01-01") },
+        {
+          mode: () => "prompt",
+          confirm: async (prompt) => {
+            prompts++;
+            assert.deepStrictEqual(prompt.qids, ["q"]);
+            assert.strictEqual(prompt.edits.length, 3);
+            return true;
+          },
+        }
+      );
+      assert.strictEqual(prompts, 1);
+      assert.strictEqual(edit.size, 2);
+      assert.strictEqual(
+        edit.entries().flatMap(([, edits]) => edits).filter((textEdit) => textEdit.newText === "").length,
+        3
+      );
+
+      const never = await prepareRemoveWorkspaceEdit(
+        [vscode.Uri.file(path.join(root, "questions/q"))],
+        new vscode.CancellationTokenSource().token,
+        { getCourseIdFor: () => root },
+        { whenIndexed: async () => indexCourse(root, "2026-01-01") },
+        { mode: () => "never", confirm: async () => { throw new Error("must not prompt"); } }
+      );
+      assert.strictEqual(never.size, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("native assessment ancestor removal cleans suppressions for every assessment", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-remove-assessments-"));
+    const write = (relative: string, contents = "{}") => {
+      const file = path.join(root, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, contents);
+    };
+    try {
+      write("infoCourse.json");
+      write("courseInstances/Fa26/assessments/unit/hw1/infoAssessment.json");
+      write("courseInstances/Fa26/assessments/unit/hw2/infoAssessment.json");
+      write("questions/keep/info.json");
+      write(".pl-navigator.jsonc", JSON.stringify({
+        ignoredDiagnostics: [
+          {
+            file: "courseInstances/Fa26/assessments/unit/hw1/infoAssessment.json",
+            rule: "schema",
+          },
+          {
+            file: "courseInstances/Fa26/assessments/unit/hw2/infoAssessment.json",
+            rule: "schema",
+          },
+          { file: "questions/keep/info.json", rule: "schema" },
+        ],
+      }, null, 2));
+
+      const edit = await prepareRemoveWorkspaceEdit(
+        [vscode.Uri.file(path.join(root, "courseInstances/Fa26/assessments/unit"))],
+        new vscode.CancellationTokenSource().token,
+        { getCourseIdFor: () => root },
+        { whenIndexed: async () => indexCourse(root, "2026-01-01") },
+        { mode: () => "always" }
+      );
+      assert.strictEqual(edit.size, 1);
+      const configFile = path.join(root, ".pl-navigator.jsonc");
+      const original = fs.readFileSync(configFile, "utf-8");
+      const lineStarts = [0];
+      for (let i = 0; i < original.length; i++) {
+        if (original[i] === "\n") {
+          lineStarts.push(i + 1);
+        }
+      }
+      const at = (position: vscode.Position) => lineStarts[position.line] + position.character;
+      const [entry] = edit.entries();
+      assert.strictEqual(entry[0].fsPath, configFile);
+      const updated = [...entry[1]]
+        .sort((a, b) => at(b.range.start) - at(a.range.start))
+        .reduce(
+          (text, textEdit) =>
+            text.slice(0, at(textEdit.range.start)) + textEdit.newText + text.slice(at(textEdit.range.end)),
+          original
+        );
+      const config = JSON.parse(updated);
+      assert.deepStrictEqual(config.ignoredDiagnostics, [
+        { file: "questions/keep/info.json", rule: "schema" },
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("question folder moves remove directories they leave empty", async () => {
@@ -1712,6 +1862,57 @@ suite("PrairieLearn Navigator", () => {
     });
   });
 
+  test("remove commands share core plans for text and directory nouns", async () => {
+    await withAddCourse(async (root) => {
+      const [courses, references] = addCaches(root);
+      const removedTag = removeCommand(removeNouns.tag, courses, references, {
+        mode: () => "always",
+        confirmRemoval: async () => true,
+      });
+      assert.strictEqual(await removedTag({ courseRoot: root, id: "used" }), true);
+      await vscode.workspace.saveAll();
+      const infoCourse = JSON.parse(fs.readFileSync(path.join(root, "infoCourse.json"), "utf-8"));
+      const question = JSON.parse(fs.readFileSync(path.join(root, "questions/q/info.json"), "utf-8"));
+      assert.deepStrictEqual(infoCourse.tags.map((tag: { name: string }) => tag.name), ["unused"]);
+      assert.deepStrictEqual(question.tags, []);
+    });
+
+    await withAddCourse(async (root) => {
+      const [courses, references] = addCaches(root);
+      const removedSet = removeCommand(removeNouns["assessment-set"], courses, references, {
+        mode: () => "always",
+        pickReplacement: async (sets) => {
+          assert.deepStrictEqual(sets, ["Quiz"]);
+          return "Quiz";
+        },
+        confirmRemoval: async () => true,
+      });
+      assert.strictEqual(await removedSet({ courseRoot: root, id: "Homework" }), true);
+      await vscode.workspace.saveAll();
+      const assessment = JSON.parse(fs.readFileSync(
+        path.join(root, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
+        "utf-8"
+      ));
+      assert.strictEqual(assessment.set, "Quiz");
+    });
+
+    await withAddCourse(async (root) => {
+      const [courses, references] = addCaches(root);
+      const removedQuestion = removeCommand(removeNouns.qid, courses, references, {
+        mode: () => "always",
+        confirmRemoval: async () => true,
+      });
+      assert.strictEqual(await removedQuestion({ courseRoot: root, id: "q" }), true);
+      await vscode.workspace.saveAll();
+      assert.strictEqual(fs.existsSync(path.join(root, "questions/q")), false);
+      const assessment = JSON.parse(fs.readFileSync(
+        path.join(root, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
+        "utf-8"
+      ));
+      assert.deepStrictEqual(assessment.zones[0].questions, []);
+    });
+  });
+
   test("adding to an infoCourse.json with unsaved changes leaves them unsaved", async () => {
     await withAddCourse(async (root) => {
       const file = path.join(root, "infoCourse.json");
@@ -1812,29 +2013,45 @@ suite("PrairieLearn Navigator", () => {
     });
   });
 
-  test("the manifest offers the add commands only in a course", () => {
+  test("the manifest offers add and remove commands only in a course", () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf-8"),
     ) as {
       contributes: {
         commands: { command: string; enablement?: string }[];
+        configuration: { properties: Record<string, { enum?: string[]; default?: string; scope?: string }> };
         menus: Record<string, { command?: string; submenu?: string; when?: string }[]>;
       };
     };
     const hasCourse = "prairielearn-navigator.hasCourse";
-    const names = ["addQuestion", "addTag", "addAssessmentSet", "addAssessment"]
-      .map((name) => `prairielearn-navigator.${name}`);
-    for (const name of names) {
+    for (const verb of ["add", "remove"]) {
+      const names = ["Question", "Tag", "AssessmentSet", "Assessment"]
+        .map((name) => `prairielearn-navigator.${verb}${name}`);
+      for (const name of names) {
+        assert.strictEqual(
+          manifest.contributes.commands.find((c) => c.command === name)?.enablement,
+          hasCourse
+        );
+      }
+      const { menus } = manifest.contributes;
+      assert.deepStrictEqual(
+        menus[`prairielearn-navigator.${verb}`].map((item) => item.command),
+        names
+      );
       assert.strictEqual(
-        manifest.contributes.commands.find((c) => c.command === name)?.enablement,
+        menus["explorer/context"].find(
+          (item) => item.submenu === `prairielearn-navigator.${verb}`
+        )?.when,
         hasCourse
       );
     }
-    const { menus } = manifest.contributes;
-    assert.deepStrictEqual(menus["prairielearn-navigator.add"].map((item) => item.command), names);
-    assert.strictEqual(
-      menus["explorer/context"].find((item) => item.submenu === "prairielearn-navigator.add")?.when,
-      hasCourse
-    );
+    for (const operation of ["Rename", "Remove"]) {
+      const setting = manifest.contributes.configuration.properties[
+        `prairielearn-navigator.updateReferencesOn${operation}`
+      ];
+      assert.deepStrictEqual(setting.enum, ["prompt", "always", "never"]);
+      assert.strictEqual(setting.default, "prompt");
+      assert.strictEqual(setting.scope, "resource");
+    }
   });
 });

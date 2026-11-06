@@ -6,6 +6,7 @@ import { courseNameProblem, NameKind, nounTitle } from "./courseNames";
 import { offsetToPosition } from "./diagnostic";
 import { edit, FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
+import { removeJsonValues } from "./jsonEdits";
 import { treeOf } from "./jsonTree";
 import { ReferenceIndex } from "./referenceIndex";
 
@@ -14,10 +15,20 @@ import { ReferenceIndex } from "./referenceIndex";
  * assessment's `set`): the first `oldName` becomes `newName`, unless the file
  * already lists `newName`; every other `oldName` is removed.
  */
-function useEdits(kind: NameKind, file: string, text: string, oldName: string, newName: string): FileEdit[] {
+function useEdits(
+  kind: NameKind,
+  file: string,
+  text: string,
+  oldName: string,
+  newName: string | undefined
+): FileEdit[] {
   const tree = treeOf(parseJsonDoc(text));
   const items = tree ? kind.useItems(tree) : [];
   const isString = (node: Node, name: string) => node.type === "string" && node.value === name;
+  const oldItems = items.filter((node) => isString(node, oldName));
+  if (newName === undefined) {
+    return removeJsonValues(file, text, oldItems);
+  }
   let keep = !items.some((node) => isString(node, newName));
   const out: FileEdit[] = [];
   const removed = new Set<number>();
@@ -53,18 +64,29 @@ function useEdits(kind: NameKind, file: string, text: string, oldName: string, n
 }
 
 /** Edits renaming `ignoredDiagnostics` identifiers for `kind`'s rules. */
-function suppressionEdits(kind: NameKind, file: string, text: string, oldName: string, newName: string): FileEdit[] {
+function suppressionEdits(
+  kind: NameKind,
+  file: string,
+  text: string,
+  oldName: string,
+  newName: string | undefined
+): FileEdit[] {
   const tree = treeOf(parseJsonDoc(text));
   const array = tree && findNodeAtLocation(tree, ["ignoredDiagnostics"]);
   if (array?.type !== "array") {
     return [];
   }
-  return (array.children ?? []).flatMap((entry): FileEdit[] => {
+  const matched = (array.children ?? []).filter((entry) => {
     const rule = findNodeAtLocation(entry, ["rule"])?.value;
     const identifier = findNodeAtLocation(entry, ["identifier"]);
-    return typeof rule === "string" && kind.rules.has(rule) && identifier?.value === oldName
-      ? [edit(file, text, identifier.offset, identifier.offset + identifier.length, JSON.stringify(newName))]
-      : [];
+    return typeof rule === "string" && kind.rules.has(rule) && identifier?.value === oldName;
+  });
+  if (newName === undefined) {
+    return removeJsonValues(file, text, matched);
+  }
+  return matched.map((entry) => {
+    const identifier = findNodeAtLocation(entry, ["identifier"])!;
+    return edit(file, text, identifier.offset, identifier.offset + identifier.length, JSON.stringify(newName));
   });
 }
 
@@ -186,4 +208,78 @@ export function planCourseNameRename(
   return edits.sort(
     (a, b) => a.file.localeCompare(b.file) || a.startOffset - b.startOffset
   );
+}
+
+export interface CourseNameRemoval {
+  /** Removes every matching definition from infoCourse.json. */
+  primaryEdits: FileEdit[];
+  /** Removes or replaces uses, and removes suppressions naming the old name. */
+  referenceEdits: FileEdit[];
+  useCount: number;
+}
+
+/**
+ * Plans removing a tag or assessment-set definition. With `replacement`, uses
+ * are rewritten to it; without one, array-valued uses (tags) are removed.
+ * Suppressions for the removed name are deleted rather than transferred.
+ */
+export function planCourseNameRemoval(
+  kind: NameKind,
+  index: ReferenceIndex,
+  oldName: string,
+  replacement: string | undefined,
+  readText: (file: string) => string | undefined,
+  extraFiles: readonly string[] = []
+): CourseNameRemoval {
+  const Noun = nounTitle(kind);
+  const infoCourse = path.join(index.courseRoot, courseFiles.course);
+  const infoText = readText(infoCourse);
+  if (infoText === undefined) {
+    throw new Error(`Could not read ${courseFiles.course}`);
+  }
+  const tree = treeOf(parseJsonDoc(infoText));
+  const defined = kind.definitions(parseJsonDoc(infoText));
+  const matches = defined.filter((definition) => definition.name === oldName);
+  if (matches.length === 0) {
+    throw new Error(`${Noun} "${oldName}" is not defined in ${courseFiles.course}`);
+  }
+  if (replacement !== undefined) {
+    if (replacement === oldName) {
+      throw new Error(`${Noun} "${oldName}" cannot replace itself`);
+    }
+    if (!defined.some((definition) => definition.name === replacement)) {
+      throw new Error(`${Noun} "${replacement}" is not defined in ${courseFiles.course}`);
+    }
+  }
+  const collection = tree && findNodeAtLocation(tree, [kind.collection]);
+  const entries = collection?.type === "array" ? collection.children ?? [] : [];
+  const primaryEdits = removeJsonValues(
+    infoCourse,
+    infoText,
+    matches.flatMap((definition) => entries[definition.index] ?? [])
+  );
+
+  const referenceEdits: FileEdit[] = [];
+  let useCount = 0;
+  for (const file of filesUsingName(kind, index, oldName, extraFiles)) {
+    const text = readText(file);
+    if (text === undefined) {
+      continue;
+    }
+    const fileTree = treeOf(parseJsonDoc(text));
+    const uses = fileTree
+      ? kind.useItems(fileTree).filter((node) => node.type === "string" && node.value === oldName)
+      : [];
+    useCount += uses.length;
+    referenceEdits.push(...useEdits(kind, file, text, oldName, replacement));
+  }
+  const config = path.join(index.courseRoot, configFileName);
+  const configText = readText(config);
+  if (configText !== undefined) {
+    referenceEdits.push(...suppressionEdits(kind, config, configText, oldName, undefined));
+  }
+  referenceEdits.sort(
+    (a, b) => a.file.localeCompare(b.file) || a.startOffset - b.startOffset
+  );
+  return { primaryEdits, referenceEdits, useCount };
 }

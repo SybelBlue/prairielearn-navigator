@@ -65,6 +65,30 @@
         "enablement": "prairielearn-navigator.hasCourse"
       },
       {
+        "command": "prairielearn-navigator.removeQuestion",
+        "title": "Remove Question...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
+        "command": "prairielearn-navigator.removeTag",
+        "title": "Remove Tag...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
+        "command": "prairielearn-navigator.removeAssessmentSet",
+        "title": "Remove Assessment Set...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
+        "command": "prairielearn-navigator.removeAssessment",
+        "title": "Remove Assessment...",
+        "category": "PrairieLearn",
+        "enablement": "prairielearn-navigator.hasCourse"
+      },
+      {
         "command": "prairielearn-navigator.openQuestionHtml",
         "title": "Open question.html",
         "icon": "$(code)",
@@ -108,6 +132,38 @@
           "default": "uuidgen",
           "scope": "resource",
           "markdownDescription": "Shell command used to generate UUID completion values. The command must print one UUID to standard output."
+        },
+        "prairielearn-navigator.updateReferencesOnRename": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Ask before updating semantic references after a question-directory rename.",
+            "Always update semantic references after a question-directory rename.",
+            "Never update additional references after a question-directory rename."
+          ],
+          "default": "prompt",
+          "scope": "resource",
+          "markdownDescription": "Whether PrairieLearn Navigator updates additional semantic references when question directories are renamed. Rename Symbol (F2) is unaffected."
+        },
+        "prairielearn-navigator.updateReferencesOnRemove": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "always",
+            "never"
+          ],
+          "enumDescriptions": [
+            "Ask before updating semantic references and suppressions when resources are removed.",
+            "Always update semantic references and suppressions when resources are removed.",
+            "Never update additional references or suppressions when resources are removed."
+          ],
+          "default": "prompt",
+          "scope": "resource",
+          "markdownDescription": "Whether PrairieLearn Navigator updates additional semantic references and suppressions when resources are removed."
         },
         "prairielearn-navigator.rules": {
           "type": "object",
@@ -681,6 +737,10 @@
       {
         "id": "prairielearn-navigator.add",
         "label": "PrairieLearn: Add"
+      },
+      {
+        "id": "prairielearn-navigator.remove",
+        "label": "PrairieLearn: Remove"
       }
     ],
     "menus": {
@@ -700,6 +760,24 @@
         {
           "command": "prairielearn-navigator.addAssessment",
           "group": "add@4"
+        }
+      ],
+      "prairielearn-navigator.remove": [
+        {
+          "command": "prairielearn-navigator.removeQuestion",
+          "group": "remove@1"
+        },
+        {
+          "command": "prairielearn-navigator.removeTag",
+          "group": "remove@2"
+        },
+        {
+          "command": "prairielearn-navigator.removeAssessmentSet",
+          "group": "remove@3"
+        },
+        {
+          "command": "prairielearn-navigator.removeAssessment",
+          "group": "remove@4"
         }
       ],
       "editor/title": [
@@ -724,6 +802,11 @@
           "submenu": "prairielearn-navigator.add",
           "when": "prairielearn-navigator.hasCourse",
           "group": "navigation@98"
+        },
+        {
+          "submenu": "prairielearn-navigator.remove",
+          "when": "prairielearn-navigator.hasCourse",
+          "group": "navigation@98.5"
         },
         {
           "command": "prairielearn-navigator.findUses",

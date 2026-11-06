@@ -1231,6 +1231,81 @@ test("add validates its arguments and leaves the course alone", async () => {
   });
 });
 
+test("remove previews and writes every noun with structural reference cleanup", async () => {
+  await withAssessmentCourse(async (course) => {
+    const preview = await runCliAt(course, "qid", "remove", "q");
+    assert.equal(preview.code, 0, preview.stderr);
+    assert.match(preview.stdout, /Remove directory questions\/q/);
+    assert.match(preview.stdout, /Would remove 1 question/);
+    assert.ok(fs.existsSync(path.join(course, "questions/q")));
+
+    const written = await runCliAt(course, "qid", "remove", "--write", "q");
+    assert.equal(written.code, 0, written.stderr);
+    assert.equal(fs.existsSync(path.join(course, "questions/q")), false);
+    const assessment = JSON.parse(fs.readFileSync(
+      path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
+      "utf-8"
+    ));
+    assert.deepEqual(assessment.zones[0].questions, []);
+  });
+
+  await withAssessmentCourse(async (course) => {
+    assert.equal((await runCliAt(course, "tag", "remove", "--write", "used")).code, 0);
+    const infoCourse = JSON.parse(fs.readFileSync(path.join(course, "infoCourse.json"), "utf-8"));
+    const question = JSON.parse(fs.readFileSync(path.join(course, "questions/q/info.json"), "utf-8"));
+    assert.deepEqual(infoCourse.tags.map((tag: { name: string }) => tag.name), ["unused"]);
+    assert.deepEqual(question.tags, []);
+  });
+
+  await withAssessmentCourse(async (course) => {
+    const missing = await runCliAt(course, "assessment-set", "remove", "Homework");
+    assert.equal(missing.code, 1);
+    assert.match(missing.stderr, /provide --replacement/);
+    const replaced = await runCliAt(
+      course,
+      "assessment-set", "remove", "--write", "--replacement", "Quiz", "Homework"
+    );
+    assert.equal(replaced.code, 0, replaced.stderr);
+    const assessment = JSON.parse(fs.readFileSync(
+      path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
+      "utf-8"
+    ));
+    assert.equal(assessment.set, "Quiz");
+  });
+
+  await withAssessmentCourse(async (course) => {
+    const removed = await runCliAt(course, "assessment", "remove", "--write", "Fa26/hw1");
+    assert.equal(removed.code, 0, removed.stderr);
+    assert.equal(
+      fs.existsSync(path.join(course, "courseInstances/Fa26/assessments/hw1")),
+      false
+    );
+  });
+});
+
+test("remove can deliberately leave additional references unchanged", async () => {
+  await withAssessmentCourse(async (course) => {
+    const assessmentFile = path.join(
+      course,
+      "courseInstances/Fa26/assessments/hw1/infoAssessment.json"
+    );
+    const before = fs.readFileSync(assessmentFile, "utf-8");
+    const removed = await runCliAt(
+      course,
+      "qid", "remove", "--write", "--no-update-references", "q"
+    );
+    assert.equal(removed.code, 0, removed.stderr);
+    assert.match(removed.stderr, /will not be updated/);
+    assert.equal(fs.readFileSync(assessmentFile, "utf-8"), before);
+  });
+
+  const conflict = await runCli(
+    "assessment-set", "remove", "--no-update-references", "--replacement", "Quiz", "Homework"
+  );
+  assert.equal(conflict.code, 1);
+  assert.match(conflict.stderr, /cannot be used with --no-update-references/);
+});
+
 test("tag add leaves infoCourse.json as it was if the write fails", async () => {
   await withAssessmentCourse(async (course) => {
     const infoCourse = path.join(course, "infoCourse.json");

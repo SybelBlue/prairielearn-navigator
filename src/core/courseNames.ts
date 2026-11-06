@@ -15,6 +15,8 @@ import { courseTags, implicitTagColor, plDefaultTag, tagNameAt } from "./tags";
 /** A name infoCourse.json defines, with the offsets of its `name` value. */
 interface CourseNameDefinition {
   name: string;
+  /** Index of the defining entry in the collection. */
+  index: number;
   nameStart: number;
   nameEnd: number;
 }

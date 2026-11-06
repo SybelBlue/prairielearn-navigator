@@ -298,17 +298,20 @@ function unusedItemRemoval(
 ): vscode.CodeAction | undefined {
   if (rule === "unused-question" && courseRoot) {
     const action = new vscode.CodeAction(
-      "Move unused question directory to Trash…",
+      "Remove unused question…",
       vscode.CodeActionKind.QuickFix
     );
     action.diagnostics = [diagnostic];
     action.command = {
-      command: "prairielearn-navigator.removeUnusedQuestion",
+      command: "prairielearn-navigator.removeQuestion",
       title: action.title,
       arguments: [{
         courseRoot,
-        file: document.uri.fsPath,
-      } satisfies RemoveUnusedQuestionArgs],
+        id: path.relative(
+          path.join(courseRoot, "questions"),
+          path.dirname(document.uri.fsPath)
+        ).split(path.sep).join("/"),
+      }],
     };
     return action;
   }
@@ -331,29 +334,25 @@ function unusedItemRemoval(
   ) {
     return undefined;
   }
-  const title = rule === "unused-tag" ? "Remove unused tag" : "Remove unused assessment set";
-  const tree = parseTree(document.getText());
-  const array = tree && findNodeAtLocation(tree, [collection]);
-  const items = array?.type === "array" ? array.children ?? [] : [];
-  const index = jsonPath[1];
-  const item = items[index];
-  if (!item) {
+  if (!courseRoot) {
     return undefined;
   }
-  let startOffset = item.offset;
-  let endOffset = item.offset + item.length;
-  if (items.length > 1 && index === 0) {
-    endOffset = items[1].offset;
-  } else if (index > 0) {
-    startOffset = items[index - 1].offset + items[index - 1].length;
+  const title = rule === "unused-tag" ? "Remove unused tag…" : "Remove unused assessment set…";
+  const tree = parseTree(document.getText());
+  const index = jsonPath[1];
+  const name = tree && findNodeAtLocation(tree, [collection, index, "name"])?.value;
+  if (typeof name !== "string") {
+    return undefined;
   }
   const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
   action.diagnostics = [diagnostic];
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.delete(
-    document.uri,
-    new vscode.Range(document.positionAt(startOffset), document.positionAt(endOffset))
-  );
+  action.command = {
+    command: rule === "unused-tag"
+      ? "prairielearn-navigator.removeTag"
+      : "prairielearn-navigator.removeAssessmentSet",
+    title,
+    arguments: [{ courseRoot, id: name }],
+  };
   return action;
 }
 

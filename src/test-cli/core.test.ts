@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import Ajv from "ajv";
+import { findNodeAtLocation } from "jsonc-parser";
 import { test } from "vitest";
 import {
   assessmentSetAt,
@@ -30,7 +31,7 @@ import {
   resolveAddValues,
   stepBack,
 } from "../core/additions";
-import { appendJsonEdits, jsonValueRange } from "../core/jsonEdits";
+import { appendJsonEdits, jsonValueRange, removeJsonValues } from "../core/jsonEdits";
 import { parentsEmptiedBy, removeEmptyParents } from "../core/emptyDirs";
 import { findElements } from "../core/html";
 import { parseJsonc, parseJsonDoc, rangeOf } from "../core/json";
@@ -49,6 +50,7 @@ import { findCourseNameReferences, planCourseNameRename } from "../core/courseNa
 import { assessmentSetKind, courseNameAt, tagKind } from "../core/courseNames";
 import { courseTags, plBadgeColors, plDefaultTag, tagAt, tagNameAt } from "../core/tags";
 import { vscodeRuleSettings } from "../providers/ruleSettings";
+import { treeOf } from "../core/jsonTree";
 
 const fixtures = path.join(__dirname, "fixtures");
 const brokenCourse = path.join(fixtures, "broken");
@@ -1454,6 +1456,29 @@ test("jsonValueRange finds a value, inside the quotes of a string", () => {
   assert.ok(number);
   assert.equal(text.slice(number.start, number.end), "3");
   assert.equal(jsonValueRange(text, ["nope"]), undefined);
+});
+
+test("removeJsonValues preserves kept comments and produces valid empty containers", () => {
+  const root = tmpDir();
+  const file = path.join(root, "info.json");
+  const text = '{\r\n' +
+    '  "tags": [\r\n' +
+    '    "keep", // keep this comment\r\n' +
+    '    "remove" // remove this comment\r\n' +
+    '  ],\r\n' +
+    '  "template": "old" // remove this property\r\n' +
+    '}\r\n';
+  fs.writeFileSync(file, text);
+  const tree = treeOf(parseJsonDoc(text));
+  assert.ok(tree);
+  const tag = findNodeAtLocation(tree, ["tags", 1]);
+  const template = findNodeAtLocation(tree, ["template"]);
+  assert.ok(tag && template);
+  const [change] = prepareFileChanges(removeJsonValues(file, text, [tag, template]));
+  assert.deepEqual(parseJsonc(change.updated), { tags: ["keep"] });
+  assert.match(change.updated, /"keep" \/\/ keep this comment\r\n/);
+  assert.doesNotMatch(change.updated, /remove this/);
+  assert.ok(change.updated.includes("\r\n"));
 });
 
 /** A course with an instance, a set, a topic and one homework, for add tests. */

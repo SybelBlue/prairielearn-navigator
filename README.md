@@ -45,6 +45,10 @@ This extension is still experimental and may change or break.
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.
   Directories under `questions/` that the move leaves empty are removed.
+- Questions, tags, assessment sets, and assessments can be removed from the
+  CLI or the Explorer's **PrairieLearn: Remove** menu. Semantic references and
+  diagnostic suppressions are updated unless that is disabled; native
+  question-folder deletion offers the same reference workflow as a move.
 - Preview or apply the same semantic QID reference updates from the CLI with
   `prairielearn-navigator qid rename`.
 - Completions, code lenses, and quick fixes that create missing files, ignore
@@ -66,6 +70,8 @@ also reads. User-level settings rank below that file.
 | `prairielearn-navigator.plVersion` | `latest` (default), a date (`YYYY-MM-DD`), or a commit sha |
 | `prairielearn-navigator.schemaCacheDir` | Schema cache, relative to the workspace folder. Default: the extension's storage |
 | `prairielearn-navigator.uuidCommand` | Shell command for UUID completions. It must print one UUID. Default: `uuidgen` |
+| `prairielearn-navigator.updateReferencesOnRename` | `prompt` (default), `always`, or `never` for automatic reference updates after question-folder renames |
+| `prairielearn-navigator.updateReferencesOnRemove` | `prompt` (default), `always`, or `never` for reference and suppression cleanup during removal |
 | `prairielearn-navigator.rules` | Rule id → `off` / `info` / `warning` / `error` |
 | `prairielearn-navigator.diagnostics.<rule-id>` | Dedicated severity dropdown for every [built-in rule](packages/cli/README.md#rules): `default` / `off` / `info` / `warning` / `error`. A non-default named setting overrides the `rules` object. |
 | `prairielearn-navigator.excludes` | Glob patterns of files never to check, relative to the workspace folder. Adds to the course file's `excludes` rather than replacing them. |
@@ -80,9 +86,8 @@ file**, which adds a suppression to `.pl-navigator.jsonc`, and **Configure
 severity for …**, which opens that rule's dropdown in VS Code Settings.
 Suppressions use semantic identifiers when available—question ids, tag names,
 and assessment-set names—and fall back to exact message/occurrence matching.
-Unused tags and assessment sets can be removed directly, undefined tags and
-assessment sets can be added to `infoCourse.json`, and an unused question
-can be moved to Trash after confirmation.
+Unused questions, tags, and assessment sets offer the same shared removal
+commands; undefined tags and assessment sets can be added to `infoCourse.json`.
 
 Run **PrairieLearn: Reload Schemas and Config** to retry downloads after going
 back online. Run **PrairieLearn: Clear Schema Cache** to remove downloaded

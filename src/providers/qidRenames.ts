@@ -9,6 +9,7 @@ import {
 } from "../core/qidRenames";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { addFileEdits } from "./fileEdits";
+import { referenceUpdateMode, ReferenceUpdateMode } from "./referenceUpdates";
 
 const updateReferences: vscode.MessageItem = { title: "Update References" };
 // `onWillRenameFiles` cannot veto a move, so a modal's default Cancel button
@@ -33,6 +34,7 @@ interface QidRenamePrompt {
 export interface QidRenameParticipantOptions {
   confirm?(prompt: QidRenamePrompt): Thenable<boolean>;
   warn?(message: string): void;
+  mode?(uri: vscode.Uri): ReferenceUpdateMode;
 }
 
 function relativeInside(root: string, candidate: string): string | undefined {
@@ -183,43 +185,60 @@ export async function prepareQidRenameWorkspaceEdit(
       return workspaceEdit;
     }
 
-    const edits: QidReferenceEdit[] = [];
+    const automaticEdits: QidReferenceEdit[] = [];
+    const promptEdits: QidReferenceEdit[] = [];
     const referencedRenames: QidRename[] = [];
     for (const group of groups) {
+      const mode = options.mode?.(group.referenceUri) ??
+        referenceUpdateMode("rename", group.referenceUri);
+      if (mode === "never") {
+        continue;
+      }
       const index = await references.whenIndexed(group.referenceUri);
       if (!index) {
         throw new Error(`could not index course ${group.courseRoot}`);
       }
       const groupEdits = planQidReferenceRenames(index, group.renames);
-      edits.push(...groupEdits);
-      for (const rename of group.renames) {
-        if (
-          groupEdits.some(
-            (edit) =>
-              edit.oldQid === rename.oldQid && edit.newQid === rename.newQid
-          )
-        ) {
-          referencedRenames.push(rename);
+      if (mode === "always") {
+        automaticEdits.push(...groupEdits);
+      } else {
+        promptEdits.push(...groupEdits);
+        for (const rename of group.renames) {
+          if (
+            groupEdits.some(
+              (edit) =>
+                edit.oldQid === rename.oldQid && edit.newQid === rename.newQid
+            )
+          ) {
+            referencedRenames.push(rename);
+          }
         }
       }
     }
-    if (token.isCancellationRequested || edits.length === 0) {
+    if (token.isCancellationRequested || automaticEdits.length + promptEdits.length === 0) {
       return workspaceEdit;
     }
 
-    edits.sort(
+    automaticEdits.sort(
       (a, b) =>
         a.file.localeCompare(b.file) || a.startOffset - b.startOffset
     );
-    const confirm = options.confirm ?? defaultConfirmation;
-    if (!(await confirm({ edits, renames: referencedRenames }))) {
-      return workspaceEdit;
+    promptEdits.sort(
+      (a, b) =>
+        a.file.localeCompare(b.file) || a.startOffset - b.startOffset
+    );
+    let acceptedPromptEdits: readonly QidReferenceEdit[] = promptEdits;
+    if (promptEdits.length > 0) {
+      const confirm = options.confirm ?? defaultConfirmation;
+      if (!(await confirm({ edits: promptEdits, renames: referencedRenames }))) {
+        acceptedPromptEdits = [];
+      }
     }
     if (token.isCancellationRequested) {
       return workspaceEdit;
     }
 
-    addFileEdits(workspaceEdit, edits);
+    addFileEdits(workspaceEdit, [...automaticEdits, ...acceptedPromptEdits]);
     return workspaceEdit;
   } catch (error) {
     if (!token.isCancellationRequested) {

@@ -6,6 +6,7 @@ export {
   UuidCompletionItemProvider,
 } from "./completions";
 export { addCommand, addCommands } from "./addWizard";
+export { removeCommand, removeCommands } from "./removeCommands";
 export { ConfigProvider } from "./config";
 export {
   defineAssessmentSet,
@@ -41,3 +42,7 @@ export {
   registerQidRenameParticipant,
   removeQuestionMoveResidue,
 } from "./qidRenames";
+export {
+  prepareRemoveWorkspaceEdit,
+  registerRemoveParticipant,
+} from "./removeParticipant";

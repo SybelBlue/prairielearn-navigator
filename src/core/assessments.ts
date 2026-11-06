@@ -1,14 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { findNodeAtLocation } from "jsonc-parser";
 import { configFileName } from "./config";
 import { courseFiles, courseRelativePath, isWithinDir, matchesGlob, relativeIdProblem } from "./courseFiles";
 import { parentsEmptiedBy } from "./emptyDirs";
-import { edit, FileEdit } from "./fileEdits";
+import { FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
-import { treeOf } from "./jsonTree";
 import { folderOutside, placementProblem } from "./placement";
 import { ReferenceIndex } from "./referenceIndex";
+import { moveFileSuppressionEdits, removeFileSuppressionEdits } from "./suppressionEdits";
 
 /** An assessment in a course, named by the directories that locate it. */
 export interface CourseAssessment {
@@ -140,37 +139,17 @@ export interface AssessmentRename {
   edits: FileEdit[];
 }
 
-/** Whether `dir` is strictly inside `parent`. */
-function isInside(parent: string, dir: string): boolean {
-  const rel = path.relative(parent, dir);
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
-}
-
-/** Edits to `ignoredDiagnostics` entries for files in `oldDir`. */
-function suppressionEdits(
-  courseRoot: string,
-  config: string,
-  text: string,
-  oldDir: string,
-  newDir: string
-): FileEdit[] {
-  const tree = treeOf(parseJsonDoc(text));
-  const array = tree && findNodeAtLocation(tree, ["ignoredDiagnostics"]);
-  if (array?.type !== "array") {
-    return [];
+/** Finds exactly one assessment by the id printed by `assessment list`. */
+function assessmentById(index: ReferenceIndex, id: string): CourseAssessment {
+  const matches = courseAssessments(index).filter((assessment) => assessmentId(assessment) === id);
+  if (matches.length === 0) {
+    throw new Error(`Assessment "${id}" is not defined`);
   }
-  return (array.children ?? []).flatMap((entry): FileEdit[] => {
-    const node = findNodeAtLocation(entry, ["file"]);
-    if (typeof node?.value !== "string") {
-      return [];
-    }
-    const file = path.resolve(courseRoot, node.value);
-    if (!isInside(oldDir, file)) {
-      return [];
-    }
-    const moved = courseRelativePath(courseRoot, path.join(newDir, path.relative(oldDir, file)));
-    return [edit(config, text, node.offset, node.offset + node.length, JSON.stringify(moved))];
-  });
+  if (matches.length > 1) {
+    const files = matches.map((assessment) => courseRelativePath(index.courseRoot, assessment.file)).sort();
+    throw new Error(`Assessment "${id}" is ambiguous: ${files.join(", ")}`);
+  }
+  return matches[0];
 }
 
 /**
@@ -196,17 +175,7 @@ export function planAssessmentRename(
   }
 
   const { courseRoot } = index;
-  const assessments = courseAssessments(index);
-  const matches = assessments.filter((a) => assessmentId(a) === oldId);
-  if (matches.length === 0) {
-    throw new Error(`Assessment "${oldId}" is not defined`);
-  }
-  if (matches.length > 1) {
-    const files = matches.map((a) => courseRelativePath(courseRoot, a.file)).sort();
-    throw new Error(`Assessment "${oldId}" is ambiguous: ${files.join(", ")}`);
-  }
-
-  const { file, instance } = matches[0];
+  const { file, instance } = assessmentById(index, oldId);
   if (!newId.startsWith(`${instance}/`)) {
     throw new Error(`Assessment "${newId}" must stay in course instance "${instance}"`);
   }
@@ -234,9 +203,34 @@ export function planAssessmentRename(
   const configText = readText(config);
   const edits = configText === undefined
     ? []
-    : suppressionEdits(courseRoot, config, configText, oldDir, newDir);
+    : moveFileSuppressionEdits(courseRoot, config, configText, oldDir, newDir);
   const emptiedDirs = parentsEmptiedBy(oldDir, assessmentsDir).filter(
-    (dir) => !isInside(dir, newDir)
+    (dir) => !isWithinDir(dir, newDir)
   );
   return { oldDir, newDir, assessmentsDir, emptiedDirs, edits };
+}
+
+export interface AssessmentRemoval {
+  /** Absolute directory to remove. */
+  dir: string;
+  /** Absolute assessments/ directory that must remain. */
+  assessmentsDir: string;
+  referenceEdits: FileEdit[];
+}
+
+/** Plans removing an assessment directory and suppressions for files inside it. */
+export function planAssessmentRemoval(
+  index: ReferenceIndex,
+  id: string,
+  readText: (file: string) => string | undefined
+): AssessmentRemoval {
+  const { file, instance } = assessmentById(index, id);
+  const dir = path.dirname(file);
+  const assessmentsDir = assessmentsDirOf(index.courseRoot, instance);
+  const config = path.join(index.courseRoot, configFileName);
+  const configText = readText(config);
+  const referenceEdits = configText === undefined
+    ? []
+    : removeFileSuppressionEdits(index.courseRoot, config, configText, [dir]);
+  return { dir, assessmentsDir, referenceEdits };
 }
