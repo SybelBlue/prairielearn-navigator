@@ -691,6 +691,7 @@
     "test:cli": "vitest run",
     "test:package": "node scripts/test-package.mjs",
     "test:size": "node scripts/check-build-size.mjs",
+    "cli": "node packages/cli/dist/cli.js",
     "check": "node packages/cli/dist/cli.js check",
     "bundle": "npm test && vsce package"
   },
