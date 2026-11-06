@@ -1246,7 +1246,7 @@ test("remove previews and writes every noun with structural reference cleanup", 
       path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
       "utf-8"
     ));
-    assert.deepEqual(assessment.zones[0].questions, []);
+    assert.deepEqual(assessment.zones, []);
   });
 
   await withAssessmentCourse(async (course) => {

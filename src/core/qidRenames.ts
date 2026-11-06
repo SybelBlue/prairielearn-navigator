@@ -180,6 +180,24 @@ export function planQidReferenceRemovals(
         targets.add(findNodeAtLocation(question, ["id"]) ? array : question);
       }
     }
+    // `questions` also requires at least one entry, so remove a zone whose
+    // question blocks are all being removed.
+    for (const target of [...targets]) {
+      const array = target.parent;
+      const property = array?.parent;
+      const zone = property?.parent;
+      if (
+        target.type === "object" &&
+        array?.type === "array" &&
+        property?.type === "property" &&
+        zone?.type === "object" &&
+        property.children?.[0]?.value === "questions" &&
+        (array.children ?? []).every((child) => targets.has(child))
+      ) {
+        (array.children ?? []).forEach((child) => targets.delete(child));
+        targets.add(zone);
+      }
+    }
     edits.push(...removeJsonValues(file, text, [...targets]));
   }
   return edits.sort(
