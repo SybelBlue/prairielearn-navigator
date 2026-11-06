@@ -1913,6 +1913,31 @@ suite("PrairieLearn Navigator", () => {
     });
   });
 
+  test("remove commands do not plan reference edits in never mode", async () => {
+    await withAddCourse(async (root) => {
+      const [courses, references] = addCaches(root);
+      const questionNoun = {
+        ...removeNouns.qid,
+        plan(...args: Parameters<typeof removeNouns.qid.plan>) {
+          assert.strictEqual(args[2].updateReferences, false);
+          return removeNouns.qid.plan(...args);
+        },
+      };
+      const removedQuestion = removeCommand(questionNoun, courses, references, {
+        mode: () => "never",
+        confirmRemoval: async () => true,
+      });
+
+      assert.strictEqual(await removedQuestion({ courseRoot: root, id: "q" }), true);
+      assert.strictEqual(fs.existsSync(path.join(root, "questions/q")), false);
+      const assessment = JSON.parse(fs.readFileSync(
+        path.join(root, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
+        "utf-8"
+      ));
+      assert.strictEqual(assessment.zones[0].questions[0].id, "q");
+    });
+  });
+
   test("adding to an infoCourse.json with unsaved changes leaves them unsaved", async () => {
     await withAddCourse(async (root) => {
       const file = path.join(root, "infoCourse.json");

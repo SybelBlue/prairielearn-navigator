@@ -160,16 +160,15 @@ export function removeCommand(
           (file) => index.namesIn(file)?.assessmentSets.includes(id)
         ).length;
 
-      let probePlan: CourseRemoval | undefined;
-      if (!usedSet) {
-        probePlan = noun.plan(ctx, id, { updateReferences: true });
-      }
-      const impact = usedSet || probePlan?.referenceEdits.length || 0;
-      if (mode === "prompt" && impact > 0) {
-        shouldUpdate = await (
-          options.confirmReferences?.(noun, id, impact) ??
-          confirmReferenceUpdates(noun, id, impact)
-        );
+      if (mode === "prompt") {
+        const impact = usedSet ||
+          noun.plan(ctx, id, { updateReferences: true }).referenceEdits.length;
+        if (impact > 0) {
+          shouldUpdate = await (
+            options.confirmReferences?.(noun, id, impact) ??
+            confirmReferenceUpdates(noun, id, impact)
+          );
+        }
       }
 
       if (shouldUpdate && usedSet) {
