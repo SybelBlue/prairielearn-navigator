@@ -3,7 +3,7 @@ import { prepareFileChanges } from "../core/fileEdits";
 import { today } from "../core/plVersion";
 import { planQidReferenceRenames, QidRename } from "../core/qidRenames";
 import { indexCourse } from "../core/referenceIndex";
-import { displayEdit, resolveCourseRoot, writeChanges } from "./edits";
+import { displayEdit, openCourse, writeChanges } from "./edits";
 import { CliRuntime, processRuntime } from "./runtime";
 
 const USAGE = `Usage: prairielearn-navigator qid rename [options] <old-qid> <new-qid> [<old-qid> <new-qid> ...]
@@ -86,17 +86,8 @@ export async function run(
     return 1;
   }
 
-  let courseRoot: string | null;
-  try {
-    courseRoot = resolveCourseRoot(parsed.course, runtime.cwd);
-  } catch (error) {
-    runtime.stderr(error instanceof Error ? error.message : String(error));
-    return 1;
-  }
+  const courseRoot = openCourse(parsed.course, runtime);
   if (!courseRoot) {
-    runtime.stderr(
-      `No PrairieLearn course found for ${path.resolve(runtime.cwd, parsed.course)}`
-    );
     return 1;
   }
 

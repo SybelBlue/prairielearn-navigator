@@ -17,9 +17,9 @@ const vsce = path.join(
 
 const budgets = {
   extensionAsset: 250 * KiB,
-  extensionJavaScript: 350 * KiB,
-  npmAsset: 200 * KiB,
-  npmJavaScript: 350 * KiB,
+  extensionJavaScript: 375 * KiB,
+  npmAsset: 225 * KiB,
+  npmJavaScript: 375 * KiB,
   npmPacked: 200 * KiB,
   npmUnpacked: 500 * KiB,
   vsix: 250 * KiB,

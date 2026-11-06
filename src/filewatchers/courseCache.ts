@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { QuestionId, ScopedId } from "../common";
+import { isWithinDir } from "../core/courseFiles";
 import { CourseIdManager } from "./courseIdManager";
 import { FileWatcher } from "./filewatcher";
 
@@ -56,7 +57,7 @@ export class CourseCache {
   getUriFrom(courseId: string) {
     return this.fileWatcher
       .getUris()
-      .find((uri) => uri.fsPath.startsWith(courseId));
+      .find((uri) => isWithinDir(courseId, uri.fsPath));
   }
 
   getCourseIds() {

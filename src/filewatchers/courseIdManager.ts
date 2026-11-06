@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { CourseId, ScopedId } from "../common";
+import { isWithinDir } from "../core/courseFiles";
 
 class CourseJsonPath {
   public readonly pathParts: number;
@@ -59,7 +60,7 @@ export class CourseIdManager {
   getScopedIdFor(filePath: vscode.Uri): ScopedId {
     const p = path.normalize(path.dirname(filePath.fsPath));
     const courseId = this.getCourseIdForNormalized(p);
-    if (courseId === null || !p.startsWith(courseId)) {
+    if (courseId === null) {
       return { courseId: "", localId: p };
     }
     const localId = p
@@ -71,7 +72,7 @@ export class CourseIdManager {
 
   private getCourseIdForNormalized(p: string): string | null {
     return (
-      this.paths.find((cjp) => p.startsWith(cjp.courseId))?.courseId ?? null
+      this.paths.find((cjp) => isWithinDir(cjp.courseId, p))?.courseId ?? null
     );
   }
 

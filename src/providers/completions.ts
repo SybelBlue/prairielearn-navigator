@@ -8,7 +8,7 @@ import {
 import { courseFiles } from "../core/courseFiles";
 import { parseJsonDoc } from "../core/json";
 import { CourseCache, QuestionCache } from "../filewatchers";
-import { currentText } from "./courseNames";
+import { currentText } from "./fileEdits";
 import { generateUuid, reportUuidGenerationError } from "./uuid";
 
 /** Whether the cursor is between the quotes of an empty `uuid` value. */
@@ -39,7 +39,7 @@ export class UuidCompletionItemProvider
     }
 
     try {
-      const uuid = await generateUuid(document);
+      const uuid = await generateUuid(document.uri);
       if (token.isCancellationRequested) {
         return;
       }

@@ -22,6 +22,8 @@ import {
   anyFileSelector,
   FileReferenceProvider,
   fileReferenceSelector,
+  addCommands,
+  removeCommands,
   findUsesCommand,
   isEmptyUuidValue,
   ignoreDiagnostic,
@@ -29,8 +31,8 @@ import {
   QuestionCompletionItemProvider,
   QuestionHeaderCodeLensProvider,
   RuleDiagnosticCollection,
-  removeUnusedQuestion,
   registerQidRenameParticipant,
+  registerRemoveParticipant,
   AssessmentSetProvider,
   CourseNameProvider,
   TagProvider,
@@ -134,6 +136,20 @@ export function activate(context: vscode.ExtensionContext) {
     configProvider,
     referenceIndex,
     registerQidRenameParticipant(courseCache, referenceIndex),
+    registerRemoveParticipant(courseCache, referenceIndex),
+    ...Object.entries(addCommands(courseCache, referenceIndex)).map(([name, command]) =>
+      vscode.commands.registerCommand(`prairielearn-navigator.${name}`, command),
+    ),
+    ...Object.entries(removeCommands(courseCache, referenceIndex)).map(([name, command]) =>
+      vscode.commands.registerCommand(`prairielearn-navigator.${name}`, command),
+    ),
+    courseCache.onUpdated((courses) => {
+      void vscode.commands.executeCommand(
+        "setContext",
+        "prairielearn-navigator.hasCourse",
+        courses.length > 0,
+      );
+    }),
     vscode.commands.registerCommand(
       "prairielearn-navigator.reloadSchemas",
       () => configProvider.reset(true),
@@ -169,10 +185,6 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "prairielearn-navigator.ignoreDiagnostic",
       ignoreDiagnostic,
-    ),
-    vscode.commands.registerCommand(
-      "prairielearn-navigator.removeUnusedQuestion",
-      removeUnusedQuestion,
     ),
     vscode.commands.registerCommand(
       "prairielearn-navigator.defineTag",

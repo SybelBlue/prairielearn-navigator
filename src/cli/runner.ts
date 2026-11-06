@@ -10,10 +10,10 @@ const USAGE = `Usage: prairielearn-navigator <command> [options]
 
 Commands:
   check           Check a course's JSON files against PrairieLearn's schemas and rules
-  qid             List, locate, rename, or find uses of question IDs
-  tag             List, locate, rename, or find uses of tags
-  assessment-set  List, locate, rename, or find uses of assessment sets
-  assessment      List, locate, or rename assessments
+  qid             Add, list, locate, remove, rename, or find uses of question IDs
+  tag             Add, list, locate, remove, rename, or find uses of tags
+  assessment-set  Add, list, locate, remove, rename, or find uses of assessment sets
+  assessment      Add, list, locate, remove, or rename assessments
 
 Options:
   -h, --help      Show this help message

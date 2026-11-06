@@ -3,7 +3,7 @@ import { assessmentId, courseAssessments } from "../core/assessments";
 import { courseFiles, courseRelativePath, matchesGlob } from "../core/courseFiles";
 import { today } from "../core/plVersion";
 import { indexCourse, ReferenceIndex, UsedNames } from "../core/referenceIndex";
-import { resolveCourseRoot } from "./edits";
+import { openCourse } from "./edits";
 import { CliRuntime, processRuntime } from "./runtime";
 
 const INCLUDE_UNDEFINED_OPTION = `  --include-undefined  Also list names the course uses but infoCourse.json does
@@ -138,17 +138,8 @@ async function run(
     return 1;
   }
 
-  let courseRoot: string | null;
-  try {
-    courseRoot = resolveCourseRoot(parsed.course, runtime.cwd);
-  } catch (error) {
-    runtime.stderr(error instanceof Error ? error.message : String(error));
-    return 1;
-  }
+  const courseRoot = openCourse(parsed.course, runtime);
   if (!courseRoot) {
-    runtime.stderr(
-      `No PrairieLearn course found for ${path.resolve(runtime.cwd, parsed.course)}`
-    );
     return 1;
   }
 
