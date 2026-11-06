@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { removeEmptyParents } from "../core/emptyDirs";
 import {
   planQidReferenceRenames,
   QidRename,
@@ -244,19 +245,51 @@ export async function prepareQidRenameWorkspaceEdit(
   }
 }
 
+/**
+ * Removes directories under questions/ left empty by moved question folders.
+ * Moves of anything else are left alone, so moving the last file out of a
+ * question's clientFilesQuestion/ keeps that directory.
+ */
+export async function removeQuestionMoveResidue(
+  files: readonly { oldUri: vscode.Uri; newUri: vscode.Uri }[],
+  courseCache: Pick<CourseCache, "getCourseIdFor">
+): Promise<void> {
+  for (const { oldUri, newUri } of files) {
+    if (oldUri.scheme !== "file" || newUri.scheme !== "file") {
+      continue;
+    }
+    const courseRoot = courseCache.getCourseIdFor(oldUri);
+    if (!courseRoot) {
+      continue;
+    }
+    const questionsRoot = path.join(courseRoot, "questions");
+    if (
+      relativeInside(questionsRoot, oldUri.fsPath) &&
+      (await questionDirectories(newUri.fsPath)).length > 0
+    ) {
+      removeEmptyParents(oldUri.fsPath, questionsRoot);
+    }
+  }
+}
+
 /** Registers the VS Code-only automatic question-folder move participant. */
 export function registerQidRenameParticipant(
   courseCache: CourseCache,
   references: ReferenceIndexCache
 ): vscode.Disposable {
-  return vscode.workspace.onWillRenameFiles((event) => {
-    event.waitUntil(
-      prepareQidRenameWorkspaceEdit(
-        event.files,
-        event.token,
-        courseCache,
-        references
-      )
-    );
-  });
+  return vscode.Disposable.from(
+    vscode.workspace.onWillRenameFiles((event) => {
+      event.waitUntil(
+        prepareQidRenameWorkspaceEdit(
+          event.files,
+          event.token,
+          courseCache,
+          references
+        )
+      );
+    }),
+    vscode.workspace.onDidRenameFiles((event) => {
+      void removeQuestionMoveResidue(event.files, courseCache);
+    })
+  );
 }

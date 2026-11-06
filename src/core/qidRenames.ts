@@ -9,20 +9,20 @@ export interface QidRename {
 
 export type QidReferenceEdit = QidRename & FileEdit;
 
-/** Returns a problem with a QID, or undefined when it is a safe relative path. */
-function qidProblem(qid: string): string | undefined {
-  if (qid.length === 0) {
-    return "QIDs must not be empty";
+/** Returns a problem with an id, or undefined when it is a safe relative path. */
+export function relativeIdProblem(noun: string, id: string): string | undefined {
+  if (id.length === 0) {
+    return `${noun}s must not be empty`;
   }
   if (
-    qid.includes("\\") ||
-    path.posix.isAbsolute(qid) ||
-    /^[A-Za-z]:/.test(qid)
+    id.includes("\\") ||
+    path.posix.isAbsolute(id) ||
+    /^[A-Za-z]:/.test(id)
   ) {
-    return `QID "${qid}" must be a relative path using forward slashes`;
+    return `${noun} "${id}" must be a relative path using forward slashes`;
   }
-  if (qid.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return `QID "${qid}" must not contain empty, ".", or ".." path segments`;
+  if (id.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return `${noun} "${id}" must not contain empty, ".", or ".." path segments`;
   }
   return undefined;
 }
@@ -43,7 +43,7 @@ export function planQidReferenceRenames(
 ): QidReferenceEdit[] {
   const byOldQid = new Map<string, string>();
   for (const { oldQid, newQid } of renames) {
-    const problem = qidProblem(oldQid) ?? qidProblem(newQid);
+    const problem = relativeIdProblem("QID", oldQid) ?? relativeIdProblem("QID", newQid);
     if (problem) {
       throw new Error(problem);
     }

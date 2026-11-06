@@ -10,6 +10,7 @@ import {
 } from "jsonc-parser";
 import { configFileName } from "../core/config";
 import { courseFiles } from "../core/courseFiles";
+import { removeEmptyParents } from "../core/emptyDirs";
 import { parseJsonc, parseJsonDoc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
 import { assessmentSetKind, NameKind, tagKind } from "../core/courseNames";
@@ -195,6 +196,7 @@ export async function removeUnusedQuestion(
     recursive: true,
     useTrash: true,
   });
+  removeEmptyParents(questionDir, path.join(args.courseRoot, "questions"));
   return true;
 }
 

@@ -9,7 +9,8 @@ import { parseJsonDoc } from "./json";
 import { treeOf } from "./jsonTree";
 import { ReferenceIndex } from "./referenceIndex";
 
-function edit(file: string, text: string, start: number, end: number, replacement: string): FileEdit {
+/** A replacement of `text`, the contents of `file`, between two offsets. */
+export function edit(file: string, text: string, start: number, end: number, replacement: string): FileEdit {
   return {
     file,
     startOffset: start,

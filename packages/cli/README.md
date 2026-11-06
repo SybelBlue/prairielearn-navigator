@@ -306,6 +306,30 @@ Quote names with spaces, e.g. `assessment-set rename "Quiz" "Practice Quiz"`.
 The old set must be defined in `infoCourse.json`, and the new name must not
 be. In VS Code, Rename Symbol (F2) on the set does the same.
 
+## Rename assessments
+
+`assessment rename` renames an assessment within its course instance: it moves
+the assessment's directory, removes directories that leaves empty, and updates
+`ignoredDiagnostics` entries in `.pl-navigator.jsonc` for files in it. Nothing
+else in a course names an assessment's directory. The assessment's `uuid` and `title` are left as they
+are.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator assessment rename [options] <old-assessment> <new-assessment>
+```
+
+| Option | |
+| --- | --- |
+| `--course <path>` | Course directory or a path inside one (default: `.`) |
+| `--write` | Move the directory and apply the planned edits. Without this flag, the command only previews them. |
+
+Both names are as `assessment list` prints them, e.g.
+`assessment rename Fa26/hw1 Fa26/unit1/hw1`. The new name must be in the same
+course instance, must not exist yet, and must not be inside another assessment.
+`excludes` globs are not updated, because a glob can't be rewritten reliably.
+A directory that still holds anything, even a hidden file like `.DS_Store`, is
+kept.
+
 ## Deprecated commands
 
 `rename-qids`, `rename-tags`, and `rename-assessment-sets` still run

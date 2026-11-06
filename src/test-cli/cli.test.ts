@@ -38,10 +38,6 @@ test("noun commands show usage and reject unknown subcommands", async () => {
     assert.equal(unknown.code, 1);
     assert.match(unknown.stderr, new RegExp(`^Unknown ${noun} subcommand: bogus`));
   }
-
-  const noRename = await runCli("assessment", "rename");
-  assert.equal(noRename.code, 1);
-  assert.match(noRename.stderr, /^Unknown assessment subcommand: rename/);
 });
 
 test("the verb-first forms are not commands", async () => {
@@ -802,6 +798,154 @@ test("locate reports usage and argument errors", async () => {
   const noCourse = await runCli("qid", "locate", "--course", "noCourse", "q");
   assert.equal(noCourse.code, 1);
   assert.match(noCourse.stderr, /^No PrairieLearn course found for /);
+});
+
+/** A copy of the `names` fixture with suppressions, removed when `body` finishes. */
+async function withAssessmentCourse(body: (course: string) => Promise<void>) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-assessment-"));
+  const course = path.join(root, "course");
+  fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
+  fs.writeFileSync(path.join(course, ".pl-navigator.jsonc"), JSON.stringify({
+    ignoredDiagnostics: [
+      {
+        file: "courseInstances/Fa26/assessments/hw1/infoAssessment.json",
+        rule: "duplicate-question-id",
+        identifier: "q",
+      },
+      { file: "questions/q/info.json", rule: "unused-question", identifier: "q" },
+    ],
+  }, null, 2));
+  try {
+    await body(course);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const hw1 = "courseInstances/Fa26/assessments/hw1";
+
+test("assessment rename previews and writes a move and its suppressions", async () => {
+  await withAssessmentCourse(async (course) => {
+    const config = path.join(course, ".pl-navigator.jsonc");
+    const before = fs.readFileSync(config, "utf-8");
+
+    const preview = await runCliAt(course, "assessment", "rename", "Fa26/hw1", "Fa26/unit1/hw2");
+    assert.equal(preview.code, 0, preview.stderr);
+    assert.match(preview.stdout, /^courseInstances\/Fa26\/assessments\/hw1 -> courseInstances\/Fa26\/assessments\/unit1\/hw2\n/);
+    assert.match(preview.stdout, /\.pl-navigator\.jsonc:\d+:\d+ /);
+    assert.match(preview.stdout, /Would rename 1 assessment and 1 edit in 1 file\. Rerun with --write/);
+    assert.ok(fs.existsSync(path.join(course, hw1)));
+    assert.equal(fs.readFileSync(config, "utf-8"), before);
+
+    const written = await runCliAt(
+      course, "assessment", "rename", "--write", "Fa26/hw1", "Fa26/unit1/hw2"
+    );
+    assert.equal(written.code, 0, written.stderr);
+    assert.match(written.stdout, /Renamed 1 assessment and 1 edit in 1 file\./);
+    assert.ok(!fs.existsSync(path.join(course, hw1)));
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(config, "utf-8")).ignoredDiagnostics.map(
+        (entry: { file: string }) => entry.file
+      ),
+      ["courseInstances/Fa26/assessments/unit1/hw2/infoAssessment.json", "questions/q/info.json"]
+    );
+
+    const listed = await runCliAt(course, "assessment", "list");
+    assert.equal(listed.stdout, "Fa26/unit1/hw2\n");
+    const located = await runCliAt(course, "assessment", "locate", "Fa26/unit1/hw2");
+    assert.equal(located.code, 0, located.stderr);
+  });
+});
+
+test("assessment rename removes directories it leaves empty", async () => {
+  await withAssessmentCourse(async (course) => {
+    const assessments = path.join(course, "courseInstances/Fa26/assessments");
+    const rename = (...args: string[]) => runCliAt(course, "assessment", "rename", ...args);
+
+    await rename("--write", "Fa26/hw1", "Fa26/a/b/hw1");
+
+    // Staying under a directory keeps it, and only what is empty goes
+    fs.mkdirSync(path.join(assessments, "a/other"));
+    const kept = await rename("--write", "Fa26/a/b/hw1", "Fa26/a/hw1");
+    assert.doesNotMatch(kept.stdout, /Remove empty directory .*\/a\n/);
+    assert.match(kept.stdout, /Remove empty directory courseInstances\/Fa26\/assessments\/a\/b\n/);
+    assert.ok(!fs.existsSync(path.join(assessments, "a/b")));
+    assert.ok(fs.existsSync(path.join(assessments, "a/other")));
+
+    fs.rmdirSync(path.join(assessments, "a/other"));
+    const preview = await rename("Fa26/a/hw1", "Fa26/hw1");
+    assert.match(preview.stdout, /Remove empty directory courseInstances\/Fa26\/assessments\/a\n/);
+    assert.ok(fs.existsSync(path.join(assessments, "a")));
+
+    await rename("--write", "Fa26/a/hw1", "Fa26/hw1");
+    assert.deepEqual(fs.readdirSync(assessments), ["hw1"]);
+  });
+});
+
+test("assessment rename never removes a directory its target is in", async () => {
+  await withAssessmentCourse(async (course) => {
+    const assessments = path.join(course, "courseInstances/Fa26/assessments");
+    await runCliAt(course, "assessment", "rename", "--write", "Fa26/hw1", "Fa26/a/hw1");
+
+    const { code, stdout } = await runCliAt(
+      course, "assessment", "rename", "--write", "Fa26/a/hw1", "Fa26/a/b/hw1"
+    );
+    assert.equal(code, 0);
+    assert.doesNotMatch(stdout, /Remove empty directory/);
+    assert.ok(fs.existsSync(path.join(assessments, "a/b/hw1/infoAssessment.json")));
+  });
+});
+
+test("assessment rename without suppressions only moves", async () => {
+  const { code, stdout } = await runCli(
+    "assessment", "rename", "--course", "names", "Fa26/hw1", "Fa26/hw2"
+  );
+  assert.equal(code, 0);
+  assert.match(stdout, /Would rename 1 assessment\. Rerun with --write/);
+});
+
+test("assessment rename moves back if a write fails", async () => {
+  await withAssessmentCourse(async (course) => {
+    const config = path.join(course, ".pl-navigator.jsonc");
+    fs.chmodSync(config, 0o444);
+    try {
+      const { code } = await runCliAt(
+        course, "assessment", "rename", "--write", "Fa26/hw1", "Fa26/unit1/hw2"
+      );
+      assert.equal(code, 1);
+      assert.ok(fs.existsSync(path.join(course, hw1)));
+      assert.deepEqual(fs.readdirSync(path.join(course, "courseInstances/Fa26/assessments")), ["hw1"]);
+    } finally {
+      fs.chmodSync(config, 0o644);
+    }
+  });
+});
+
+test("assessment rename validates its arguments and the move", async () => {
+  await withAssessmentCourse(async (course) => {
+    fs.mkdirSync(path.join(course, "courseInstances/Fa26/assessments/taken"));
+
+    const cases: [string[], RegExp][] = [
+      [["Fa26/hw1"], /^Exactly one old assessment and one new assessment are required/],
+      [["Fa26/nope", "Fa26/hw2"], /^Assessment "Fa26\/nope" is not defined/],
+      [["Fa26/hw1", "Fa26/hw1"], /cannot be renamed to itself/],
+      [["Fa26/hw1", "Sp27/hw1"], /must stay in course instance "Fa26"/],
+      [["Fa26/hw1", "Fa26/taken"], /^Assessment "Fa26\/taken" already exists/],
+      [["Fa26/hw1", "Fa26/hw1/sub"], /must not be inside "Fa26\/hw1"/],
+      [["Fa26/hw1", "Fa26/../hw2"], /must not contain empty, "\.", or "\.\." path segments/],
+      [["Fa26/hw1", "/tmp/hw2"], /must be a relative path/],
+    ];
+    for (const [args, message] of cases) {
+      const { code, stderr } = await runCliAt(course, "assessment", "rename", "--write", ...args);
+      assert.equal(code, 1);
+      assert.match(stderr, message);
+    }
+    assert.ok(fs.existsSync(path.join(course, hw1)));
+  });
+
+  const help = await runCli("assessment", "rename", "--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /^Usage: prairielearn-navigator assessment rename \[options\]/);
 });
 
 test("top-level usage and invalid commands return the expected status", async () => {

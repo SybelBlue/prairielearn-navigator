@@ -10,7 +10,9 @@ import {
   implicitAssessmentSet,
   plDefaultAssessmentSet,
 } from "../core/assessmentSets";
+import { assessmentId, courseAssessments, planAssessmentRename } from "../core/assessments";
 import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from "../core/config";
+import { parentsEmptiedBy, removeEmptyParents } from "../core/emptyDirs";
 import { findElements } from "../core/html";
 import { parseJsonc, parseJsonDoc, rangeOf } from "../core/json";
 import { matchesRange, validatePlVersion } from "../core/plVersion";
@@ -1235,4 +1237,109 @@ test("unavailable schemas are recorded once, not thrown", async () => {
   const limited = new SchemaStore({ cacheDir: tmpDir(), fetch: async () => respond(403) });
   assert.equal(await limited.get("infoQuestion", "2024-01-01"), undefined);
   assert.match([...limited.problems][0], /rate limited; set GITHUB_TOKEN/);
+});
+
+test("courseAssessments splits nested instances and assessments", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-assessments-"));
+  try {
+    fs.writeFileSync(path.join(root, "infoCourse.json"), "{}");
+    const add = (dir: string) => {
+      fs.mkdirSync(path.join(root, dir), { recursive: true });
+      fs.writeFileSync(path.join(root, dir, "infoAssessment.json"), "{}");
+    };
+    add("courseInstances/2026/Fa/assessments/unit/hw1");
+    add("courseInstances/Sp27/assessments/hw1");
+    add("courseInstances/2026/assessments/Fa/unit/hw1");
+
+    const index = indexCourse(root, "2026-01-01");
+    const found = courseAssessments(index)
+      .map(({ instance, assessment }) => [instance, assessment])
+      .sort();
+    assert.deepEqual(found, [
+      ["2026", "Fa/unit/hw1"],
+      ["2026/Fa", "unit/hw1"],
+      ["Sp27", "hw1"],
+    ]);
+    assert.deepEqual(
+      courseAssessments(index).map(assessmentId).sort(),
+      ["2026/Fa/unit/hw1", "2026/Fa/unit/hw1", "Sp27/hw1"]
+    );
+
+    const readText = () => undefined;
+    assert.throws(
+      () => planAssessmentRename(index, "2026/Fa/unit/hw1", "2026/Fa/unit/hw2", readText),
+      /is ambiguous: courseInstances\/2026\/Fa\/assessments\/unit\/hw1\/infoAssessment\.json, /
+    );
+    const { oldDir, newDir, edits } = planAssessmentRename(index, "Sp27/hw1", "Sp27/hw2", readText);
+    assert.equal(oldDir, path.join(root, "courseInstances/Sp27/assessments/hw1"));
+    assert.equal(newDir, path.join(root, "courseInstances/Sp27/assessments/hw2"));
+    assert.deepEqual(edits, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("planAssessmentRename only edits suppressions for files in the assessment", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-assessments-"));
+  try {
+    fs.writeFileSync(path.join(root, "infoCourse.json"), "{}");
+    for (const name of ["hw1", "hw10"]) {
+      const dir = path.join(root, "courseInstances/Fa26/assessments", name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "infoAssessment.json"), "{}");
+    }
+    const config = path.join(root, ".pl-navigator.jsonc");
+    const text = JSON.stringify({
+      ignoredDiagnostics: [
+        { file: "./courseInstances/Fa26/assessments/hw1/infoAssessment.json" },
+        { file: "courseInstances/Fa26/assessments/hw10/infoAssessment.json" },
+      ],
+    });
+    const { edits } = planAssessmentRename(
+      indexCourse(root, "2026-01-01"),
+      "Fa26/hw1",
+      "Fa26/hw2",
+      (file) => (file === config ? text : undefined)
+    );
+    assert.deepEqual(edits.map((e) => [e.expected, e.replacement]), [[
+      '"./courseInstances/Fa26/assessments/hw1/infoAssessment.json"',
+      '"courseInstances/Fa26/assessments/hw2/infoAssessment.json"',
+    ]]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("empty parents stop at content and never reach the root", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-empty-dirs-"));
+  try {
+    const dir = path.join(root, "kept/a/b/q");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(root, "kept/info.json"), "{}");
+    fs.writeFileSync(path.join(dir, "info.json"), "{}");
+
+    assert.deepEqual(parentsEmptiedBy(dir, root), [
+      path.join(root, "kept/a/b"),
+      path.join(root, "kept/a"),
+    ]);
+
+    fs.rmSync(dir, { recursive: true });
+    removeEmptyParents(dir, root);
+    assert.deepEqual(fs.readdirSync(path.join(root, "kept")), ["info.json"]);
+
+    // Everything below the root is emptied, but the root stays
+    const lone = path.join(root, "lone/q");
+    fs.mkdirSync(lone, { recursive: true });
+    fs.rmSync(lone, { recursive: true });
+    removeEmptyParents(lone, root);
+    assert.ok(!fs.existsSync(path.join(root, "lone")));
+    assert.ok(fs.existsSync(root));
+
+    // A dir outside the root, or a parent that is already gone, is a no-op
+    removeEmptyParents(path.join(root, "missing/deeper/q"), root);
+    removeEmptyParents(path.join(os.tmpdir(), "elsewhere/q"), root);
+    assert.deepEqual(parentsEmptiedBy(path.join(os.tmpdir(), "elsewhere/q"), root), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

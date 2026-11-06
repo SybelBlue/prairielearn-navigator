@@ -17,6 +17,12 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - New CLI commands `qid locate`, `tag locate`, `assessment-set locate`, and
   `assessment locate`. Each prints where something is defined, with its line
   and column span when it has one, and fails if it isn't defined.
+- New CLI command `assessment rename`, which previews or writes moving an
+  assessment's directory within its course instance, along with diagnostic
+  suppressions that name files in it. Directories the move leaves empty are
+  removed.
+- Moving a question folder in VS Code, or moving an unused question to Trash,
+  now removes directories under `questions/` that it leaves empty.
 
 ## [1.3.1] - 2026-11-06
 

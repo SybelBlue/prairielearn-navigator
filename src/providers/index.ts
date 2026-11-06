@@ -38,4 +38,5 @@ export {
   prepareQidRenameWorkspaceEdit,
   qidRenamesForFileMoves,
   registerQidRenameParticipant,
+  removeQuestionMoveResidue,
 } from "./qidRenames";

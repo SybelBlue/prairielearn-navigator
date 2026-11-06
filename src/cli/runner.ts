@@ -10,7 +10,7 @@ Commands:
   qid             List, locate, or rename question IDs
   tag             List, locate, or rename tags
   assessment-set  List, locate, or rename assessment sets
-  assessment      List or locate assessments
+  assessment      List, locate, or rename assessments
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
 

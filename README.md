@@ -41,6 +41,7 @@ This extension is still experimental and may change or break.
 - When a question directory, or an ancestor containing questions, is moved
   within `questions/` in VS Code, offer to update all affected assessment IDs,
   alternative IDs, and question templates as part of the same operation.
+  Directories under `questions/` that the move leaves empty are removed.
 - Preview or apply the same semantic QID reference updates from the CLI with
   `prairielearn-navigator qid rename`.
 - Completions, code lenses, and quick fixes that create missing files, ignore

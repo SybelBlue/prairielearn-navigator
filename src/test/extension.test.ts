@@ -13,6 +13,7 @@ import {
   MissingFileQuickFixProvider,
   prepareQidRenameWorkspaceEdit,
   qidRenamesForFileMoves,
+  removeQuestionMoveResidue,
   UuidCompletionItemProvider,
 } from "../providers";
 import { indexCourse } from "../core/referenceIndex";
@@ -670,6 +671,40 @@ suite("PrairieLearn Navigator", () => {
         ["questions/jsonRefs/info.json", "better"],
       ]
     );
+  });
+
+  test("question folder moves remove directories they leave empty", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "plnv-residue-"));
+    const questions = path.join(root, "questions");
+    const courseCache = { getCourseIdFor: () => root };
+    const move = (from: string, to: string) => {
+      fs.mkdirSync(path.dirname(path.join(questions, to)), { recursive: true });
+      fs.renameSync(path.join(questions, from), path.join(questions, to));
+      return {
+        oldUri: vscode.Uri.file(path.join(questions, from)),
+        newUri: vscode.Uri.file(path.join(questions, to)),
+      };
+    };
+    try {
+      fs.mkdirSync(path.join(questions, "a/b/q/clientFilesQuestion"), { recursive: true });
+      fs.writeFileSync(path.join(questions, "a/b/q/info.json"), "{}");
+      fs.mkdirSync(path.join(questions, "a/kept"));
+      fs.writeFileSync(path.join(questions, "a/kept/info.json"), "{}");
+      fs.writeFileSync(path.join(questions, "a/b/q/clientFilesQuestion/fig.png"), "");
+
+      // Moving a file out of a question is not a question move
+      const figure = move("a/b/q/clientFilesQuestion/fig.png", "a/b/q/fig.png");
+      await removeQuestionMoveResidue([figure], courseCache);
+      assert.ok(fs.existsSync(path.join(questions, "a/b/q/clientFilesQuestion")));
+
+      const question = move("a/b/q", "c/q");
+      await removeQuestionMoveResidue([question], courseCache);
+      assert.ok(!fs.existsSync(path.join(questions, "a/b")));
+      assert.ok(fs.existsSync(path.join(questions, "a/kept/info.json")));
+      assert.ok(fs.existsSync(path.join(questions, "c/q/info.json")));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("question folder move prompt never offers a Cancel it can't honor", async () => {

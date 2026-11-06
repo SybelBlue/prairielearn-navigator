@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { assessmentId, courseAssessments } from "../core/assessments";
 import { courseFiles, courseRelativePath, matchesGlob } from "../core/courseFiles";
 import { today } from "../core/plVersion";
 import { indexCourse, ReferenceIndex, UsedNames } from "../core/referenceIndex";
@@ -73,34 +74,27 @@ function parseArgs(args: string[], listsNames: boolean): ListArgs | string {
   return { course, json, includeUndefined };
 }
 
-/** Indexed files matching `glob`, with their course-relative posix paths. */
-function filesMatching(index: ReferenceIndex, glob: string) {
+export function questionRows(index: ReferenceIndex): FileRow[] {
   return index
     .files()
-    .map((file) => ({ file, relPath: courseRelativePath(index.courseRoot, file) }))
-    .filter(({ relPath }) => matchesGlob(relPath, glob));
-}
-
-export function questionRows(index: ReferenceIndex): FileRow[] {
-  return filesMatching(index, courseFiles.question).map(({ file }) => {
-    const qid = courseRelativePath(
-      path.join(index.courseRoot, "questions"),
-      path.dirname(file)
-    );
-    return { file, line: qid, json: { qid, tags: index.namesIn(file)?.tags ?? [] } };
-  });
+    .filter((file) =>
+      matchesGlob(courseRelativePath(index.courseRoot, file), courseFiles.question)
+    )
+    .map((file) => {
+      const qid = courseRelativePath(
+        path.join(index.courseRoot, "questions"),
+        path.dirname(file)
+      );
+      return { file, line: qid, json: { qid, tags: index.namesIn(file)?.tags ?? [] } };
+    });
 }
 
 export function assessmentRows(index: ReferenceIndex): FileRow[] {
-  return filesMatching(index, courseFiles.assessment).map(({ file, relPath }) => {
-    // courseInstances/<instance>/assessments/<assessment>/infoAssessment.json
-    const parts = relPath.split("/").slice(1, -1);
-    const split = parts.indexOf("assessments");
-    const instance = parts.slice(0, split).join("/");
-    const assessment = parts.slice(split + 1).join("/");
+  return courseAssessments(index).map((item) => {
+    const { file, instance, assessment } = item;
     return {
       file,
-      line: `${instance}/${assessment}`,
+      line: assessmentId(item),
       json: { instance, assessment, set: index.namesIn(file)?.assessmentSets[0] ?? null },
     };
   });

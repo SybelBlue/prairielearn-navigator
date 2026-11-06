@@ -11,6 +11,7 @@ import {
   runLocateQid,
   runLocateTag,
 } from "./locate";
+import { run as runRenameAssessment } from "./renameAssessments";
 import { runRenameAssessmentSets, runRenameTags } from "./renameCourseNames";
 import { run as runRenameQids } from "./renameQids";
 import { CliRuntime } from "./runtime";
@@ -101,6 +102,10 @@ export const NOUN_COMMANDS: ReadonlyMap<
       locate: {
         summary: "Print the path of an assessment's infoAssessment.json",
         run: runLocateAssessment,
+      },
+      rename: {
+        summary: "Preview or write a rename of an assessment's directory",
+        run: runRenameAssessment,
       },
     }),
   ],
