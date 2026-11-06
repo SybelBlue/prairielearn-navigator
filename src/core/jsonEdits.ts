@@ -200,6 +200,7 @@ export function removeJsonValues(file: string, text: string, values: readonly No
       if (b + 1 < children.length) {
         edits.push(edit(file, text, children[a].offset, children[b + 1].offset, ""));
       } else {
+        const end = trailingEntryEnd(text, children[b], container);
         if (a > 0) {
           const comma = commaBetween(
             text,
@@ -207,18 +208,16 @@ export function removeJsonValues(file: string, text: string, values: readonly No
             children[a].offset
           );
           if (comma) {
+            const separator = text.slice(comma.end, children[a].offset);
+            if (/^\s*$/.test(separator)) {
+              edits.push(edit(file, text, comma.start, end, ""));
+              a = b;
+              continue;
+            }
             edits.push(edit(file, text, comma.start, comma.end, ""));
           }
         }
-        edits.push(
-          edit(
-            file,
-            text,
-            children[a].offset,
-            trailingEntryEnd(text, children[b], container),
-            ""
-          )
-        );
+        edits.push(edit(file, text, children[a].offset, end, ""));
       }
       a = b;
     }

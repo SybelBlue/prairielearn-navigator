@@ -1481,6 +1481,32 @@ test("removeJsonValues preserves kept comments and produces valid empty containe
   assert.ok(change.updated.includes("\r\n"));
 });
 
+test("removeJsonValues does not leave a blank line after removing the last entry", () => {
+  const root = tmpDir();
+  const cases: [string, (string | number)[], string][] = [
+    [
+      '{\n  "tags": [\n    "keep",\n    "remove"\n  ]\n}\n',
+      ["tags", 1],
+      '{\n  "tags": [\n    "keep"\n  ]\n}\n',
+    ],
+    [
+      '{\n  "keep": true,\n  "remove": false\n}\n',
+      ["remove"],
+      '{\n  "keep": true\n}\n',
+    ],
+  ];
+  for (const [i, [text, jsonPath, expected]] of cases.entries()) {
+    const file = path.join(root, `${i}.json`);
+    fs.writeFileSync(file, text);
+    const tree = treeOf(parseJsonDoc(text));
+    assert.ok(tree);
+    const value = findNodeAtLocation(tree, jsonPath);
+    assert.ok(value);
+    const [change] = prepareFileChanges(removeJsonValues(file, text, [value]));
+    assert.equal(change.updated, expected);
+  }
+});
+
 /** A course with an instance, a set, a topic and one homework, for add tests. */
 function addCourse(infoCourse: object = {}): { root: string; ctx: () => AddContext } {
   const root = tmpDir();
