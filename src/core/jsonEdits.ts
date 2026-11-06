@@ -131,6 +131,32 @@ function commaBetween(text: string, start: number, end: number): { start: number
 }
 
 /**
+ * The start of an entry's own line, including leading comments, but excluding
+ * a trailing comment on the previous entry's line.
+ */
+function leadingEntryStart(
+  text: string,
+  previous: Node | undefined,
+  child: Node,
+  container: Node
+): number {
+  if (!previous) {
+    return container.offset + 1;
+  }
+  const scanner = createScanner(text, false);
+  scanner.setPosition(previous.offset + previous.length);
+  while (scanner.getPosition() < child.offset) {
+    switch (scanner.scan()) {
+      case SyntaxKind.LineBreakTrivia:
+        return scanner.getTokenOffset();
+      case SyntaxKind.EOF:
+        return child.offset;
+    }
+  }
+  return child.offset;
+}
+
+/**
  * Extends an entry through its separator and trailing comment, but not through
  * the line break before the container's closing token.
  */
@@ -198,9 +224,18 @@ export function removeJsonValues(file: string, text: string, values: readonly No
         b++;
       }
       if (b + 1 < children.length) {
-        edits.push(edit(file, text, children[a].offset, children[b + 1].offset, ""));
+        edits.push(
+          edit(
+            file,
+            text,
+            leadingEntryStart(text, children[a - 1], children[a], container),
+            leadingEntryStart(text, children[b], children[b + 1], container),
+            ""
+          )
+        );
       } else {
         const end = trailingEntryEnd(text, children[b], container);
+        const start = leadingEntryStart(text, children[a - 1], children[a], container);
         if (a > 0) {
           const comma = commaBetween(
             text,
@@ -208,7 +243,7 @@ export function removeJsonValues(file: string, text: string, values: readonly No
             children[a].offset
           );
           if (comma) {
-            const separator = text.slice(comma.end, children[a].offset);
+            const separator = text.slice(comma.end, start);
             if (/^\s*$/.test(separator)) {
               edits.push(edit(file, text, comma.start, end, ""));
               a = b;
@@ -217,7 +252,7 @@ export function removeJsonValues(file: string, text: string, values: readonly No
             edits.push(edit(file, text, comma.start, comma.end, ""));
           }
         }
-        edits.push(edit(file, text, children[a].offset, end, ""));
+        edits.push(edit(file, text, start, end, ""));
       }
       a = b;
     }

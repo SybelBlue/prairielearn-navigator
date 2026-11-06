@@ -1507,6 +1507,36 @@ test("removeJsonValues does not leave a blank line after removing the last entry
   }
 });
 
+test("removeJsonValues keeps leading comments with the entries they describe", () => {
+  const root = tmpDir();
+  const cases: [number, string][] = [
+    [
+      0,
+      '{\n  "ignoredDiagnostics": [\n    // keep rationale\n    { "id": "keep" }\n  ]\n}\n',
+    ],
+    [
+      1,
+      '{\n  "ignoredDiagnostics": [\n    // remove rationale\n    { "id": "remove" }\n  ]\n}\n',
+    ],
+  ];
+  const text = '{\n  "ignoredDiagnostics": [\n' +
+    '    // remove rationale\n' +
+    '    { "id": "remove" },\n' +
+    '    // keep rationale\n' +
+    '    { "id": "keep" }\n' +
+    '  ]\n}\n';
+  for (const [index, expected] of cases) {
+    const file = path.join(root, `${index}.jsonc`);
+    fs.writeFileSync(file, text);
+    const tree = treeOf(parseJsonDoc(text));
+    assert.ok(tree);
+    const value = findNodeAtLocation(tree, ["ignoredDiagnostics", index]);
+    assert.ok(value);
+    const [change] = prepareFileChanges(removeJsonValues(file, text, [value]));
+    assert.equal(change.updated, expected);
+  }
+});
+
 /** A course with an instance, a set, a topic and one homework, for add tests. */
 function addCourse(infoCourse: object = {}): { root: string; ctx: () => AddContext } {
   const root = tmpDir();
