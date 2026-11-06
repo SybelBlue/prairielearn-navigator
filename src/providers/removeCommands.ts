@@ -216,4 +216,3 @@ export function removeCommands(
     removeAssessment: command(removeNouns.assessment),
   };
 }
-

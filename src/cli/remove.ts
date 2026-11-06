@@ -194,4 +194,3 @@ export function removeCommand(cliNoun: string, noun: RemoveNoun) {
     }
   };
 }
-

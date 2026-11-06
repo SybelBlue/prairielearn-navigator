@@ -192,4 +192,3 @@ export const removeNouns = {
   "assessment-set": nameNoun(assessmentSetKind),
   assessment: assessmentNoun,
 } as const satisfies Record<string, RemoveNoun>;
-

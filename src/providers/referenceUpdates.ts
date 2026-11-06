@@ -15,4 +15,3 @@ export function referenceUpdateMode(
     .getConfiguration("prairielearn-navigator", uri)
     .get<ReferenceUpdateMode>(key, "prompt");
 }
-
