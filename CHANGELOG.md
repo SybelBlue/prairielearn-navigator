@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-06
+
 - CLI commands are now grouped by what they act on: `rename-qids` is
   `qid rename`, `rename-tags` is `tag rename`, and `rename-assessment-sets` is
   `assessment-set rename`. The old names still work but print a deprecation
