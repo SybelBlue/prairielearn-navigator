@@ -31,7 +31,6 @@ import {
   QuestionCompletionItemProvider,
   QuestionHeaderCodeLensProvider,
   RuleDiagnosticCollection,
-  removeUnusedQuestion,
   registerQidRenameParticipant,
   registerRemoveParticipant,
   AssessmentSetProvider,
@@ -186,10 +185,6 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "prairielearn-navigator.ignoreDiagnostic",
       ignoreDiagnostic,
-    ),
-    vscode.commands.registerCommand(
-      "prairielearn-navigator.removeUnusedQuestion",
-      removeUnusedQuestion,
     ),
     vscode.commands.registerCommand(
       "prairielearn-navigator.defineTag",

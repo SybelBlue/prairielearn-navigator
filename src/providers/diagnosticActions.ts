@@ -4,7 +4,6 @@ import * as vscode from "vscode";
 import { findNodeAtLocation, getLocation, parseTree } from "jsonc-parser";
 import { configFileName } from "../core/config";
 import { courseFiles } from "../core/courseFiles";
-import { removeEmptyParents } from "../core/emptyDirs";
 import { parseJsonc, parseJsonDoc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
 import {
@@ -36,11 +35,6 @@ export type IgnoreDiagnosticArgs = IgnoreDiagnosticBase & (
   | { identifier: string }
   | { message: string; occurrence: number }
 );
-
-export interface RemoveUnusedQuestionArgs {
-  courseRoot: string;
-  file: string;
-}
 
 export interface DefineCourseNameArgs {
   courseRoot: string;
@@ -131,47 +125,6 @@ export async function ignoreDiagnostic(args: IgnoreDiagnosticArgs): Promise<bool
   const workspaceEdit = new vscode.WorkspaceEdit();
   addFileEdits(workspaceEdit, edits);
   return applyToDocument(workspaceEdit, document);
-}
-
-/** Moves an unused question directory to Trash after rechecking and confirming. */
-export async function removeUnusedQuestion(
-  args: RemoveUnusedQuestionArgs
-): Promise<boolean> {
-  const questionsRoot = path.join(args.courseRoot, "questions") + path.sep;
-  const questionDir = path.dirname(args.file);
-  if (
-    path.basename(args.file) !== "info.json" ||
-    !questionDir.startsWith(questionsRoot)
-  ) {
-    return false;
-  }
-  const uri = vscode.Uri.file(args.file);
-  const stillUnused = vscode.languages.getDiagnostics(uri).some(
-    (diagnostic) =>
-      diagnostic.source === "prairielearn-navigator" &&
-      diagnosticRuleId(diagnostic.code) === "unused-question"
-  );
-  if (!stillUnused) {
-    void vscode.window.showInformationMessage(
-      "PrairieLearn Navigator: the question is no longer unused."
-    );
-    return false;
-  }
-  const localId = path.relative(path.join(args.courseRoot, "questions"), questionDir);
-  const confirmed = await vscode.window.showWarningMessage(
-    `Move unused question "${localId}" and all files in its directory to Trash?`,
-    { modal: true },
-    "Move to Trash"
-  );
-  if (confirmed !== "Move to Trash") {
-    return false;
-  }
-  await vscode.workspace.fs.delete(vscode.Uri.file(questionDir), {
-    recursive: true,
-    useTrash: true,
-  });
-  removeEmptyParents(questionDir, path.join(args.courseRoot, "questions"));
-  return true;
 }
 
 /**
