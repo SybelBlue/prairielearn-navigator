@@ -1909,7 +1909,7 @@ suite("PrairieLearn Navigator", () => {
         path.join(root, "courseInstances/Fa26/assessments/hw1/infoAssessment.json"),
         "utf-8"
       ));
-      assert.deepStrictEqual(assessment.zones[0].questions, []);
+      assert.deepStrictEqual(assessment.zones, []);
     });
   });
 
