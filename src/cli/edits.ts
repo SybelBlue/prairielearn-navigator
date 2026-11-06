@@ -2,15 +2,39 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { findCourseRoot } from "../core/course";
 import { FileChange, FileEdit } from "../core/fileEdits";
+import { CliRuntime } from "./runtime";
 
 /** The course containing `value` (a course or a path inside one), relative to `cwd`. */
-export function resolveCourseRoot(value: string, cwd: string): string | null {
+function resolveCourseRoot(value: string, cwd: string): string | null {
   const resolved = path.resolve(cwd, value);
   const stat = fs.statSync(resolved, { throwIfNoEntry: false });
   if (!stat) {
     return null;
   }
   return findCourseRoot(stat.isDirectory() ? path.join(resolved, "_") : resolved);
+}
+
+/** The course at `value`, or null after telling the user why there isn't one. */
+export function openCourse(value: string, runtime: CliRuntime): string | null {
+  try {
+    const courseRoot = resolveCourseRoot(value, runtime.cwd);
+    if (!courseRoot) {
+      runtime.stderr(`No PrairieLearn course found for ${path.resolve(runtime.cwd, value)}`);
+    }
+    return courseRoot;
+  } catch (error) {
+    runtime.stderr(error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+/** A file's text, or undefined if it can't be read. */
+export function readText(file: string): string | undefined {
+  try {
+    return fs.readFileSync(file, "utf-8");
+  } catch {
+    return undefined;
+  }
 }
 
 export function displayEdit(edit: FileEdit, cwd: string): string {

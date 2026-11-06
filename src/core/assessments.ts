@@ -2,13 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { findNodeAtLocation } from "jsonc-parser";
 import { configFileName } from "./config";
-import { courseFiles, courseRelativePath, matchesGlob } from "./courseFiles";
-import { edit } from "./courseNameRenames";
+import { courseFiles, courseRelativePath, matchesGlob, relativeIdProblem } from "./courseFiles";
 import { parentsEmptiedBy } from "./emptyDirs";
-import { FileEdit } from "./fileEdits";
+import { edit, FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
 import { treeOf } from "./jsonTree";
-import { relativeIdProblem } from "./qidRenames";
 import { ReferenceIndex } from "./referenceIndex";
 
 /** An assessment in a course, named by the directories that locate it. */

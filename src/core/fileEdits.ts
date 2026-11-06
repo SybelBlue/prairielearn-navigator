@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { offsetToPosition } from "./diagnostic";
 
 /** One replacement in a course file, located by offsets and by 1-based position. */
 export interface FileEdit {
@@ -10,6 +11,19 @@ export interface FileEdit {
   /** The text the range must still hold for the edit to apply. */
   expected: string;
   replacement: string;
+}
+
+/** A replacement of `text`, the contents of `file`, between two offsets. */
+export function edit(file: string, text: string, start: number, end: number, replacement: string): FileEdit {
+  return {
+    file,
+    startOffset: start,
+    endOffset: end,
+    start: offsetToPosition(text, start),
+    end: offsetToPosition(text, end),
+    expected: text.slice(start, end),
+    replacement,
+  };
 }
 
 export interface FileChange {

@@ -12,6 +12,7 @@ import {
 } from "../core/assessmentSets";
 import { assessmentId, courseAssessments, planAssessmentRename } from "../core/assessments";
 import { configKeys, isExcluded, loadConfig, ruleSetting, severitySetting } from "../core/config";
+import { isWithinDir } from "../core/courseFiles";
 import { parentsEmptiedBy, removeEmptyParents } from "../core/emptyDirs";
 import { findElements } from "../core/html";
 import { parseJsonc, parseJsonDoc, rangeOf } from "../core/json";
@@ -1361,4 +1362,10 @@ test("empty parents stop at content and never reach the root", () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("isWithinDir matches whole path segments", () => {
+  assert.ok(isWithinDir("/x/course", "/x/course"));
+  assert.ok(isWithinDir("/x/course", "/x/course/questions/q"));
+  assert.equal(isWithinDir("/x/course", "/x/course2/questions/q"), false);
 });

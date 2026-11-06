@@ -4,23 +4,10 @@ import { configFileName } from "./config";
 import { courseFiles, courseRelativePath, matchesGlob } from "./courseFiles";
 import { NameKind } from "./courseNames";
 import { offsetToPosition } from "./diagnostic";
-import { FileEdit } from "./fileEdits";
+import { edit, FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
 import { treeOf } from "./jsonTree";
 import { ReferenceIndex } from "./referenceIndex";
-
-/** A replacement of `text`, the contents of `file`, between two offsets. */
-export function edit(file: string, text: string, start: number, end: number, replacement: string): FileEdit {
-  return {
-    file,
-    startOffset: start,
-    endOffset: end,
-    start: offsetToPosition(text, start),
-    end: offsetToPosition(text, end),
-    expected: text.slice(start, end),
-    replacement,
-  };
-}
 
 /**
  * Edits to the items of a file using `kind` (a question's `tags`, an

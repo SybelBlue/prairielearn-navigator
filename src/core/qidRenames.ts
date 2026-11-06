@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { relativeIdProblem } from "./courseFiles";
 import { FileEdit } from "./fileEdits";
 import { ReferenceIndex } from "./referenceIndex";
 
@@ -8,24 +9,6 @@ export interface QidRename {
 }
 
 export type QidReferenceEdit = QidRename & FileEdit;
-
-/** Returns a problem with an id, or undefined when it is a safe relative path. */
-export function relativeIdProblem(noun: string, id: string): string | undefined {
-  if (id.length === 0) {
-    return `${noun}s must not be empty`;
-  }
-  if (
-    id.includes("\\") ||
-    path.posix.isAbsolute(id) ||
-    /^[A-Za-z]:/.test(id)
-  ) {
-    return `${noun} "${id}" must be a relative path using forward slashes`;
-  }
-  if (id.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
-    return `${noun} "${id}" must not contain empty, ".", or ".." path segments`;
-  }
-  return undefined;
-}
 
 /** The absolute directory named by a validated QID. */
 function qidDirectory(courseRoot: string, qid: string): string {
