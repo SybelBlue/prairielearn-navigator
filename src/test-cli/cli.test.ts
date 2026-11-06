@@ -1302,6 +1302,34 @@ test("qid remove drops a question block when all of its alternatives are removed
   });
 });
 
+test("qid remove lowers numberChoose when pools and zones shrink", async () => {
+  await withAssessmentCourse(async (course) => {
+    const assessmentFile = path.join(course, hw1, "infoAssessment.json");
+    fs.writeFileSync(assessmentFile, JSON.stringify({
+      zones: [
+        {
+          numberChoose: 2,
+          questions: [{ id: "q" }, { id: "kept" }],
+        },
+        {
+          numberChoose: 2,
+          questions: [{
+            numberChoose: 2,
+            alternatives: [{ id: "q" }, { id: "kept" }],
+          }],
+        },
+      ],
+    }, null, 2));
+
+    const removed = await runCliAt(course, "qid", "remove", "--write", "q");
+    assert.equal(removed.code, 0, removed.stderr);
+    const assessment = JSON.parse(fs.readFileSync(assessmentFile, "utf-8"));
+    assert.equal(assessment.zones[0].numberChoose, 1);
+    assert.equal(assessment.zones[1].numberChoose, 1);
+    assert.equal(assessment.zones[1].questions[0].numberChoose, 1);
+  });
+});
+
 test("remove can deliberately leave additional references unchanged", async () => {
   await withAssessmentCourse(async (course) => {
     const assessmentFile = path.join(

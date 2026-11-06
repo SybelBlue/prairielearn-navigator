@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { findNodeAtLocation, getLocation, Node } from "jsonc-parser";
 import { isWithinDir, relativeIdProblem } from "./courseFiles";
-import { FileEdit } from "./fileEdits";
+import { edit, FileEdit } from "./fileEdits";
 import { parseJsonDoc } from "./json";
 import { removeJsonValues } from "./jsonEdits";
 import { treeOf } from "./jsonTree";
@@ -17,6 +17,33 @@ export type QidReferenceEdit = QidRename & FileEdit;
 /** The absolute directory named by a validated QID. */
 function qidDirectory(courseRoot: string, qid: string): string {
   return path.join(courseRoot, "questions", ...qid.split("/"));
+}
+
+/** The nearest ancestor array held by a property named `name`. */
+function namedArrayAncestor(node: Node, name: string): Node | undefined {
+  for (let current = node.parent; current; current = current.parent) {
+    if (
+      current.type === "array" &&
+      current.parent?.type === "property" &&
+      current.parent.children?.[0]?.value === name
+    ) {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+/** Maximum questions contributed by one question block after `targets` go. */
+function questionCapacity(question: Node, targets: ReadonlySet<Node>): number {
+  const alternatives = findNodeAtLocation(question, ["alternatives"]);
+  if (alternatives?.type === "array" && !targets.has(alternatives)) {
+    const remaining = (alternatives.children ?? []).filter((child) => !targets.has(child)).length;
+    const numberChoose = findNodeAtLocation(question, ["numberChoose"]);
+    return typeof numberChoose?.value === "number"
+      ? Math.min(numberChoose.value, remaining)
+      : remaining;
+  }
+  return findNodeAtLocation(question, ["id"]) ? 1 : 0;
 }
 
 /**
@@ -162,40 +189,77 @@ export function planQidReferenceRemovals(
       }
     }
 
+    const alternativeArrays = new Set<Node>();
+    const questionArrays = new Set<Node>();
+    for (const target of targets) {
+      const alternatives = namedArrayAncestor(target, "alternatives");
+      const questions = namedArrayAncestor(target, "questions");
+      if (alternatives) {
+        alternativeArrays.add(alternatives);
+      }
+      if (questions) {
+        questionArrays.add(questions);
+      }
+    }
+
     // `alternatives` requires at least one entry. If all alternatives go,
     // remove the question block unless its own `id` can keep it valid.
-    for (const target of [...targets]) {
-      const array = target.parent;
-      const property = array?.parent;
+    for (const array of alternativeArrays) {
+      const property = array.parent;
       const question = property?.parent;
+      const remaining = (array.children ?? []).filter((child) => !targets.has(child)).length;
       if (
-        target.type === "object" &&
-        array?.type === "array" &&
         property?.type === "property" &&
         question?.type === "object" &&
-        property.children?.[0]?.value === "alternatives" &&
-        (array.children ?? []).every((child) => targets.has(child))
+        remaining === 0
       ) {
         (array.children ?? []).forEach((child) => targets.delete(child));
         targets.add(findNodeAtLocation(question, ["id"]) ? array : question);
+      } else if (question) {
+        const numberChoose = findNodeAtLocation(question, ["numberChoose"]);
+        if (typeof numberChoose?.value === "number" && numberChoose.value > remaining) {
+          edits.push(
+            edit(
+              file,
+              text,
+              numberChoose.offset,
+              numberChoose.offset + numberChoose.length,
+              String(remaining)
+            )
+          );
+        }
       }
     }
     // `questions` also requires at least one entry, so remove a zone whose
     // question blocks are all being removed.
-    for (const target of [...targets]) {
-      const array = target.parent;
-      const property = array?.parent;
+    for (const array of questionArrays) {
+      const property = array.parent;
       const zone = property?.parent;
+      const remaining = (array.children ?? []).filter((child) => !targets.has(child));
       if (
-        target.type === "object" &&
-        array?.type === "array" &&
         property?.type === "property" &&
         zone?.type === "object" &&
-        property.children?.[0]?.value === "questions" &&
-        (array.children ?? []).every((child) => targets.has(child))
+        remaining.length === 0
       ) {
         (array.children ?? []).forEach((child) => targets.delete(child));
         targets.add(zone);
+      } else if (zone) {
+        const available = remaining.reduce(
+          (count, question) => count + questionCapacity(question, targets),
+          0
+        );
+        const numberChoose = findNodeAtLocation(zone, ["numberChoose"]);
+        if (typeof numberChoose?.value === "number" && numberChoose.value > available) {
+          edits.push(
+            edit(
+              file,
+              text,
+              numberChoose.offset,
+              numberChoose.offset + numberChoose.length,
+              String(available)
+            )
+          );
+        }
       }
     }
     edits.push(...removeJsonValues(file, text, [...targets]));
