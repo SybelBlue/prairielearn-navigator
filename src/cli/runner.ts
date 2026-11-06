@@ -1,18 +1,21 @@
 import { styleText } from "node:util";
 import { run as runCheck } from "./check";
-import { run as runRename } from "./rename";
+import { NOUN_COMMANDS } from "./nouns";
 import { CliRuntime, processRuntime } from "./runtime";
 
 const USAGE = `Usage: prairielearn-navigator <command> [options]
 
 Commands:
-  check         Check a course's JSON files against PrairieLearn's schemas and rules
-  rename        Preview or write a rename of a QID, tag, or assessment set
+  check           Check a course's JSON files against PrairieLearn's schemas and rules
+  qid             List, locate, or rename question IDs
+  tag             List, locate, or rename tags
+  assessment-set  List, locate, or rename assessment sets
+  assessment      List or locate assessments
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
 
 // Remove in 1.4.0, along with the note in packages/cli/README.md.
-const DEPRECATED_RENAME_COMMANDS = new Map([
+const DEPRECATED_COMMANDS = new Map([
   ["rename-qids", "qid"],
   ["rename-tags", "tag"],
   ["rename-assessment-sets", "assessment-set"],
@@ -25,22 +28,25 @@ export async function run(
 ): Promise<number> {
   const command = args[0];
 
-  const renameSubcommand = DEPRECATED_RENAME_COMMANDS.get(command);
-  if (renameSubcommand) {
+  const deprecatedNoun = DEPRECATED_COMMANDS.get(command);
+  if (deprecatedNoun) {
     runtime.stderr(
       styleText(
         "yellow",
-        `Warning: "${command}" is deprecated and will be removed in 1.4.0. Use "rename ${renameSubcommand}" instead.`
+        `Warning: "${command}" is deprecated and will be removed in 1.4.0. Use "${deprecatedNoun} rename" instead.`
       )
     );
-    return runRename([renameSubcommand, ...args.slice(1)], runtime);
+    return run([deprecatedNoun, "rename", ...args.slice(1)], runtime);
+  }
+
+  const nounCommand = NOUN_COMMANDS.get(command);
+  if (nounCommand) {
+    return nounCommand(args.slice(1), runtime);
   }
 
   switch (command) {
     case "check":
       return runCheck(args.slice(1), runtime);
-    case "rename":
-      return runRename(args.slice(1), runtime);
     case "--help":
     case "-h":
       runtime.stdout(USAGE);

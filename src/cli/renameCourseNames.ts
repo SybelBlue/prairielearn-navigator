@@ -8,7 +8,7 @@ import { indexCourse } from "../core/referenceIndex";
 import { displayEdit, plural, resolveCourseRoot, writeChanges } from "./edits";
 import { CliRuntime, processRuntime } from "./runtime";
 
-const RENAME_TAGS_USAGE = `Usage: prairielearn-navigator rename tag [options] <old-tag> <new-tag>
+const RENAME_TAGS_USAGE = `Usage: prairielearn-navigator tag rename [options] <old-tag> <new-tag>
 
 Rename a tag defined in infoCourse.json: its definition, every question's
 "tags" entry, and diagnostic suppressions in .pl-navigator.jsonc that name it.
@@ -24,10 +24,10 @@ Options:
   --help            Show this help message
 
 Examples:
-  prairielearn-navigator rename tag hw homework
-  prairielearn-navigator rename tag --write --course path/to/course hw homework`;
+  prairielearn-navigator tag rename hw homework
+  prairielearn-navigator tag rename --write --course path/to/course hw homework`;
 
-const RENAME_ASSESSMENT_SETS_USAGE = `Usage: prairielearn-navigator rename assessment-set [options] <old-set> <new-set>
+const RENAME_ASSESSMENT_SETS_USAGE = `Usage: prairielearn-navigator assessment-set rename [options] <old-set> <new-set>
 
 Rename an assessment set defined in infoCourse.json: its definition, every
 assessment's "set", and diagnostic suppressions in .pl-navigator.jsonc that
@@ -44,8 +44,8 @@ Options:
   --help            Show this help message
 
 Examples:
-  prairielearn-navigator rename assessment-set HW Homework
-  prairielearn-navigator rename assessment-set --write --course path/to/course "Quiz" "Practice Quiz"`;
+  prairielearn-navigator assessment-set rename HW Homework
+  prairielearn-navigator assessment-set rename --write --course path/to/course "Quiz" "Practice Quiz"`;
 
 interface RenameArgs {
   course: string;

@@ -23,44 +23,59 @@ async function runCliAt(cwd: string, ...args: string[]) {
   return { code, stdout: output(stdout), stderr: output(stderr) };
 }
 
-test("rename shows usage and rejects unknown subcommands", async () => {
-  const help = await runCli("rename", "--help");
-  assert.equal(help.code, 0);
-  assert.match(help.stdout, /Usage: prairielearn-navigator rename <subcommand>/);
+test("noun commands show usage and reject unknown subcommands", async () => {
+  for (const noun of ["qid", "tag", "assessment-set", "assessment"]) {
+    const help = await runCli(noun, "--help");
+    assert.equal(help.code, 0);
+    assert.match(help.stdout, new RegExp(`^Usage: prairielearn-navigator ${noun} <subcommand>`));
+    assert.match(help.stdout, /^  list\b/m);
 
-  const missing = await runCli("rename");
-  assert.equal(missing.code, 1);
-  assert.match(missing.stdout, /Usage: prairielearn-navigator rename <subcommand>/);
+    const missing = await runCli(noun);
+    assert.equal(missing.code, 1);
+    assert.equal(missing.stdout, help.stdout);
 
-  const unknown = await runCli("rename", "bogus");
-  assert.equal(unknown.code, 1);
-  assert.match(unknown.stderr, /^Unknown rename subcommand: bogus/);
+    const unknown = await runCli(noun, "bogus");
+    assert.equal(unknown.code, 1);
+    assert.match(unknown.stderr, new RegExp(`^Unknown ${noun} subcommand: bogus`));
+  }
+
+  const noRename = await runCli("assessment", "rename");
+  assert.equal(noRename.code, 1);
+  assert.match(noRename.stderr, /^Unknown assessment subcommand: rename/);
+});
+
+test("the verb-first forms are not commands", async () => {
+  for (const verb of ["rename", "list"]) {
+    const { code, stderr } = await runCli(verb, "qid");
+    assert.equal(code, 1);
+    assert.match(stderr, new RegExp(`^Unknown command: ${verb}`));
+  }
 });
 
 test("deprecated rename commands warn and behave like their replacements", async () => {
   const cases = [
-    { old: "rename-qids", subcommand: "qid", args: ["--course", "clean", "old", "new"] },
-    { old: "rename-tags", subcommand: "tag", args: ["--course", "names", "used", "homework"] },
+    { old: "rename-qids", noun: "qid", args: ["--course", "clean", "old", "new"] },
+    { old: "rename-tags", noun: "tag", args: ["--course", "names", "used", "homework"] },
     {
       old: "rename-assessment-sets",
-      subcommand: "assessment-set",
+      noun: "assessment-set",
       args: ["--course", "names", "Homework", "Problem Set"],
     },
   ];
-  for (const { old, subcommand, args } of cases) {
+  for (const { old, noun, args } of cases) {
     const deprecated = await runCli(old, ...args);
-    const current = await runCli("rename", subcommand, ...args);
+    const current = await runCli(noun, "rename", ...args);
     assert.equal(deprecated.code, 0);
     assert.equal(deprecated.stdout, current.stdout);
     assert.equal(
       deprecated.stderr,
-      `Warning: "${old}" is deprecated and will be removed in 1.4.0. Use "rename ${subcommand}" instead.\n`
+      `Warning: "${old}" is deprecated and will be removed in 1.4.0. Use "${noun} rename" instead.\n`
     );
     assert.equal(current.stderr, "");
   }
 });
 
-test("rename qid previews and writes multiple semantic QID mappings", async () => {
+test("qid rename previews and writes multiple semantic QID mappings", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-cli-"));
   const course = path.join(root, "course");
   fs.cpSync(path.join(fixtures, "broken"), course, { recursive: true });
@@ -74,7 +89,7 @@ test("rename qid previews and writes multiple semantic QID mappings", async () =
   try {
     const preview = await runCliAt(
       course,
-      "rename", "qid",
+      "qid", "rename",
       "good",
       "better",
       "topic/nested",
@@ -89,7 +104,7 @@ test("rename qid previews and writes multiple semantic QID mappings", async () =
 
     const written = await runCliAt(
       course,
-      "rename", "qid",
+      "qid", "rename",
       "--write",
       "good",
       "better",
@@ -119,13 +134,13 @@ test("rename qid previews and writes multiple semantic QID mappings", async () =
   }
 });
 
-test("rename qid validates mappings and treats no matches as success", async () => {
-  const odd = await runCli("rename", "qid", "--course", "clean", "old");
+test("qid rename validates mappings and treats no matches as success", async () => {
+  const odd = await runCli("qid", "rename", "--course", "clean", "old");
   assert.equal(odd.code, 1);
   assert.match(odd.stderr, /old\/new pairs/);
 
   const escaping = await runCli(
-    "rename", "qid",
+    "qid", "rename",
     "--course",
     "clean",
     "../old",
@@ -135,7 +150,7 @@ test("rename qid validates mappings and treats no matches as success", async () 
   assert.match(escaping.stderr, /must not contain/);
 
   const conflict = await runCli(
-    "rename", "qid",
+    "qid", "rename",
     "--course",
     "clean",
     "old",
@@ -147,7 +162,7 @@ test("rename qid validates mappings and treats no matches as success", async () 
   assert.match(conflict.stderr, /Conflicting QID renames/);
 
   const none = await runCli(
-    "rename", "qid",
+    "qid", "rename",
     "--course",
     "clean",
     "unused",
@@ -157,7 +172,7 @@ test("rename qid validates mappings and treats no matches as success", async () 
   assert.match(none.stdout, /No semantic QID references matched/);
 });
 
-test("rename tag previews and writes a tag rename", async () => {
+test("tag rename previews and writes a tag rename", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-tags-"));
   const course = path.join(root, "course");
   fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
@@ -165,13 +180,13 @@ test("rename tag previews and writes a tag rename", async () => {
   const question = path.join(course, "questions/q/info.json");
   const before = fs.readFileSync(question, "utf-8");
   try {
-    const preview = await runCliAt(course, "rename", "tag", "used", "homework");
+    const preview = await runCliAt(course, "tag", "rename", "used", "homework");
     assert.equal(preview.code, 0, preview.stderr);
     assert.match(preview.stdout, /"\\"used\\"" -> "\\"homework\\""/);
     assert.match(preview.stdout, /Would make 2 edits in 2 files/);
     assert.equal(fs.readFileSync(question, "utf-8"), before);
 
-    const written = await runCliAt(course, "rename", "tag", "--write", "used", "homework");
+    const written = await runCliAt(course, "tag", "rename", "--write", "used", "homework");
     assert.equal(written.code, 0, written.stderr);
     assert.match(written.stdout, /Made 2 edits in 2 files/);
     assert.deepEqual(JSON.parse(fs.readFileSync(question, "utf-8")).tags, ["homework"]);
@@ -184,21 +199,21 @@ test("rename tag previews and writes a tag rename", async () => {
   }
 });
 
-test("rename tag validates its arguments and the tags", async () => {
-  const one = await runCli("rename", "tag", "--course", "names", "used");
+test("tag rename validates its arguments and the tags", async () => {
+  const one = await runCli("tag", "rename", "--course", "names", "used");
   assert.equal(one.code, 1);
   assert.match(one.stderr, /Exactly one old tag and one new tag/);
 
-  const undefinedTag = await runCli("rename", "tag", "--course", "names", "nope", "new");
+  const undefinedTag = await runCli("tag", "rename", "--course", "names", "nope", "new");
   assert.equal(undefinedTag.code, 1);
   assert.match(undefinedTag.stderr, /Tag "nope" is not defined in infoCourse.json/);
 
-  const taken = await runCli("rename", "tag", "--course", "names", "used", "unused");
+  const taken = await runCli("tag", "rename", "--course", "names", "used", "unused");
   assert.equal(taken.code, 1);
   assert.match(taken.stderr, /Tag "unused" is already defined/);
 });
 
-test("rename assessment-set previews and writes an assessment set rename", async () => {
+test("assessment-set rename previews and writes an assessment set rename", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-rename-sets-"));
   const course = path.join(root, "course");
   fs.cpSync(path.join(fixtures, "names"), course, { recursive: true });
@@ -206,13 +221,13 @@ test("rename assessment-set previews and writes an assessment set rename", async
   const assessment = path.join(course, "courseInstances/Fa26/assessments/hw1/infoAssessment.json");
   const before = fs.readFileSync(assessment, "utf-8");
   try {
-    const preview = await runCliAt(course, "rename", "assessment-set", "Homework", "Problem Set");
+    const preview = await runCliAt(course, "assessment-set", "rename", "Homework", "Problem Set");
     assert.equal(preview.code, 0, preview.stderr);
     assert.match(preview.stdout, /"\\"Homework\\"" -> "\\"Problem Set\\""/);
     assert.match(preview.stdout, /Would make 2 edits in 2 files/);
     assert.equal(fs.readFileSync(assessment, "utf-8"), before);
 
-    const written = await runCliAt(course, "rename", "assessment-set", "--write", "Homework", "Problem Set");
+    const written = await runCliAt(course, "assessment-set", "rename", "--write", "Homework", "Problem Set");
     assert.equal(written.code, 0, written.stderr);
     assert.match(written.stdout, /Made 2 edits in 2 files/);
     const json = JSON.parse(fs.readFileSync(assessment, "utf-8"));
@@ -226,20 +241,20 @@ test("rename assessment-set previews and writes an assessment set rename", async
   }
 });
 
-test("rename assessment-set validates its arguments and the sets", async () => {
-  const help = await runCli("rename", "assessment-set", "--help");
+test("assessment-set rename validates its arguments and the sets", async () => {
+  const help = await runCli("assessment-set", "rename", "--help");
   assert.equal(help.code, 0);
-  assert.match(help.stdout, /Usage: prairielearn-navigator rename assessment-set/);
+  assert.match(help.stdout, /Usage: prairielearn-navigator assessment-set rename/);
 
-  const one = await runCli("rename", "assessment-set", "--course", "names", "Homework");
+  const one = await runCli("assessment-set", "rename", "--course", "names", "Homework");
   assert.equal(one.code, 1);
   assert.match(one.stderr, /Exactly one old assessment set and one new assessment set/);
 
-  const undefinedSet = await runCli("rename", "assessment-set", "--course", "names", "Exam", "Final");
+  const undefinedSet = await runCli("assessment-set", "rename", "--course", "names", "Exam", "Final");
   assert.equal(undefinedSet.code, 1);
   assert.match(undefinedSet.stderr, /Assessment set "Exam" is not defined in infoCourse.json/);
 
-  const taken = await runCli("rename", "assessment-set", "--course", "names", "Homework", "Quiz");
+  const taken = await runCli("assessment-set", "rename", "--course", "names", "Homework", "Quiz");
   assert.equal(taken.code, 1);
   assert.match(taken.stderr, /Assessment set "Quiz" is already defined/);
 });
@@ -576,6 +591,217 @@ test("glob with no matches exits 1", async () => {
   const { code, stderr } = await runCli("check", "nope/**/*.json");
   assert.equal(code, 1);
   assert.match(stderr, /No PrairieLearn course JSON files found/);
+});
+
+test("list prints one sorted item per line", async () => {
+  const qids = await runCli("qid", "list", "--course", "broken");
+  assert.equal(qids.code, 0);
+  assert.equal(qids.stderr, "");
+  assert.deepEqual(qids.stdout.trimEnd().split("\n"), [
+    "allElements",
+    "badSchema",
+    "commented",
+    "deps",
+    "figures",
+    "good",
+    "inlineText",
+    "jsonRefs",
+    "noHtml",
+    "topic/nested",
+  ]);
+
+  const expected = [
+    ["tag", "unused\nused\n"],
+    ["assessment-set", "Homework\nQuiz\n"],
+    ["assessment", "Fa26/hw1\n"],
+  ];
+  for (const [noun, stdout] of expected) {
+    const listed = await runCli(noun, "list", "--course", "names");
+    assert.equal(listed.code, 0);
+    assert.equal(listed.stdout, stdout);
+  }
+});
+
+test("list --json prints each subcommand's structured rows", async () => {
+  const cases: [string, unknown][] = [
+    ["qid", [{ qid: "q", tags: ["used"] }]],
+    [
+      "tag",
+      [
+        { name: "unused", defined: true, used: false },
+        { name: "used", defined: true, used: true },
+      ],
+    ],
+    [
+      "assessment-set",
+      [
+        { name: "Homework", defined: true, used: true },
+        { name: "Quiz", defined: true, used: false },
+      ],
+    ],
+    ["assessment", [{ instance: "Fa26", assessment: "hw1", set: "Homework" }]],
+  ];
+  for (const [noun, expected] of cases) {
+    const { code, stdout } = await runCli(noun, "list", "--json", "--course=names");
+    assert.equal(code, 0);
+    assert.deepEqual(JSON.parse(stdout), expected);
+  }
+});
+
+test("list omits undefined names unless --include-undefined is given", async () => {
+  const defaults = await runCli("assessment-set", "list", "--course", "clean");
+  assert.equal(defaults.code, 0);
+  assert.equal(defaults.stdout, "");
+
+  const included = await runCli(
+    "assessment-set", "list", "--include-undefined", "--json", "--course", "clean"
+  );
+  assert.equal(included.code, 0);
+  assert.deepEqual(JSON.parse(included.stdout), [{ name: "Homework", defined: false, used: true }]);
+});
+
+test("list's default tags and sets are all accepted by rename", async () => {
+  for (const noun of ["tag", "assessment-set"]) {
+    const { stdout } = await runCli(noun, "list", "--course", "names");
+    for (const name of stdout.trimEnd().split("\n")) {
+      const renamed = await runCli(noun, "rename", "--course", "names", name, `${name}2`);
+      assert.equal(renamed.code, 0, renamed.stderr);
+    }
+  }
+});
+
+test("--include-undefined only applies to tags and assessment sets", async () => {
+  for (const noun of ["qid", "assessment"]) {
+    const { code, stderr } = await runCli(noun, "list", "--include-undefined", "--course", "names");
+    assert.equal(code, 1);
+    assert.match(stderr, /^Unknown option: --include-undefined/);
+    assert.doesNotMatch((await runCli(noun, "list", "--help")).stdout, /--include-undefined/);
+  }
+  for (const noun of ["tag", "assessment-set"]) {
+    assert.match((await runCli(noun, "list", "--help")).stdout, /--include-undefined/);
+  }
+});
+
+test("list prints nothing for empty results", async () => {
+  const text = await runCli("tag", "list", "--course", "clean");
+  assert.equal(text.code, 0);
+  assert.equal(text.stdout, "");
+
+  const json = await runCli("tag", "list", "--json", "--course", "clean");
+  assert.equal(json.code, 0);
+  assert.deepEqual(JSON.parse(json.stdout), []);
+});
+
+test("list reports usage and argument errors", async () => {
+  const help = await runCli("qid", "list", "--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /^Usage: prairielearn-navigator qid list \[options\]/);
+
+  const option = await runCli("qid", "list", "--bogus");
+  assert.equal(option.code, 1);
+  assert.match(option.stderr, /^Unknown option: --bogus/);
+
+  const positional = await runCli("qid", "list", "extra");
+  assert.equal(positional.code, 1);
+  assert.match(positional.stderr, /^Unexpected argument: extra/);
+
+  const noValue = await runCli("qid", "list", "--course");
+  assert.equal(noValue.code, 1);
+  assert.match(noValue.stderr, /^Missing value for --course/);
+
+  const noCourse = await runCli("qid", "list", "--course", "noCourse");
+  assert.equal(noCourse.code, 1);
+  assert.match(noCourse.stderr, /^No PrairieLearn course found for /);
+});
+
+test("locate prints a name's definition in infoCourse.json", async () => {
+  const tag = await runCli("tag", "locate", "--course", "names", "used");
+  assert.equal(tag.code, 0);
+  assert.equal(tag.stdout, `${path.join("names", "infoCourse.json")}:7:15\n`);
+
+  const set = await runCli("assessment-set", "locate", "--json", "--course", "names", "Quiz");
+  assert.equal(set.code, 0);
+  assert.deepEqual(JSON.parse(set.stdout), {
+    path: path.join("names", "infoCourse.json"),
+    lineSpan: [12, 12],
+    colSpan: [36, 42],
+  });
+});
+
+test("locate prints the file of a question or assessment, with no span", async () => {
+  const cases = [
+    ["qid", "q", path.join("names", "questions", "q", "info.json")],
+    [
+      "assessment",
+      "Fa26/hw1",
+      path.join("names", "courseInstances", "Fa26", "assessments", "hw1", "infoAssessment.json"),
+    ],
+  ];
+  for (const [noun, target, file] of cases) {
+    const text = await runCli(noun, "locate", "--course", "names", target);
+    assert.equal(text.code, 0);
+    assert.equal(text.stdout, `${file}\n`);
+
+    const json = await runCli(noun, "locate", "--json", "--course", "names", target);
+    assert.equal(json.code, 0);
+    assert.deepEqual(JSON.parse(json.stdout), { path: file });
+  }
+});
+
+test("locate finds everything list prints", async () => {
+  for (const noun of ["qid", "tag", "assessment-set", "assessment"]) {
+    const { stdout } = await runCli(noun, "list", "--course", "names");
+    for (const target of stdout.trimEnd().split("\n")) {
+      const located = await runCli(noun, "locate", "--course", "names", target);
+      assert.equal(located.code, 0, located.stderr);
+    }
+  }
+});
+
+test("locate fails for anything not defined", async () => {
+  const cases = [
+    ["qid", "nope", /^Question "nope" is not defined/],
+    ["tag", "nope", /^Tag "nope" is not defined in infoCourse\.json/],
+    ["assessment-set", "nope", /^Assessment set "nope" is not defined in infoCourse\.json/],
+    ["assessment", "Fa26/nope", /^Assessment "Fa26\/nope" is not defined/],
+  ] as const;
+  for (const [noun, target, message] of cases) {
+    for (const flags of [[], ["--json"]]) {
+      const { code, stdout, stderr } = await runCli(
+        noun, "locate", ...flags, "--course", "names", target
+      );
+      assert.equal(code, 1);
+      assert.equal(stdout, "");
+      assert.match(stderr, message);
+    }
+  }
+
+  // Used by hw1 and a PrairieLearn default, but infoCourse.json does not define it.
+  const undefinedSet = await runCli("assessment-set", "locate", "--course", "clean", "Homework");
+  assert.equal(undefinedSet.code, 1);
+  assert.match(undefinedSet.stderr, /^Assessment set "Homework" is not defined/);
+});
+
+test("locate reports usage and argument errors", async () => {
+  const help = await runCli("tag", "locate", "--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /^Usage: prairielearn-navigator tag locate \[options\] <tag>/);
+
+  const none = await runCli("tag", "locate", "--course", "names");
+  assert.equal(none.code, 1);
+  assert.match(none.stderr, /^Exactly one tag is required/);
+
+  const two = await runCli("assessment-set", "locate", "--course", "names", "Homework", "Quiz");
+  assert.equal(two.code, 1);
+  assert.match(two.stderr, /^Exactly one assessment set is required/);
+
+  const option = await runCli("qid", "locate", "--bogus", "q");
+  assert.equal(option.code, 1);
+  assert.match(option.stderr, /^Unknown option: --bogus/);
+
+  const noCourse = await runCli("qid", "locate", "--course", "noCourse", "q");
+  assert.equal(noCourse.code, 1);
+  assert.match(noCourse.stderr, /^No PrairieLearn course found for /);
 });
 
 test("top-level usage and invalid commands return the expected status", async () => {

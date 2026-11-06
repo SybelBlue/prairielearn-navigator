@@ -6,10 +6,17 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
-- The CLI's rename commands are now subcommands of `rename`: `rename-qids` is
-  `rename qid`, `rename-tags` is `rename tag`, and `rename-assessment-sets` is
-  `rename assessment-set`. The old names still work but print a deprecation
+- CLI commands are now grouped by what they act on: `rename-qids` is
+  `qid rename`, `rename-tags` is `tag rename`, and `rename-assessment-sets` is
+  `assessment-set rename`. The old names still work but print a deprecation
   warning to stderr, and will be removed in 1.4.0.
+- New CLI commands `qid list`, `tag list`, `assessment-set list`, and
+  `assessment list`. Each prints one item per line, or a JSON array with
+  `--json`. `tag list` and `assessment-set list` print what `infoCourse.json`
+  defines; add `--include-undefined` for names that are only used.
+- New CLI commands `qid locate`, `tag locate`, `assessment-set locate`, and
+  `assessment locate`. Each prints where something is defined, with its line
+  and column span when it has one, and fails if it isn't defined.
 
 ## [1.3.1] - 2026-11-06
 
