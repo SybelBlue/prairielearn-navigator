@@ -29,6 +29,11 @@ test("noun commands show usage and reject unknown subcommands", async () => {
     assert.equal(help.code, 0);
     assert.match(help.stdout, new RegExp(`^Usage: prairielearn-navigator ${noun} <subcommand>`));
     assert.match(help.stdout, /^  list\b/m);
+    if (noun === "assessment") {
+      assert.doesNotMatch(help.stdout, /^  uses\b/m);
+    } else {
+      assert.match(help.stdout, /^  uses\b/m);
+    }
 
     const missing = await runCli(noun);
     assert.equal(missing.code, 1);
@@ -41,7 +46,7 @@ test("noun commands show usage and reject unknown subcommands", async () => {
 });
 
 test("the verb-first forms are not commands", async () => {
-  for (const verb of ["rename", "list"]) {
+  for (const verb of ["rename", "list", "uses"]) {
     const { code, stderr } = await runCli(verb, "qid");
     assert.equal(code, 1);
     assert.match(stderr, new RegExp(`^Unknown command: ${verb}`));
@@ -798,6 +803,170 @@ test("locate reports usage and argument errors", async () => {
   const noCourse = await runCli("qid", "locate", "--course", "noCourse", "q");
   assert.equal(noCourse.code, 1);
   assert.match(noCourse.stderr, /^No PrairieLearn course found for /);
+});
+
+/** A temporary course containing every semantic reference kind used by `uses`. */
+async function withUsesCourse(body: (root: string) => Promise<void>) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pl-navigator-uses-cli-"));
+  const course = path.join(root, "course");
+  const write = (relative: string, contents: string) => {
+    const file = path.join(course, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, contents);
+  };
+  write(
+    "infoCourse.json",
+    '{ "tags": [{ "name": "used", "color": "blue1" }, { "name": "unused", "color": "gray1" }], "assessmentSets": [{ "name": "Homework" }, { "name": "Quiz" }] }\n'
+  );
+  write(
+    "courseInstances/Fa26/assessments/hw1/infoAssessment.json",
+    '{ "set": "Homework", "zones": [{ "questions": [{ "id": "q", "alternatives": [{ "id": "q" }, { "id": "missing" }] }] }] }\n'
+  );
+  write("questions/q/info.json", '{ "title": "Q", "tags": ["used", "used"] }\n');
+  write("questions/template/info.json", '{ "title": "Template", "template": "q" }\n');
+  write("questions/unused/info.json", '{ "title": "Unused" }\n');
+  try {
+    await body(root);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("uses prints every semantic reference, excluding definitions", async () => {
+  await withUsesCourse(async (root) => {
+    const assessment = path.join(
+      "course", "courseInstances", "Fa26", "assessments", "hw1", "infoAssessment.json"
+    );
+    const question = path.join("course", "questions", "q", "info.json");
+    const template = path.join("course", "questions", "template", "info.json");
+
+    const qid = await runCliAt(root, "qid", "uses", "--course", "course", "q");
+    assert.equal(qid.code, 0, qid.stderr);
+    assert.equal(qid.stderr, "");
+    assert.equal(
+      qid.stdout,
+      `${assessment}:1:57\n${assessment}:1:87\n${template}:1:37\n`
+    );
+
+    const tag = await runCliAt(root, "tag", "uses", "--course=course", "used");
+    assert.equal(tag.code, 0, tag.stderr);
+    assert.equal(tag.stdout, `${question}:1:26\n${question}:1:34\n`);
+
+    const set = await runCliAt(root, "assessment-set", "uses", "--course", "course", "Homework");
+    assert.equal(set.code, 0, set.stderr);
+    assert.equal(set.stdout, `${assessment}:1:10\n`);
+  });
+});
+
+test("uses --json prints location spans", async () => {
+  await withUsesCourse(async (root) => {
+    const assessment = path.join(
+      "course", "courseInstances", "Fa26", "assessments", "hw1", "infoAssessment.json"
+    );
+    const question = path.join("course", "questions", "q", "info.json");
+    const template = path.join("course", "questions", "template", "info.json");
+    const qid = await runCliAt(
+      root, "qid", "uses", "--json", "--course", "course/questions/q", "q"
+    );
+    assert.equal(qid.code, 0, qid.stderr);
+    assert.deepEqual(JSON.parse(qid.stdout), [
+      { path: assessment, lineSpan: [1, 1], colSpan: [57, 58] },
+      { path: assessment, lineSpan: [1, 1], colSpan: [87, 88] },
+      { path: template, lineSpan: [1, 1], colSpan: [37, 38] },
+    ]);
+
+    const tag = await runCliAt(
+      root, "tag", "uses", "--json", "--course", "course", "used"
+    );
+    assert.equal(tag.code, 0, tag.stderr);
+    assert.deepEqual(JSON.parse(tag.stdout), [
+      { path: question, lineSpan: [1, 1], colSpan: [26, 32] },
+      { path: question, lineSpan: [1, 1], colSpan: [34, 40] },
+    ]);
+
+    const set = await runCliAt(
+      root, "assessment-set", "uses", "--json", "--course", "course", "Homework"
+    );
+    assert.equal(set.code, 0, set.stderr);
+    assert.deepEqual(JSON.parse(set.stdout), [
+      { path: assessment, lineSpan: [1, 1], colSpan: [10, 20] },
+    ]);
+  });
+});
+
+test("qid uses finds missing questions and succeeds for no matches", async () => {
+  await withUsesCourse(async (root) => {
+    const assessment = path.join(
+      "course", "courseInstances", "Fa26", "assessments", "hw1", "infoAssessment.json"
+    );
+    const missing = await runCliAt(root, "qid", "uses", "--course", "course", "missing");
+    assert.equal(missing.code, 0, missing.stderr);
+    assert.equal(missing.stdout, `${assessment}:1:102\n`);
+
+    const text = await runCliAt(root, "qid", "uses", "--course", "course", "unused");
+    assert.equal(text.code, 0, text.stderr);
+    assert.equal(text.stdout, "");
+
+    const json = await runCliAt(
+      root, "qid", "uses", "--json", "--course", "course", "unused"
+    );
+    assert.equal(json.code, 0, json.stderr);
+    assert.deepEqual(JSON.parse(json.stdout), []);
+  });
+});
+
+test("tag and assessment-set uses require definitions and allow unused definitions", async () => {
+  await withUsesCourse(async (root) => {
+    for (const [noun, unused] of [["tag", "unused"], ["assessment-set", "Quiz"]]) {
+      const result = await runCliAt(root, noun, "uses", "--course", "course", unused);
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.stdout, "");
+    }
+
+    for (const [noun, message] of [
+      ["tag", /^Tag "undefined" is not defined in infoCourse\.json/],
+      ["assessment-set", /^Assessment set "undefined" is not defined in infoCourse\.json/],
+    ] as const) {
+      const result = await runCliAt(root, noun, "uses", "--course", "course", "undefined");
+      assert.equal(result.code, 1);
+      assert.equal(result.stdout, "");
+      assert.match(result.stderr, message);
+    }
+  });
+});
+
+test("uses reports help and argument errors", async () => {
+  const help = await runCli("qid", "uses", "--help");
+  assert.equal(help.code, 0);
+  assert.match(help.stdout, /^Usage: prairielearn-navigator qid uses \[options\] <qid>/);
+
+  const none = await runCli("qid", "uses", "--course", "names");
+  assert.equal(none.code, 1);
+  assert.match(none.stderr, /^Exactly one qid is required/);
+
+  const two = await runCli("tag", "uses", "--course", "names", "used", "unused");
+  assert.equal(two.code, 1);
+  assert.match(two.stderr, /^Exactly one tag is required/);
+
+  const option = await runCli("qid", "uses", "--bogus", "q");
+  assert.equal(option.code, 1);
+  assert.match(option.stderr, /^Unknown option: --bogus/);
+
+  const noValue = await runCli("qid", "uses", "--course");
+  assert.equal(noValue.code, 1);
+  assert.match(noValue.stderr, /^Missing value for --course/);
+
+  const noCourse = await runCli("qid", "uses", "--course", "noCourse", "q");
+  assert.equal(noCourse.code, 1);
+  assert.match(noCourse.stderr, /^No PrairieLearn course found for /);
+
+  const invalid = await runCli("qid", "uses", "--course", "names", "../q");
+  assert.equal(invalid.code, 1);
+  assert.match(invalid.stderr, /^QID "\.\.\/q" must not contain/);
+
+  const assessment = await runCli("assessment", "uses", "Fa26/hw1");
+  assert.equal(assessment.code, 1);
+  assert.match(assessment.stderr, /^Unknown assessment subcommand: uses/);
 });
 
 /** A copy of the `names` fixture with suppressions, removed when `body` finishes. */

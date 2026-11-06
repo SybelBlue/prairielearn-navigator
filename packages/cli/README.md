@@ -234,6 +234,46 @@ A tag or assessment set only counts as defined if `infoCourse.json` defines it.
 Names that are only used, including PrairieLearn defaults, are errors, as they
 are for `rename`.
 
+## Uses
+
+The `uses` subcommands list every semantic reference to a QID, tag, or
+assessment set, one source location per line and sorted by file and position.
+Definitions themselves are not uses.
+
+```sh
+npx -y @sybelblue/prairielearn-navigator <noun> uses [options] <target>
+```
+
+| Command | References |
+| --- | --- |
+| `qid uses` | Assessment questions, alternatives, and question `template` values |
+| `tag uses` | Question `tags` entries |
+| `assessment-set uses` | Assessment `set` values |
+
+| Option | |
+| --- | --- |
+| `--course <path>` | Course directory or a path inside one (default: `.`) |
+| `--json` | Print a JSON array of locations instead of one location per line |
+
+Text locations are `path:line:column`. With `--json`, each location has the
+same shape as `locate`, including the full reference span:
+
+```json
+[
+  {
+    "path": "courseInstances/Fa26/assessments/hw1/infoAssessment.json",
+    "lineSpan": [10, 10],
+    "colSpan": [17, 23]
+  }
+]
+```
+
+Paths are relative to the current directory. Lines and columns are 1-based,
+and span ends are exclusive. A QID can be missing from `questions/`; its
+references are still listed so broken courses can be inspected. Tags and
+assessment sets must be defined in `infoCourse.json`. A valid target with no
+uses succeeds with no text output, or `[]` with `--json`.
+
 ## Rename QIDs
 
 `qid rename` bulk-updates semantic references to one or more question IDs:
