@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-06
+
 - The prompt to update QID references after moving a question folder no longer
   offers Cancel. VS Code doesn't let extensions stop a move, so Cancel only
   skipped the reference updates; the choices are now Update References and
