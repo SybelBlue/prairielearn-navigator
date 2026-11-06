@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { AddContext, AddNoun, resolveAddValues } from "../core/additions";
+import { courseInstances } from "../core/assessments";
 import { prepareFileChanges } from "../core/fileEdits";
 import { today } from "../core/plVersion";
 import { indexCourse } from "../core/referenceIndex";
@@ -98,7 +99,11 @@ export function addCommand(cliNoun: string, noun: AddNoun) {
     }
 
     try {
-      const ctx: AddContext = { index: indexCourse(courseRoot, today()), readText };
+      const ctx: AddContext = {
+        index: indexCourse(courseRoot, today()),
+        courseInstances: courseInstances(courseRoot),
+        readText,
+      };
       const values = resolveAddValues(noun, ctx, parsed.given);
       const addition = noun.plan(ctx, values, randomUUID());
       // Validate every source range before reporting or writing any changes.

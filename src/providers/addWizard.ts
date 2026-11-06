@@ -11,6 +11,7 @@ import {
   CourseAddition,
   stepBack,
 } from "../core/additions";
+import { courseInstances } from "../core/assessments";
 import { courseFiles } from "../core/courseFiles";
 import { CourseCache, ReferenceIndexCache } from "../filewatchers";
 import { addFileEdits, applyToDocument, currentText, revealFocus } from "./fileEdits";
@@ -175,7 +176,11 @@ export function addCommand(
         throw new Error(`Could not index the course at ${courseRoot}`);
       }
 
-      const ctx: AddContext = { index, readText: currentText };
+      const ctx: AddContext = {
+        index,
+        courseInstances: courseInstances(courseRoot),
+        readText: currentText,
+      };
       const seed = { [noun.fields[0].key]: noun.idPrefix?.(ctx, dir ?? courseRoot) ?? "" };
       const values = await collectAddValues(noun, ctx, options.prompt ?? vscodePrompt(noun), seed);
       if (!values) {

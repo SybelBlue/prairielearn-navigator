@@ -1557,6 +1557,7 @@ function addCourse(infoCourse: object = {}): { root: string; ctx: () => AddConte
   write("questions/unit1/q1/info.json", { title: "Q" });
   const ctx = () => ({
     index: indexCourse(root, "2026-01-01"),
+    courseInstances: courseInstances(root),
     readText: (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf-8") : undefined),
   });
   return { root, ctx };
@@ -1708,6 +1709,24 @@ test("collectAddValues walks the fields in order", async () => {
     type: "Exam",
   });
   assert.deepEqual(offered, ["Fa26/", "New Assessment", "Lab", "3", "Homework"]);
+});
+
+test("assessment add validation reuses the context's course instances", async () => {
+  const { root, ctx } = addCourse();
+  const cached = ctx();
+  fs.rmSync(path.join(root, "courseInstances"), { recursive: true });
+  const problems: (string | undefined)[] = [];
+  const prompt: AddPrompt = async (step) => {
+    if (step.field.key === "assessment") {
+      problems.push(step.problem("Fa26/new"), step.problem("Fa26/new"), step.problem("Fa26/new"));
+      return "Fa26/new";
+    }
+    return step.value;
+  };
+
+  const values = await collectAddValues(addNouns.assessment, cached, prompt);
+  assert.equal(values?.assessment, "Fa26/new");
+  assert.deepEqual(problems, [undefined, undefined, undefined]);
 });
 
 test("collectAddValues going back recomputes defaults but keeps changed answers", async () => {

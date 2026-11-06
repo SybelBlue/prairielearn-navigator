@@ -74,8 +74,11 @@ function assessmentsDirOf(courseRoot: string, instance: string): string {
 }
 
 /** Finds the instance a new assessment's id starts with, or returns what's wrong with the id. */
-export function assessmentTarget(courseRoot: string, id: string): AssessmentTarget | string {
-  const instances = courseInstances(courseRoot);
+export function assessmentTarget(
+  courseRoot: string,
+  id: string,
+  instances: readonly string[] = courseInstances(courseRoot)
+): AssessmentTarget | string {
   if (instances.includes(id)) {
     return `"${id}" is a course instance; name an assessment in it, as "${id}/hw1"`;
   }
@@ -92,8 +95,11 @@ export function assessmentTarget(courseRoot: string, id: string): AssessmentTarg
 }
 
 /** The start of the id of an assessment added at `dir`, an absolute directory. */
-export function assessmentPrefixFor(courseRoot: string, dir: string): string {
-  const instances = courseInstances(courseRoot);
+export function assessmentPrefixFor(
+  courseRoot: string,
+  dir: string,
+  instances: readonly string[] = courseInstances(courseRoot)
+): string {
   const root = (instance: string) => path.join(courseRoot, "courseInstances", ...instance.split("/"));
   const instance = instances.find((candidate) => isWithinDir(root(candidate), dir)) ??
     (instances.length === 1 ? instances[0] : undefined);

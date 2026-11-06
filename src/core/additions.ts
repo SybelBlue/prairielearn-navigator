@@ -22,6 +22,8 @@ import {
 /** What a noun needs to know about the course. */
 export interface AddContext {
   index: ReferenceIndex;
+  /** Course-instance ids captured once for this add operation. */
+  courseInstances: readonly string[];
   /** A file's current text (an unsaved editor's, in VS Code). */
   readText: (file: string) => string | undefined;
 }
@@ -227,7 +229,7 @@ const assessmentNoun: AddNoun = {
         if (problem) {
           return problem;
         }
-        const target = assessmentTarget(ctx.index.courseRoot, id);
+        const target = assessmentTarget(ctx.index.courseRoot, id, ctx.courseInstances);
         if (typeof target === "string") {
           return target;
         }
@@ -258,7 +260,7 @@ const assessmentNoun: AddNoun = {
       label: "Number",
       usage: "Its number in the set (default: the next one)",
       defaultValue: (ctx, { assessment, set }) => {
-        const target = assessmentTarget(ctx.index.courseRoot, assessment);
+        const target = assessmentTarget(ctx.index.courseRoot, assessment, ctx.courseInstances);
         return typeof target === "string"
           ? undefined
           : nextAssessmentNumber(ctx.index, ctx.readText, target.instance, set);
@@ -273,9 +275,9 @@ const assessmentNoun: AddNoun = {
       defaultValue: () => "Homework",
     },
   ],
-  idPrefix: (ctx, dir) => assessmentPrefixFor(ctx.index.courseRoot, dir),
+  idPrefix: (ctx, dir) => assessmentPrefixFor(ctx.index.courseRoot, dir, ctx.courseInstances),
   plan(ctx, values, uuid) {
-    const target = assessmentTarget(ctx.index.courseRoot, values.assessment);
+    const target = assessmentTarget(ctx.index.courseRoot, values.assessment, ctx.courseInstances);
     if (typeof target === "string") {
       throw new Error(target);
     }
