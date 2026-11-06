@@ -1283,6 +1283,25 @@ test("remove previews and writes every noun with structural reference cleanup", 
   });
 });
 
+test("qid remove drops a question block when all of its alternatives are removed", async () => {
+  await withAssessmentCourse(async (course) => {
+    const assessmentFile = path.join(course, hw1, "infoAssessment.json");
+    fs.writeFileSync(assessmentFile, JSON.stringify({
+      zones: [{
+        questions: [
+          { alternatives: [{ id: "q" }], points: 3 },
+          { id: "kept" },
+        ],
+      }],
+    }, null, 2));
+
+    const removed = await runCliAt(course, "qid", "remove", "--write", "q");
+    assert.equal(removed.code, 0, removed.stderr);
+    const assessment = JSON.parse(fs.readFileSync(assessmentFile, "utf-8"));
+    assert.deepEqual(assessment.zones[0].questions, [{ id: "kept" }]);
+  });
+});
+
 test("remove can deliberately leave additional references unchanged", async () => {
   await withAssessmentCourse(async (course) => {
     const assessmentFile = path.join(

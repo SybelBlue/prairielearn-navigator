@@ -163,19 +163,21 @@ export function planQidReferenceRemovals(
     }
 
     // `alternatives` requires at least one entry. If all alternatives go,
-    // remove the optional property instead of leaving an empty array.
+    // remove the question block unless its own `id` can keep it valid.
     for (const target of [...targets]) {
       const array = target.parent;
       const property = array?.parent;
+      const question = property?.parent;
       if (
         target.type === "object" &&
         array?.type === "array" &&
         property?.type === "property" &&
+        question?.type === "object" &&
         property.children?.[0]?.value === "alternatives" &&
         (array.children ?? []).every((child) => targets.has(child))
       ) {
         (array.children ?? []).forEach((child) => targets.delete(child));
-        targets.add(array);
+        targets.add(findNodeAtLocation(question, ["id"]) ? array : question);
       }
     }
     edits.push(...removeJsonValues(file, text, [...targets]));
