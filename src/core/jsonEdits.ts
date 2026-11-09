@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { createScanner, findNodeAtLocation, FormattingOptions, modify, Node, SyntaxKind } from "jsonc-parser";
-import { edit, FileEdit } from "./fileEdits";
-import { JsonPath, parseJsonDoc } from "./json";
+import { edit, FileEdit } from "./fileEdits.js";
+import { JsonPath, parseJsonDoc } from "./json.js";
 import { treeOf } from "./jsonTree";
 
 /** Formatting that matches `text`'s indentation and line endings. */
@@ -196,6 +196,8 @@ function containsNode(ancestor: Node, candidate: Node): boolean {
  * Values may overlap (for example, an assessment question and one of its
  * alternatives); the outer removal wins. Unrelated text and comments on kept
  * entries are left byte-for-byte unchanged.
+ *
+ * @internal Takes jsonc-parser nodes, which the published declarations must not name.
  */
 export function removeJsonValues(file: string, text: string, values: readonly Node[]): FileEdit[] {
   const outer = values.filter(

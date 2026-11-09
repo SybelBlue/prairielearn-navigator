@@ -21,7 +21,7 @@ Options:
 
 Run 'prairielearn-navigator <command> --help' for command-specific help.`;
 
-// Remove in 1.4.0, along with the note in packages/cli/README.md.
+// Remove in 2.0.0, along with the note in packages/cli/README.md.
 const DEPRECATED_COMMANDS = new Map([
   ["rename-qids", "qid"],
   ["rename-tags", "tag"],
@@ -40,7 +40,7 @@ export async function run(
     runtime.stderr(
       styleText(
         "yellow",
-        `Warning: "${command}" is deprecated and will be removed in 1.4.0. Use "${deprecatedNoun} rename" instead.`
+        `Warning: "${command}" is deprecated and will be removed in 2.0.0. Use "${deprecatedNoun} rename" instead.`
       )
     );
     return run([deprecatedNoun, "rename", ...args.slice(1)], runtime);

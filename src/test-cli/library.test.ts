@@ -4,16 +4,34 @@ import * as library from "../library";
 
 test("the library exports exactly its public API", () => {
   assert.deepEqual(Object.keys(library).sort(), [
+    "addNouns",
+    "appendJsonEdits",
+    "assessmentId",
     "assessmentQuestionRefs",
+    "collectAddValues",
+    "courseAssessments",
+    "courseInstances",
     "courseTags",
     "createQuestionFileResolver",
+    "defaultTopic",
     "findCourseRoot",
     "implicitTagColor",
+    "indexCourse",
+    "jsonValueRange",
+    "newQuestionTitle",
     "parseJsonDoc",
     "plBadgeColors",
     "plDefaultTag",
     "plDefaultTagList",
+    "planAssessmentRename",
+    "prepareFileChanges",
+    "questionInfo",
+    "removeNouns",
+    "removedFileSuppressionPlan",
+    "resolveAddValues",
+    "stepBack",
     "strictJsonErrors",
+    "today",
   ]);
 });
 

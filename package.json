@@ -16,7 +16,7 @@
   ],
   "activationEvents": [
     "workspaceContains:**/infoCourse.json",
-    "workspaceContains:**/infoInstanceCourse.json",
+    "workspaceContains:**/infoCourseInstance.json",
     "workspaceContains:**/infoAssessment.json",
     "workspaceContains:**/questions/**/info.json",
     "workspaceContains:**/.pl-navigator.jsonc"
@@ -24,10 +24,6 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "prairielearn-navigator.helloWorld",
-        "title": "Hello World"
-      },
       {
         "command": "prairielearn-navigator.reloadSchemas",
         "title": "PrairieLearn: Reload Schemas and Config"

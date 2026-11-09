@@ -3,11 +3,11 @@ import { knownAssessmentSetNames } from "./assessmentSets";
 import { assessmentPrefixFor, assessmentTarget, nextAssessmentNumber } from "./assessments";
 import { assessmentSetKind, courseNameProblem, NameKind, planNameDefinition, tagKind } from "./courseNames";
 import { courseFiles, courseRelativePath, isWithinDir, relativeIdProblem } from "./courseFiles";
-import { FileEdit } from "./fileEdits";
+import { FileEdit } from "./fileEdits.js";
 import { parseJsonDoc } from "./json";
-import { JsonFocus } from "./jsonEdits";
+import { JsonFocus } from "./jsonEdits.js";
 import { folderOutside, placementProblem } from "./placement";
-import { ReferenceIndex } from "./referenceIndex";
+import { ReferenceIndex } from "./referenceIndex.js";
 import { plBadgeColors } from "./tags";
 import {
   courseTopics,
@@ -17,7 +17,7 @@ import {
   NewFile,
   newQuestionFiles,
   newQuestionTitle,
-} from "./templates";
+} from "./templates.js";
 
 /** What a noun needs to know about the course. */
 export interface AddContext {
@@ -34,7 +34,7 @@ export type AddValues = Readonly<Record<string, string>>;
  * One value a noun needs, in the CLI a flag and in VS Code a step. Each
  * callback sees the values of the fields before it.
  */
-interface AddField {
+export interface AddField {
   /** The key in `AddValues`, and the name of the CLI flag. */
   key: string;
   label: string;

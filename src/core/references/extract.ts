@@ -3,11 +3,11 @@ import * as path from "node:path";
 import { Node } from "jsonc-parser";
 import { matchesGlob } from "../courseFiles";
 import { findElements, HtmlElement } from "../html";
-import { JsonDoc, parseJsonDoc } from "../json";
+import { JsonDoc, parseJsonDoc } from "../json.js";
 import { treeOf } from "../jsonTree";
-import { IsoDate, matchesRange } from "../plVersion";
-import { baseDir, BaseName, inside, RefContext } from "./bases";
-import { PathSegment, RefSpec, refSpecs } from "./specs";
+import { IsoDate, matchesRange } from "../plVersion.js";
+import { baseDir, BaseName, inside, RefContext } from "./bases.js";
+import { PathSegment, RefSpec, refSpecs } from "./specs.js";
 
 export interface FileRef {
   spec: RefSpec;

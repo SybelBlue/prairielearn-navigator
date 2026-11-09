@@ -71,7 +71,7 @@ test("deprecated rename commands warn and behave like their replacements", async
     assert.equal(deprecated.stdout, current.stdout);
     assert.equal(
       deprecated.stderr,
-      `Warning: "${old}" is deprecated and will be removed in 1.4.0. Use "${noun} rename" instead.\n`
+      `Warning: "${old}" is deprecated and will be removed in 2.0.0. Use "${noun} rename" instead.\n`
     );
     assert.equal(current.stderr, "");
   }

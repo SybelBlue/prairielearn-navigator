@@ -109,6 +109,9 @@ const npmConfig = {
     }),
   ],
   optimization: {
+    // Per-runtime export analysis would copy a module into each entry that
+    // uses different exports of it, instead of sharing it.
+    usedExports: 'global',
     splitChunks: {
       chunks: 'all',
       minSize: 0,

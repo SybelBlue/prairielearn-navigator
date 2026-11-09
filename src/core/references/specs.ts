@@ -1,6 +1,6 @@
 import { courseFiles, questionHtml } from "../courseFiles";
-import { VersionRange } from "../plVersion";
-import { BaseName } from "./bases";
+import { VersionRange } from "../plVersion.js";
+import { BaseName } from "./bases.js";
 
 /**
  * Every place a course file names another file that must exist. Each spec

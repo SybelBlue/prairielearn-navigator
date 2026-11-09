@@ -23,11 +23,22 @@
     "dist/index.js",
     "dist/shared.js",
     "dist/library.d.ts",
+    "dist/core/additions.d.ts",
     "dist/core/assessmentQuestionRefs.d.ts",
+    "dist/core/assessments.d.ts",
     "dist/core/course.d.ts",
+    "dist/core/fileEdits.d.ts",
     "dist/core/json.d.ts",
+    "dist/core/jsonEdits.d.ts",
+    "dist/core/plVersion.d.ts",
     "dist/core/questionFileResolver.d.ts",
-    "dist/core/tags.d.ts"
+    "dist/core/referenceIndex.d.ts",
+    "dist/core/references/bases.d.ts",
+    "dist/core/references/extract.d.ts",
+    "dist/core/references/specs.d.ts",
+    "dist/core/removals.d.ts",
+    "dist/core/tags.d.ts",
+    "dist/core/templates.d.ts"
   ],
   "engines": {
     "node": ">=22"
