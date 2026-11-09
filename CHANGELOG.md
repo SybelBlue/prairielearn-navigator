@@ -6,6 +6,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-09
+
 - New CLI commands `qid uses`, `tag uses`, and `assessment-set uses` list
   semantic references as source locations, with structured `--json` output.
 - New CLI commands `qid remove`, `tag remove`, `assessment-set remove`, and
