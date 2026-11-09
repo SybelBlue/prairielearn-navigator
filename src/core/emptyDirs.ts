@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 /** `dir`'s parents strictly inside `root`, innermost first. */
-function parentsWithin(dir: string, root: string): string[] {
+export function parentsWithin(dir: string, root: string): string[] {
   const out: string[] = [];
   for (
     let parent = path.dirname(dir);

@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { findCourseRoot } from "../core/course";
 import { FileChange, FileEdit } from "../core/fileEdits";
+import { NewFile } from "../core/templates";
+import { CliRuntime } from "./runtime";
 
 /** The course containing `value` (a course or a path inside one), relative to `cwd`. */
 export function resolveCourseRoot(value: string, cwd: string): string | null {
@@ -11,6 +13,29 @@ export function resolveCourseRoot(value: string, cwd: string): string | null {
     return null;
   }
   return findCourseRoot(stat.isDirectory() ? path.join(resolved, "_") : resolved);
+}
+
+/** The course at `value`, or null after telling the user why there isn't one. */
+export function openCourse(value: string, runtime: CliRuntime): string | null {
+  try {
+    const courseRoot = resolveCourseRoot(value, runtime.cwd);
+    if (!courseRoot) {
+      runtime.stderr(`No PrairieLearn course found for ${path.resolve(runtime.cwd, value)}`);
+    }
+    return courseRoot;
+  } catch (error) {
+    runtime.stderr(error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+/** A file's text, or undefined if it can't be read. */
+export function readText(file: string): string | undefined {
+  try {
+    return fs.readFileSync(file, "utf-8");
+  } catch {
+    return undefined;
+  }
 }
 
 export function displayEdit(edit: FileEdit, cwd: string): string {
@@ -38,6 +63,39 @@ export function writeChanges(changes: readonly FileChange[]): void {
     if (rollbackErrors.length > 0) {
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}; failed to roll back ${rollbackErrors.length} file(s)`
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Creates every file, never replacing one, and removes what it made,
+ * including new directories, if one fails.
+ */
+export function createFiles(files: readonly NewFile[]): void {
+  const made: string[] = [];
+  try {
+    for (const { file, contents } of files) {
+      const firstDir = fs.mkdirSync(path.dirname(file), { recursive: true });
+      if (firstDir) {
+        made.push(firstDir);
+      }
+      fs.writeFileSync(file, contents, { flag: "wx" });
+      made.push(file);
+    }
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    for (const item of made.reverse()) {
+      try {
+        fs.rmSync(item, { recursive: true, force: true });
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; failed to roll back ${rollbackErrors.length} path(s)`
       );
     }
     throw error;

@@ -1,23 +1,29 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-  applyEdits,
-  findNodeAtLocation,
-  getLocation,
-  modify,
-  parseTree,
-} from "jsonc-parser";
+import { findNodeAtLocation, getLocation, parseTree } from "jsonc-parser";
 import { configFileName } from "../core/config";
 import { courseFiles } from "../core/courseFiles";
-import { removeEmptyParents } from "../core/emptyDirs";
 import { parseJsonc, parseJsonDoc } from "../core/json";
 import { isRuleId, RuleId } from "../core/rules/registry";
-import { assessmentSetKind, NameKind, tagKind } from "../core/courseNames";
+import {
+  assessmentSetKind,
+  NameDefinition,
+  NameKind,
+  planNameDefinition,
+  tagKind,
+} from "../core/courseNames";
+import { FileEdit, prepareFileChanges } from "../core/fileEdits";
+import { appendJsonEdits } from "../core/jsonEdits";
 import { CourseCache } from "../filewatchers";
+import { addFileEdits, applyToDocument, revealFocus } from "./fileEdits";
 import { vscodeRuleSettings } from "./ruleSettings";
 
 const diagnosticPrefix = "prairielearn-navigator/";
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 interface IgnoreDiagnosticBase {
   courseRoot: string;
@@ -29,11 +35,6 @@ export type IgnoreDiagnosticArgs = IgnoreDiagnosticBase & (
   | { identifier: string }
   | { message: string; occurrence: number }
 );
-
-export interface RemoveUnusedQuestionArgs {
-  courseRoot: string;
-  file: string;
-}
 
 export interface DefineCourseNameArgs {
   courseRoot: string;
@@ -55,15 +56,6 @@ export function diagnosticRuleId(
 
 function relativeFile(courseRoot: string, file: string): string {
   return path.relative(courseRoot, file).split(path.sep).join("/");
-}
-
-function formattingOptions(text: string, eol: "\n" | "\r\n") {
-  const indentation = text.match(/^[ \t]+(?=")/m)?.[0] ?? "  ";
-  return {
-    insertSpaces: !indentation.includes("\t"),
-    tabSize: indentation.includes("\t") ? 1 : indentation.length,
-    eol,
-  };
 }
 
 /** Adds one exact suppression to the course config. */
@@ -117,106 +109,35 @@ export async function ignoreDiagnostic(args: IgnoreDiagnosticArgs): Promise<bool
     return true;
   }
 
-  const edits = modify(
-    text,
-    ["ignoredDiagnostics", -1],
-    entry,
-    {
-      formattingOptions: formattingOptions(
-        text,
-        document?.eol === vscode.EndOfLine.CRLF || (!document && text.includes("\r\n"))
-          ? "\r\n"
-          : "\n"
-      ),
-    }
-  );
+  let edits: FileEdit[];
+  try {
+    edits = appendJsonEdits(configUri.fsPath, text, "ignoredDiagnostics", entry);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`PrairieLearn Navigator: ${errorMessage(error)}.`);
+    return false;
+  }
   if (!document) {
-    await vscode.workspace.fs.writeFile(
-      configUri,
-      new TextEncoder().encode(applyEdits(text, edits))
-    );
+    const [change] = prepareFileChanges(edits);
+    await vscode.workspace.fs.writeFile(configUri, new TextEncoder().encode(change.updated));
     return true;
   }
 
-  const wasDirty = document.isDirty;
   const workspaceEdit = new vscode.WorkspaceEdit();
-  for (const edit of edits) {
-    workspaceEdit.replace(
-      configUri,
-      new vscode.Range(
-        document.positionAt(edit.offset),
-        document.positionAt(edit.offset + edit.length)
-      ),
-      edit.content
-    );
-  }
-  const applied = await vscode.workspace.applyEdit(workspaceEdit);
-  if (applied && !wasDirty) {
-    await document.save();
-  } else if (applied) {
-    await vscode.window.showTextDocument(document);
-  }
-  return applied;
+  addFileEdits(workspaceEdit, edits);
+  return applyToDocument(workspaceEdit, document);
 }
-
-/** Moves an unused question directory to Trash after rechecking and confirming. */
-export async function removeUnusedQuestion(
-  args: RemoveUnusedQuestionArgs
-): Promise<boolean> {
-  const questionsRoot = path.join(args.courseRoot, "questions") + path.sep;
-  const questionDir = path.dirname(args.file);
-  if (
-    path.basename(args.file) !== "info.json" ||
-    !questionDir.startsWith(questionsRoot)
-  ) {
-    return false;
-  }
-  const uri = vscode.Uri.file(args.file);
-  const stillUnused = vscode.languages.getDiagnostics(uri).some(
-    (diagnostic) =>
-      diagnostic.source === "prairielearn-navigator" &&
-      diagnosticRuleId(diagnostic.code) === "unused-question"
-  );
-  if (!stillUnused) {
-    void vscode.window.showInformationMessage(
-      "PrairieLearn Navigator: the question is no longer unused."
-    );
-    return false;
-  }
-  const localId = path.relative(path.join(args.courseRoot, "questions"), questionDir);
-  const confirmed = await vscode.window.showWarningMessage(
-    `Move unused question "${localId}" and all files in its directory to Trash?`,
-    { modal: true },
-    "Move to Trash"
-  );
-  if (confirmed !== "Move to Trash") {
-    return false;
-  }
-  await vscode.workspace.fs.delete(vscode.Uri.file(questionDir), {
-    recursive: true,
-    useTrash: true,
-  });
-  removeEmptyParents(questionDir, path.join(args.courseRoot, "questions"));
-  return true;
-}
-
-/**
- * The key of the entry `defineCourseName` selects for the user to change
- * first: the color PrairieLearn would give a tag, or the abbreviation of a
- * set, which PrairieLearn would make the whole name.
- */
-const focusKey = { tags: "color", assessmentSets: "abbreviation" } as const;
 
 /**
  * Adds a name to infoCourse.json as PrairieLearn would create it, then opens
- * the file with one field selected to change it (see focusKey). If the name
- * is already defined, selects that definition instead. The edit is left
- * unsaved.
+ * the file with one field selected to change it (see NameKind.focusKey). If
+ * the name is already defined, selects that definition instead. The edit is
+ * left unsaved.
  */
 async function defineCourseName(kind: NameKind, args: DefineCourseNameArgs): Promise<boolean> {
   const uri = vscode.Uri.file(path.join(args.courseRoot, courseFiles.course));
   const document = await vscode.workspace.openTextDocument(uri);
-  const existing = kind.definitions(parseJsonDoc(document.getText())).find((d) => d.name === args.name);
+  const text = document.getText();
+  const existing = kind.definitions(parseJsonDoc(text)).find((d) => d.name === args.name);
   if (existing) {
     const editor = await vscode.window.showTextDocument(document);
     const start = document.positionAt(existing.nameStart);
@@ -224,52 +145,19 @@ async function defineCourseName(kind: NameKind, args: DefineCourseNameArgs): Pro
     editor.revealRange(editor.selection);
     return true;
   }
-  const text = document.getText();
-  const root = parseJsonc(text);
-  if (typeof root !== "object" || root === null || Array.isArray(root)) {
-    void vscode.window.showErrorMessage(
-      `PrairieLearn Navigator: fix ${courseFiles.course} before defining this ${kind.noun}.`
-    );
+  let plan: NameDefinition;
+  try {
+    plan = planNameDefinition(kind, uri.fsPath, text, kind.implicitDefinition(args.name));
+  } catch (error) {
+    void vscode.window.showErrorMessage(`PrairieLearn Navigator: ${errorMessage(error)}.`);
     return false;
   }
-  const edits = modify(
-    text,
-    [kind.collection, -1],
-    kind.implicitDefinition(args.name),
-    {
-      formattingOptions: formattingOptions(
-        text,
-        document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n"
-      ),
-    }
-  );
   const workspaceEdit = new vscode.WorkspaceEdit();
-  for (const edit of edits) {
-    workspaceEdit.replace(
-      uri,
-      new vscode.Range(
-        document.positionAt(edit.offset),
-        document.positionAt(edit.offset + edit.length)
-      ),
-      edit.content
-    );
-  }
+  addFileEdits(workspaceEdit, plan.edits);
   if (!(await vscode.workspace.applyEdit(workspaceEdit))) {
     return false;
   }
-  const editor = await vscode.window.showTextDocument(document);
-  const tree = parseTree(document.getText());
-  const array = tree && findNodeAtLocation(tree, [kind.collection]);
-  const added = array?.children?.at(-1);
-  const focus = added && findNodeAtLocation(added, [focusKey[kind.collection]]);
-  if (focus) {
-    // Inside the quotes, so typing replaces the value
-    editor.selection = new vscode.Selection(
-      document.positionAt(focus.offset + 1),
-      document.positionAt(focus.offset + focus.length - 1)
-    );
-    editor.revealRange(editor.selection);
-  }
+  await revealFocus(plan.focus);
   return true;
 }
 
@@ -363,17 +251,20 @@ function unusedItemRemoval(
 ): vscode.CodeAction | undefined {
   if (rule === "unused-question" && courseRoot) {
     const action = new vscode.CodeAction(
-      "Move unused question directory to Trash…",
+      "Remove unused question…",
       vscode.CodeActionKind.QuickFix
     );
     action.diagnostics = [diagnostic];
     action.command = {
-      command: "prairielearn-navigator.removeUnusedQuestion",
+      command: "prairielearn-navigator.removeQuestion",
       title: action.title,
       arguments: [{
         courseRoot,
-        file: document.uri.fsPath,
-      } satisfies RemoveUnusedQuestionArgs],
+        id: path.relative(
+          path.join(courseRoot, "questions"),
+          path.dirname(document.uri.fsPath)
+        ).split(path.sep).join("/"),
+      }],
     };
     return action;
   }
@@ -396,29 +287,25 @@ function unusedItemRemoval(
   ) {
     return undefined;
   }
-  const title = rule === "unused-tag" ? "Remove unused tag" : "Remove unused assessment set";
-  const tree = parseTree(document.getText());
-  const array = tree && findNodeAtLocation(tree, [collection]);
-  const items = array?.type === "array" ? array.children ?? [] : [];
-  const index = jsonPath[1];
-  const item = items[index];
-  if (!item) {
+  if (!courseRoot) {
     return undefined;
   }
-  let startOffset = item.offset;
-  let endOffset = item.offset + item.length;
-  if (items.length > 1 && index === 0) {
-    endOffset = items[1].offset;
-  } else if (index > 0) {
-    startOffset = items[index - 1].offset + items[index - 1].length;
+  const title = rule === "unused-tag" ? "Remove unused tag…" : "Remove unused assessment set…";
+  const tree = parseTree(document.getText());
+  const index = jsonPath[1];
+  const name = tree && findNodeAtLocation(tree, [collection, index, "name"])?.value;
+  if (typeof name !== "string") {
+    return undefined;
   }
   const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
   action.diagnostics = [diagnostic];
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.delete(
-    document.uri,
-    new vscode.Range(document.positionAt(startOffset), document.positionAt(endOffset))
-  );
+  action.command = {
+    command: rule === "unused-tag"
+      ? "prairielearn-navigator.removeTag"
+      : "prairielearn-navigator.removeAssessmentSet",
+    title,
+    arguments: [{ courseRoot, id: name }],
+  };
   return action;
 }
 
