@@ -445,7 +445,7 @@ kept.
 
 `rename-qids`, `rename-tags`, and `rename-assessment-sets` still run
 `qid rename`, `tag rename`, and `assessment-set rename`, with a warning on
-stderr. They will be removed in 1.4.0.
+stderr. They will be removed in 2.0.0.
 
 ## Library API
 
