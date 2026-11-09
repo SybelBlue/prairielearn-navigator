@@ -4,10 +4,10 @@ import { configFileName } from "./config";
 import { planCourseNameRemoval } from "./courseNameRenames";
 import { assessmentSetKind, NameKind, tagKind } from "./courseNames";
 import { courseFiles, courseRelativePath, isWithinDir, matchesGlob } from "./courseFiles";
-import { FileEdit } from "./fileEdits";
+import { FileEdit } from "./fileEdits.js";
 import { parseJsonDoc } from "./json";
 import { planQidReferenceRemovals, qidReferenceUseCount } from "./qidRenames";
-import { ReferenceIndex } from "./referenceIndex";
+import { ReferenceIndex } from "./referenceIndex.js";
 import { planRemoveFileSuppressions } from "./suppressionEdits";
 
 export interface RemoveContext {
@@ -18,7 +18,7 @@ export interface RemoveContext {
   extraFiles?: readonly string[];
 }
 
-interface RemoveOptions {
+export interface RemoveOptions {
   updateReferences: boolean;
   /** Used only by assessment-set removal. */
   replacement?: string;

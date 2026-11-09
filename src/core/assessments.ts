@@ -3,10 +3,10 @@ import * as path from "node:path";
 import { configFileName } from "./config";
 import { courseFiles, courseRelativePath, isWithinDir, matchesGlob, relativeIdProblem } from "./courseFiles";
 import { parentsEmptiedBy } from "./emptyDirs";
-import { FileEdit } from "./fileEdits";
+import { FileEdit } from "./fileEdits.js";
 import { parseJsonDoc } from "./json";
 import { folderOutside, placementProblem } from "./placement";
-import { ReferenceIndex } from "./referenceIndex";
+import { ReferenceIndex } from "./referenceIndex.js";
 import { moveFileSuppressionEdits, planRemoveFileSuppressions } from "./suppressionEdits";
 
 /** An assessment in a course, named by the directories that locate it. */

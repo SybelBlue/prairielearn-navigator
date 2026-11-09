@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+- The npm library now exports what the CLI and extension use to add, remove,
+  list, and rename course resources, including `addNouns`, `removeNouns`,
+  `indexCourse`, and `prepareFileChanges`.
+
 ## [1.4.0] - 2026-11-09
 
 - New CLI commands `qid uses`, `tag uses`, and `assessment-set uses` list

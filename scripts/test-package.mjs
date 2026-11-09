@@ -55,11 +55,22 @@ try {
     .sort();
   const expectedDistFiles = [
     "cli.js",
+    "core/additions.d.ts",
     "core/assessmentQuestionRefs.d.ts",
+    "core/assessments.d.ts",
     "core/course.d.ts",
+    "core/fileEdits.d.ts",
     "core/json.d.ts",
+    "core/jsonEdits.d.ts",
+    "core/plVersion.d.ts",
     "core/questionFileResolver.d.ts",
+    "core/referenceIndex.d.ts",
+    "core/references/bases.d.ts",
+    "core/references/extract.d.ts",
+    "core/references/specs.d.ts",
+    "core/removals.d.ts",
     "core/tags.d.ts",
+    "core/templates.d.ts",
     "index.js",
     "library.d.ts",
     "shared.js",
@@ -114,22 +125,44 @@ try {
 
   // Every runtime export, imported and exercised from plain Node ESM.
   fs.mkdirSync(path.join(consumer, "course", "questions"), { recursive: true });
-  fs.writeFileSync(path.join(consumer, "course", "infoCourse.json"), "{}");
+  fs.writeFileSync(
+    path.join(consumer, "course", "infoCourse.json"),
+    '{"tags": [{"name": "old", "color": "red1", "description": "old"}]}',
+  );
   fs.writeFileSync(
     path.join(consumer, "consumer.mjs"),
     `import * as library from "@sybelblue/prairielearn-navigator";
 import {
+  addNouns,
+  appendJsonEdits,
+  assessmentId,
   assessmentQuestionRefs,
+  collectAddValues,
+  courseAssessments,
+  courseInstances,
   courseTags,
   createQuestionFileResolver,
+  defaultTopic,
   findCourseRoot,
   implicitTagColor,
+  indexCourse,
+  jsonValueRange,
+  newQuestionTitle,
   parseJsonDoc,
+  planAssessmentRename,
   plBadgeColors,
   plDefaultTag,
   plDefaultTagList,
+  prepareFileChanges,
+  questionInfo,
+  removedFileSuppressionPlan,
+  removeNouns,
+  resolveAddValues,
+  stepBack,
   strictJsonErrors,
+  today,
 } from "@sybelblue/prairielearn-navigator";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 const check = (ok, message) => {
@@ -142,8 +175,11 @@ const names = Object.keys(library)
   .join(",");
 check(
   names ===
-    "assessmentQuestionRefs,courseTags,createQuestionFileResolver,findCourseRoot,implicitTagColor," +
-      "parseJsonDoc,plBadgeColors,plDefaultTag,plDefaultTagList,strictJsonErrors",
+    "addNouns,appendJsonEdits,assessmentId,assessmentQuestionRefs,collectAddValues,courseAssessments," +
+      "courseInstances,courseTags,createQuestionFileResolver,defaultTopic,findCourseRoot,implicitTagColor," +
+      "indexCourse,jsonValueRange,newQuestionTitle,parseJsonDoc,plBadgeColors,plDefaultTag,plDefaultTagList," +
+      "planAssessmentRename,prepareFileChanges,questionInfo,removeNouns,removedFileSuppressionPlan," +
+      "resolveAddValues,stepBack,strictJsonErrors,today",
   "unexpected exports: " + names,
 );
 check(typeof createQuestionFileResolver === "function", "createQuestionFileResolver");
@@ -169,6 +205,57 @@ check(
   JSON.stringify(refs.map((r) => [r.kind, r.id])) === '[["question","a"],["alternative","b"]]',
   "assessmentQuestionRefs",
 );
+
+const readText = (file) => {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+};
+const index = indexCourse(course, today());
+const addContext = { index, courseInstances: courseInstances(course), readText };
+const infoCourse = path.join(course, "infoCourse.json");
+
+const addedValues = resolveAddValues(addNouns.tag, addContext, { name: "t" });
+const addedTag = addNouns.tag.plan(addContext, addedValues, "unused");
+check(addedTag.kind === "edits", "addNouns.tag.plan");
+check(prepareFileChanges(addedTag.edits)[0].updated.includes('"t"'), "prepareFileChanges");
+const question = addNouns.qid.plan(
+  addContext,
+  resolveAddValues(addNouns.qid, addContext, { qid: "a/b" }),
+  "11111111-1111-4111-8111-111111111111",
+);
+check(question.kind === "files" && question.created[0].file.endsWith("info.json"), "addNouns.qid.plan");
+const asked = [];
+const collected = await collectAddValues(addNouns.tag, addContext, async (step) => {
+  asked.push(step.field.key);
+  return asked.length === 2 && asked[0] === "name" && !asked.includes("back")
+    ? (asked.push("back"), stepBack)
+    : (step.value ?? "t");
+});
+check(collected?.name === "t" && asked.includes("back"), "collectAddValues and stepBack");
+
+check(JSON.stringify(removeNouns.tag.targets(addContext)) === '["old"]', "removeNouns targets");
+const removal = removeNouns.tag.plan(addContext, "old", { updateReferences: true });
+check(removal.primaryEdits.length > 0, "removeNouns plan");
+check(removedFileSuppressionPlan(addContext, [course]).useCount === 0, "removedFileSuppressionPlan");
+
+check(courseInstances(course).length === 0 && courseAssessments(index).length === 0, "assessment listing");
+check(assessmentId({ file: "f", instance: "Fa26", assessment: "hw1" }) === "Fa26/hw1", "assessmentId");
+let renameError = "";
+try {
+  planAssessmentRename(index, "Fa26/hw1", "Fa26/hw2", readText);
+} catch (error) {
+  renameError = error.message;
+}
+check(renameError === 'Assessment "Fa26/hw1" is not defined', "planAssessmentRename");
+
+check(appendJsonEdits("infoCourse.json", "{}", "topics", { name: "x" }).length > 0, "appendJsonEdits");
+check(jsonValueRange('{"a": "bc"}', ["a"])?.start === 7, "jsonValueRange");
+check(defaultTopic('{"topics": [{"name": "Algebra"}]}') === "Algebra", "defaultTopic");
+check(JSON.parse(questionInfo("u", newQuestionTitle, "T")).title === "New Question", "questionInfo");
+check(fs.existsSync(infoCourse), "course fixture");
 console.log("library-ok");
 `,
   );
@@ -177,21 +264,55 @@ console.log("library-ok");
   fs.writeFileSync(
     path.join(consumer, "consumer.ts"),
     `import {
+  addNouns,
   assessmentQuestionRefs,
+  collectAddValues,
+  courseAssessments,
+  courseInstances,
   courseTags,
   createQuestionFileResolver,
   findCourseRoot,
   implicitTagColor,
+  indexCourse,
+  jsonValueRange,
   parseJsonDoc,
+  planAssessmentRename,
   plBadgeColors,
   plDefaultTag,
   plDefaultTagList,
+  prepareFileChanges,
+  removeNouns,
+  resolveAddValues,
+  stepBack,
   strictJsonErrors,
+  today,
+  type AddContext,
+  type AddField,
+  type AddNoun,
+  type AddPrompt,
+  type AddStep,
+  type AddValues,
   type AssessmentQuestionRef,
+  type AssessmentRename,
+  type CourseAddition,
+  type CourseAssessment,
+  type CourseRemoval,
   type CourseTag,
+  type FileChange,
+  type FileEdit,
+  type IsoDate,
   type JsonDoc,
+  type JsonFocus,
+  type JsonPath,
+  type NewFile,
   type QuestionFileResolver,
+  type ReferenceIndex,
+  type RemoveContext,
+  type RemoveNoun,
+  type RemoveOptions,
   type TagInfo,
+  type Use,
+  type UsedNames,
 } from "@sybelblue/prairielearn-navigator";
 
 const cache = new Map<string, string | null>();
@@ -214,6 +335,36 @@ const resolver: QuestionFileResolver = createQuestionFileResolver({
   questions: [],
 });
 
+const date: IsoDate = today();
+const index: ReferenceIndex = indexCourse("/course", date);
+const uses: Use[] = index.usesOf("/course/questions/a");
+const names: UsedNames | undefined = index.namesIn("/course/infoCourse.json");
+const readText = (_file: string): string | undefined => undefined;
+const addContext: AddContext = { index, courseInstances: courseInstances("/course"), readText };
+const removeContext: RemoveContext = { index, readText };
+const addNoun: AddNoun = addNouns.qid;
+const firstField: AddField = addNoun.fields[0];
+const given: AddValues = { qid: "a/b" };
+const values: AddValues = resolveAddValues(addNoun, addContext, given);
+const addition: CourseAddition = addNoun.plan(addContext, values, "uuid");
+const focus: JsonFocus = addition.focus;
+const focusPath: JsonPath = focus.path;
+const created: NewFile[] = addition.kind === "files" ? addition.created : [];
+const edits: FileEdit[] = addition.kind === "edits" ? addition.edits : [];
+const changes: FileChange[] = prepareFileChanges(edits);
+const prompt: AddPrompt = async (step: AddStep) => (step.index > 0 ? stepBack : step.value);
+const collected: Promise<AddValues | undefined> = collectAddValues(addNoun, addContext, prompt);
+const removeNoun: RemoveNoun = removeNouns["assessment-set"];
+const options: RemoveOptions = { updateReferences: true, replacement: "Homework" };
+const removal: CourseRemoval = removeNoun.plan(removeContext, "Lab", options);
+const assessments: CourseAssessment[] = courseAssessments(index);
+const rename: AssessmentRename = planAssessmentRename(index, "a/b", "a/c", readText);
+const range: { start: number; end: number } | undefined = jsonValueRange("{}", focusPath);
+
+// @ts-expect-error unknown nouns aren't addable
+addNouns.widget;
+// @ts-expect-error jsonc-parser's nodes stay out of the public API
+import("@sybelblue/prairielearn-navigator").then((m) => m.removeJsonValues);
 // @ts-expect-error plBadgeColors is read-only
 plBadgeColors.red1 = { text: "#000000", background: "#ffffff" };
 // @ts-expect-error badge color entries are read-only
@@ -225,7 +376,24 @@ courseTags({ value: {}, tree: {}, errors: [] });
 // @ts-expect-error assessmentQuestionRefs takes text
 assessmentQuestionRefs({});
 
-export { color, defaults, errors, kind, offsets, resolver };
+export {
+  assessments,
+  changes,
+  collected,
+  color,
+  created,
+  defaults,
+  errors,
+  firstField,
+  kind,
+  names,
+  offsets,
+  range,
+  removal,
+  rename,
+  resolver,
+  uses,
+};
 `,
   );
   const typeCheck = (moduleResolution, module) =>

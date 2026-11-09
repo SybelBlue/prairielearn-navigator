@@ -527,3 +527,76 @@ course-relative file paths, `question-local`, `template-local`, or
 resolved statically. `update()` maintains the dependency graph and returns
 only questions affected by the supplied course-relative paths. The resolver
 does not watch the filesystem; callers decide how and when to batch changes.
+
+### Adding and removing
+
+`addNouns` and `removeNouns` are the tables behind `<noun> add` and
+`<noun> remove`, keyed `qid`, `tag`, `assessment-set`, and `assessment`. They
+only plan: nothing is written until you apply the result.
+
+```ts
+import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import {
+  addNouns,
+  courseInstances,
+  indexCourse,
+  prepareFileChanges,
+  removeNouns,
+  resolveAddValues,
+  today,
+} from "@sybelblue/prairielearn-navigator";
+
+const readText = (file: string) => {
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+};
+const courseRoot = "/path/to/course";
+const index = indexCourse(courseRoot, today());
+const context = { index, courseInstances: courseInstances(courseRoot), readText };
+
+// Omitted values take the same defaults as the CLI's flags.
+const values = resolveAddValues(addNouns.tag, context, { name: "calculus", color: "blue1" });
+const addition = addNouns.tag.plan(context, values, randomUUID());
+if (addition.kind === "edits") {
+  for (const { file, updated } of prepareFileChanges(addition.edits)) {
+    fs.writeFileSync(file, updated);
+  }
+}
+
+const removal = removeNouns.tag.plan(context, "old", { updateReferences: true });
+const edits = [...removal.primaryEdits, ...removal.referenceEdits];
+```
+
+| Export | Value |
+| --- | --- |
+| `indexCourse(courseRoot: string, plDate: IsoDate): ReferenceIndex` | Reads every reference in a course from disk. `plDate` (`YYYY-MM-DD`) selects which of PrairieLearn's rules apply. |
+| `today(): IsoDate` | Today's date, as the CLI passes to `indexCourse`. |
+| `addNouns: Record<"qid" \| "tag" \| "assessment-set" \| "assessment", AddNoun>` | Each `AddNoun` has `fields`, whose `key`s name the values it takes, and `plan(context, values, uuid)`, which returns a `CourseAddition`: new files (`kind: "files"`, `created`) or edits (`kind: "edits"`, `edits`), plus `warnings` and a `focus` to select afterward. Throws, with a message for the user. |
+| `resolveAddValues(noun, context, given): AddValues` | Fills in defaults and validates. Throws, with a message for the user, at the first missing or invalid value. |
+| `collectAddValues(noun, context, prompt, seed?): Promise<AddValues \| undefined>` | Asks for each field in turn through `prompt`, as the VS Code wizard does. `prompt` receives an `AddStep` and returns an answer, `stepBack` to return to the previous field, or `undefined` to cancel. |
+| `removeNouns: Record<"qid" \| "tag" \| "assessment-set" \| "assessment", RemoveNoun>` | Each `RemoveNoun` has `targets(context)`, the ids that can be removed, and `plan(context, id, options)`, which returns a `CourseRemoval`. Apply its `primaryEdits` and, if you want them, `referenceEdits`, then delete `directory.path` when it is set. Removing an assessment set that is in use requires `options.replacement` unless `updateReferences` is false. |
+| `removedFileSuppressionPlan(context, removedDirs): { edits: FileEdit[]; useCount: number }` | Edits removing config suppressions for files under absolute `removedDirs`, for directories deleted some other way. |
+| `prepareFileChanges(edits: readonly FileEdit[]): FileChange[]` | Each affected file's `original` and `updated` text, without writing. Throws if a file no longer holds the text an edit expects. |
+
+### Assessments
+
+| Export | Value |
+| --- | --- |
+| `courseInstances(courseRoot: string): string[]` | Every course instance, as a posix path under `courseInstances/`, sorted. |
+| `courseAssessments(index: ReferenceIndex): CourseAssessment[]` | Every indexed assessment's `file`, `instance`, and `assessment`, in no particular order. |
+| `assessmentId(assessment: CourseAssessment): string` | `<instance>/<assessment>`, as `assessment list` prints it. Not always unique. |
+| `planAssessmentRename(index, oldId, newId, readText): AssessmentRename` | The directory move (`oldDir`, `newDir`), the directories it leaves empty (`emptiedDirs`), and the suppression `edits` that go with it. Throws, with a message for the user, when the rename is not allowed. |
+
+### Templates and JSON edits
+
+| Export | Value |
+| --- | --- |
+| `questionInfo(uuid: string, title: string, topic: string): string` | The contents of a new question's `info.json`. |
+| `newQuestionTitle: string` | The title a new question starts with. |
+| `defaultTopic(infoCourseText: string \| undefined): string` | The course's first topic, or `"Unknown"`. |
+| `appendJsonEdits(file: string, text: string, collection: string, value: object): FileEdit[]` | Edits appending `value` to the top-level array `collection` of `text`, creating it if missing and keeping the file's formatting and comments. Throws, with a message for the user, when the file can't take the entry. |
+| `jsonValueRange(text: string, jsonPath: JsonPath): { start: number; end: number } \| undefined` | The offsets of the value at `jsonPath`, inside the quotes of a string. An index of `-1` means the last entry. |
